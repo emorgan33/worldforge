@@ -1,77 +1,133 @@
-## Running the local site
+# WorldForge
 
-Use `pnpm build`, then `pnpm serve:local` to serve WorldForge at [localhost:3033](http://localhost:3033) independently of terminal sessions. See [local server lifecycle](docs/local-server.md) for logs, restart commands and startup behavior.
+A self-hosted campaign worldbuilding workspace for **D&D 5e (2014)** and
+**Pathfinder 2e Remaster**. Author a wiki-style world of articles, statblocks,
+maps and timelines, then share a curated, permission-controlled reader view with
+your players.
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+WorldForge is a local-first web app: your campaign content lives in a SQLite
+database and an image directory that you own and back up.
 
-## Getting Started
+## Features
 
-First, run the development server:
+- **Block-based editor** — slash commands, drag/reorder, tables, images,
+  callouts and embedded statblocks.
+- **28 article templates** with edition-specific fields for characters,
+  creatures, places, organizations, lore, rules content and more.
+- **Structured compendium** — D&D 5e and PF2e creatures, NPCs, spells and items
+  rendered in distinct edition themes.
+- **Wikilinks and backlinks**, hierarchical categories, and Ctrl/Cmd+K command
+  search across article bodies and metadata.
+- **World appearance** — preset themes, backgrounds, accent colors and reading
+  widths, with live author preview.
+- **Image library** — upload, normalize to WebP, reuse across articles and
+  worlds, with archive and safe deletion.
+- **Revision history** — server-side snapshots, restore, and concurrent-edit
+  detection.
+- **GM tools** — secrets, preview-as-player, campaign sessions and notebooks.
+- **Table access** — world members, per-resource audience policies and grants,
+  and an access audit trail.
+- **Interactive maps, timelines and variable macros** (`[prefix:key]`).
+- **Public reader pages** with breadcrumbs, category navigation and scoped
+  search for anonymously published content.
+- **Backup and portability** — per-world export/import and archive/restore/purge.
+- **FoundryVTT import** — selective, preview-first import of PF2e Item exports
+  (provisional; see `docs/foundryvtt-integration.md`).
+
+## Self-host with Docker
+
+The supported way to run WorldForge is Docker Compose.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/<owner>/worldforge.git
+cd worldforge
+cp .env.example .env        # adjust if needed; keep WORLDFORGE_ORIGIN correct
+docker compose up -d --build
 ```
 
-Open [http://localhost:3001](http://localhost:3001) with your browser to see the result.
+Open http://localhost:3033. The container applies database migrations on start.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The first account has **no password**. Generate a one-time setup link for the
+seeded GM account, then open the printed `/setup#token=...` URL in your browser
+to set a password:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+docker compose exec worldforge pnpm auth:setup
+```
 
-## Learn More
+Optionally load the sample "Aethelgard" campaign:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+docker compose exec worldforge pnpm db:seed
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Persistent data
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`docker-compose.yml` mounts two named volumes:
 
-## Deploy on Vercel
+- `/app/prisma` — the SQLite database and its journals.
+- `/app/data/assets` — uploaded images (`WORLDFORGE_ASSET_DIR`).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Back these up together. To run behind a reverse proxy, set `WORLDFORGE_ORIGIN`
+to the public URL (including scheme and, when non-standard, port) so same-origin
+writes are accepted, and terminate TLS at the proxy.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Configuration
 
-## Login Credentials
+Copy `.env.example` to `.env`. Variables:
 
-The seeded demo world includes a GM account for testing:
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | yes | SQLite path. Relative paths resolve from `prisma/`, so `file:./dev.db` → `prisma/dev.db`. |
+| `WORLDFORGE_ORIGIN` | production | Public origin used for same-origin/CSRF checks. Must match the browser URL or writes return 403. |
+| `WORLDFORGE_ASSET_DIR` | no | Uploaded-image directory. Defaults to `./data/assets`. |
 
-- **Email:** `lorekeeper@worldforge.dev`
-- **Password:** `WorldForge123!`
+## Local development
 
-This account has full access to the "Aethelgard: The Shattered Realm" campaign world with sample articles, statblocks, and categories.
+Requirements: **Node.js 22+** and **pnpm 10**.
+
+```bash
+pnpm install
+cp .env.example .env
+pnpm db:deploy
+pnpm db:seed        # optional
+pnpm dev            # http://localhost:3001
+```
+
+Set a password for the seeded account with `pnpm auth:setup`, then sign in at
+`/login`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow, test
+commands and pull-request expectations.
 
 ## Documentation
 
-- [Feature Improvements Checklist](docs/feature-improvements.md) - Implementation status and roadmap
-- [Article Revisions](docs/article-revisions.md) - Server-side version history and recovery
+Design and feature references live in [`docs/`](docs/):
 
-## Testing
+- [Feature status and roadmap](docs/feature-improvements.md)
+- [Publishing and permissions](docs/publishing-and-permissions.md)
+- [Article revisions](docs/article-revisions.md)
+- [Editor and category manager](docs/editor-and-category-manager.md)
+- [Autosave and recovery](docs/autosave-and-recovery.md)
+- [Image library](docs/image-library.md)
+- [World appearance](docs/world-appearance.md)
+- [Campaign rules profiles](docs/rpg-systems.md)
+- [World creation and switcher](docs/world-creation-and-switcher.md)
+- [Backup and restore](docs/backup-restore.md)
+- [FoundryVTT integration](docs/foundryvtt-integration.md)
 
-### Test server
+## Tech stack
 
-Player-access integration tests require the dev server, not the production build:
+Next.js 16 (App Router, React 19, Turbopack) · TypeScript · Prisma 6 + SQLite ·
+TipTap 3 · Tailwind CSS 4.
 
-```bash
-# Start the dev server
-WORLDFORGE_ORIGIN=http://localhost:3131 npx next dev --port 3131
+## Contributing
 
-# Run tests
-WORLDFORGE_TEST_ORIGIN=http://localhost:3131 pnpm test
-```
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[Code of Conduct](CODE_OF_CONDUCT.md). To report a security issue, see
+[SECURITY.md](SECURITY.md).
 
-**Known constraint**: Next.js 16.4.1 production builds (next start) do not reliably read Cookie headers. Always use the dev server for tests.
+## License
 
-### Test results
+[MIT](LICENSE).
 
-- player-access-api: 6/6 passing (membership, policies, audit, preview)
-- auth-publication-api: 1/2 passing (account setup, pre-existing PATCH issue)
-- world-export-import-api: covers current format
-- pnpm build: clean compile
+Bundled fonts and theme textures retain their original licenses; see
+[`docs/licenses/`](docs/licenses/).

@@ -9,7 +9,14 @@
     "serve:local": "bash scripts/serve-local.sh",
     "lint": "eslint",
     "test": "node --import tsx --test tests/*.test.ts tests/*.test.tsx",
-    "auth:setup": "tsx scripts/auth-setup.ts"
+    "auth:setup": "tsx scripts/auth-setup.ts",
+    "db:generate": "prisma generate",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "postinstall": "prisma generate"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@tiptap/core": "3.32.0",
