@@ -1,0 +1,724 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// -------------------------------------------------------------
+// Core User & Authentication
+// -------------------------------------------------------------
+model User {
+  id              String             @id @default(uuid())
+  name            String
+  email           String             @unique
+  avatar          String?
+  role            String             @default("AUTHOR") // ADMIN, AUTHOR, GM, PLAYER
+  passwordHash    String?
+  sessions        AuthSession[]
+  setupLinks      AccountSetup[]
+  worlds          World[]
+  revisions       ArticleRevision[]
+  worldMembers    WorldMember[]      @relation("WorldMemberUser")
+  createdPolicies AudiencePolicy[]   @relation("AudiencePolicyCreator")
+  audienceGrants  AudienceGrant[]    @relation("AudienceGrantUser")
+  grantedGrants   AudienceGrant[]    @relation("GrantedBy")
+  auditEvents     AccessAuditEvent[] @relation("AccessAuditActor")
+  previewSessions PreviewSession[]   @relation("PreviewUser")
+  issuedPreviews  PreviewSession[]   @relation("PreviewIssuer")
+  foundryPreviews FoundryPreview[]
+  foundryRuns     FoundryImportRun[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+// -------------------------------------------------------------
+// World (The master universe container)
+// -------------------------------------------------------------
+model World {
+  id                  String               @id @default(uuid())
+  slug                String               @unique
+  title               String
+  description         String?
+  genre               String               @default("Fantasy") // Fantasy, Sci-Fi, Cyberpunk, Eldritch, etc.
+  system              String               @default("DND_5E") // DND_5E, PF_2E, COC, FATE, CUSTOM
+  isPublic            Boolean              @default(false)
+  coverImage          String?
+  appearance          String? // Serialized world presentation settings
+  bannerImage         String?
+  ownerId             String
+  creationRequestId   String?
+  creationPayloadHash String?
+  owner               User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  categories          Category[]
+  articles            Article[]
+  secrets             Secret[]
+  maps                Map[]
+  timelines           Timeline[]
+  variableCollections VariableCollection[]
+  rpgBlocks           RpgBlock[]
+  foundryPreviews     FoundryPreview[]
+  foundryRuns         FoundryImportRun[]
+  foundryProvenance   FoundryProvenance[]
+  assets              ImageAsset[]
+  notebooks           Notebook[]
+  members             WorldMember[]        @relation("WorldMemberWorld")
+  audiencePolicies    AudiencePolicy[]     @relation("AudiencePolicyWorld")
+  auditEvents         AccessAuditEvent[]   @relation("AccessAuditWorld")
+  previewSessions     PreviewSession[]     @relation("PreviewWorld")
+  campaignSessions    CampaignSession[]    @relation("CampaignSessionWorld")
+  sessionEntityLinks  SessionEntityLink[]  @relation("SessionLinkWorld")
+  createdAt           DateTime             @default(now())
+  deletedAt           DateTime?
+  updatedAt           DateTime             @updatedAt
+
+  @@unique([ownerId, creationRequestId])
+}
+
+// -------------------------------------------------------------
+// Category (Hierarchical folder tree)
+// -------------------------------------------------------------
+model Category {
+  id        String     @id @default(uuid())
+  worldId   String
+  world     World      @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Category[] @relation("CategoryHierarchy")
+  name      String
+  icon      String     @default("folder")
+  order     Int        @default(0)
+  articles  Article[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([worldId])
+}
+
+// -------------------------------------------------------------
+// Article (The 28-template knowledge unit)
+// -------------------------------------------------------------
+model Article {
+  id         String    @id @default(uuid())
+  worldId    String
+  world      World     @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  // One of the 28 domain templates
+  template String  @default("GENERIC")
+  title    String
+  slug     String
+  excerpt  String?
+
+  // Modern Block-Based Rich Text (TipTap JSON representation)
+  contentJson String? // Serialized TipTap JSON
+  contentHtml String? // Cached HTML render
+  sidebarJson String? // Sidebar custom fields & quick facts
+
+  // Lifecycle & Visibility
+  publicationStatus String  @default("DRAFT") // DRAFT, WIP, PUBLISHED
+  visibility        String  @default("PRIVATE") // PRIVATE, PUBLIC
+  state             String  @default("DRAFT") // DRAFT, WIP, PUBLISHED, PRIVATE
+  order             Int     @default(0)
+  isPinned          Boolean @default(false)
+  wordCount         Int     @default(0)
+  coverImage        String?
+  portraitImage     String?
+
+  // For concurrent edit detection
+  version Int @default(1)
+
+  // Table-access canon/provenance (GM_DRAFT | RUMOR | ESTABLISHED | SUPERSEDED)
+  canonState          String           @default("GM_DRAFT")
+  revealedInSessionId String?
+  revealedInSession   CampaignSession? @relation("SessionReveals", fields: [revealedInSessionId], references: [id], onDelete: SetNull)
+  supersededById      String?
+  supersededBy        Article?         @relation("ArticleSupersedes", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes          Article[]        @relation("ArticleSupersedes")
+
+  // Session entity links
+
+  // Hierarchical nesting (e.g. Region -> City -> District)
+  parentId String?
+  parent   Article?  @relation("ArticleHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Article[] @relation("ArticleHierarchy")
+
+  // Bidirectional Knowledge Graph References
+  outboundMentions ArticleMention[] @relation("MentionSource")
+  inboundMentions  ArticleMention[] @relation("MentionTarget")
+
+  // Template-specific metadata (JSON: traits, demographics, biological specs, etc.)
+  metadata String? // Serialized JSON
+  tags     String? // Comma-separated tags
+
+  // Revision history
+  revisions ArticleRevision[]
+
+  // GM Campaign Secrets
+  secrets Secret[]
+
+  // Spatial and Chronological bindings
+  markers       Marker[]
+  historyEvents HistoryEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([worldId])
+  @@index([categoryId])
+  @@index([publicationStatus, visibility])
+}
+
+// -------------------------------------------------------------
+// Bidirectional Article Mentions (@-links)
+// -------------------------------------------------------------
+model ArticleMention {
+  id              String   @id @default(uuid())
+  sourceArticleId String
+  sourceArticle   Article  @relation("MentionSource", fields: [sourceArticleId], references: [id], onDelete: Cascade)
+  targetArticleId String
+  targetArticle   Article  @relation("MentionTarget", fields: [targetArticleId], references: [id], onDelete: Cascade)
+  mentionText     String?
+  createdAt       DateTime @default(now())
+
+  @@index([sourceArticleId])
+  @@index([targetArticleId])
+}
+
+// -------------------------------------------------------------
+// GM Campaign Secrets (Conditional Visibility)
+// -------------------------------------------------------------
+model Secret {
+  id             String   @id @default(uuid())
+  worldId        String
+  world          World    @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  articleId      String?
+  article        Article? @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  title          String
+  content        String
+  isRevealed     Boolean  @default(false)
+  allowedUserIds String? // Comma-separated whitelist of user IDs
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([worldId])
+  @@index([articleId])
+}
+
+// -------------------------------------------------------------
+// Dynamic Variables Macro System ([prefix:key])
+// -------------------------------------------------------------
+model VariableCollection {
+  id          String     @id @default(uuid())
+  worldId     String
+  world       World      @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  name        String
+  prefix      String // 3-6 letters, e.g., 'cal', 'coin', 'lore'
+  description String?
+  variables   Variable[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([worldId, prefix])
+  @@index([worldId])
+}
+
+model Variable {
+  id           String             @id @default(uuid())
+  collectionId String
+  collection   VariableCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  key          String // Short slug, e.g., 'current_year', 'gold_piece'
+  title        String?
+  type         String             @default("TERM_SIMPLE") // TERM_SIMPLE, TERM_ADVANCED, RENDERED_FRAGMENT, LINK, NUMBER
+  value        String
+  description  String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@unique([collectionId, key])
+  @@index([collectionId])
+}
+
+// -------------------------------------------------------------
+// Interactive Cartography Engine
+// -------------------------------------------------------------
+model Map {
+  id           String        @id @default(uuid())
+  worldId      String
+  world        World         @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  imageUrl     String
+  width        Int           @default(3840)
+  height       Int           @default(2160)
+  defaultZoom  Float         @default(1.0)
+  layers       MapLayer[]
+  markerGroups MarkerGroup[]
+  markers      Marker[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([worldId])
+}
+
+model MapLayer {
+  id        String   @id @default(uuid())
+  mapId     String
+  map       Map      @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  name      String
+  order     Int      @default(0)
+  isVisible Boolean  @default(true)
+  imageUrl  String?
+  markers   Marker[]
+}
+
+model MarkerGroup {
+  id      String   @id @default(uuid())
+  mapId   String
+  map     Map      @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  name    String
+  color   String   @default("#f59e0b")
+  icon    String   @default("map-pin")
+  markers Marker[]
+}
+
+model Marker {
+  id          String       @id @default(uuid())
+  mapId       String
+  map         Map          @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  layerId     String?
+  layer       MapLayer?    @relation(fields: [layerId], references: [id], onDelete: SetNull)
+  groupId     String?
+  group       MarkerGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  x           Float // Percentage coordinate 0-100%
+  y           Float // Percentage coordinate 0-100%
+  articleId   String?
+  article     Article?     @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  icon        String?
+  color       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+// -------------------------------------------------------------
+// Chronology & Timelines
+// -------------------------------------------------------------
+model Timeline {
+  id          String         @id @default(uuid())
+  worldId     String
+  world       World          @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  coverImage  String?
+  eras        Era[]
+  events      HistoryEvent[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([worldId])
+}
+
+model Era {
+  id         String         @id @default(uuid())
+  timelineId String
+  timeline   Timeline       @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+  name       String
+  startYear  Int
+  endYear    Int?
+  order      Int            @default(0)
+  color      String         @default("#3b82f6")
+  events     HistoryEvent[]
+
+  @@index([timelineId])
+}
+
+model HistoryEvent {
+  id          String   @id @default(uuid())
+  timelineId  String
+  timeline    Timeline @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+  eraId       String?
+  era         Era?     @relation(fields: [eraId], references: [id], onDelete: SetNull)
+  title       String
+  dateDisplay String // e.g. "Year of the Comet, 142 AE"
+  numericDate Int // Sortable absolute year number
+  description String
+  articleId   String?
+  article     Article? @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  importance  Int      @default(3) // 1 to 5 scale
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([timelineId])
+}
+
+// -------------------------------------------------------------
+// Tabletop RPG Statblocks
+// -------------------------------------------------------------
+model RpgBlock {
+  id        String   @id @default(uuid())
+  worldId   String
+  world     World    @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  system    String   @default("DND_5E")
+  category  String // MONSTER, NPC, SPELL, ITEM, CLASS
+  name      String
+  statsJson String // Structured mechanics (AC, HP, Speed, Abilities, Actions, Spells)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  foundryProvenance FoundryProvenance?
+
+  @@index([worldId])
+}
+
+// Temporary, author-scoped source data and durable import audit/provenance.
+model FoundryPreview {
+  id             String   @id @default(uuid())
+  worldId        String
+  world          World    @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  authorId       String
+  author         User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  metadataJson   String
+  candidatesJson String
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([worldId, authorId, expiresAt])
+}
+
+model FoundryImportRun {
+  id             String   @id @default(uuid())
+  worldId        String
+  world          World    @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  authorId       String
+  author         User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  previewId      String
+  idempotencyKey String
+  requestHash    String
+  outcomesJson   String
+  status         String   @default("RUNNING")
+  outcomes       FoundryImportOutcome[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([worldId, authorId, idempotencyKey])
+  @@index([worldId, authorId, createdAt])
+}
+
+model FoundryImportOutcome {
+  id          String          @id @default(uuid())
+  runId       String
+  run         FoundryImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  candidateId String
+  status      String
+  blockId     String?
+  reason      String?
+  createdAt   DateTime        @default(now())
+
+  @@unique([runId, candidateId])
+  @@index([runId, createdAt])
+}
+
+model FoundryProvenance {
+  id                    String   @id @default(uuid())
+  blockId               String   @unique
+  block                 RpgBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  worldId               String
+  world                 World    @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  namespace             String
+  sourceIdentity        String
+  sourceHash            String
+  destinationHash       String
+  sourceSystem          String
+  sourceSystemVersion   String
+  foundryVersion        String
+  sourceDocumentJson    String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([worldId, namespace, sourceIdentity])
+  @@index([worldId])
+}
+
+// -------------------------------------------------------------
+// GM Campaign Notebooks (Private Prep Workspace)
+// -------------------------------------------------------------
+model Notebook {
+  id          String        @id @default(uuid())
+  worldId     String
+  world       World         @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  sections    NoteSection[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([worldId])
+}
+
+model NoteSection {
+  id         String   @id @default(uuid())
+  notebookId String
+  notebook   Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  title      String
+  order      Int      @default(0)
+  notes      Note[]
+
+  @@index([notebookId])
+}
+
+model Note {
+  id        String      @id @default(uuid())
+  sectionId String
+  section   NoteSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  title     String
+  content   String
+  order     Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([sectionId])
+}
+
+// Uploaded images are stored outside the build; hiding preserves existing URLs.
+model ImageAsset {
+  id           String   @id @default(uuid())
+  worldId      String
+  world        World    @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  title        String
+  originalName String
+  alt          String   @default("")
+  mimeType     String   @default("image/webp")
+  byteSize     Int
+  width        Int
+  height       Int
+  sha256       String
+  archived     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([worldId, sha256])
+  @@index([worldId, createdAt])
+}
+
+// Durable, retryable removal records for files whose owning rows were cascaded.
+model AssetCleanupJob {
+  id        String   @id @default(uuid())
+  assetId   String   @unique
+  attempts  Int      @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
+model AuthSession {
+  tokenHash String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model AccountSetup {
+  tokenHash String    @id
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+}
+
+model LoginLimit {
+  key      String   @id
+  attempts Int      @default(0)
+  resetsAt DateTime
+}
+
+// -------------------------------------------------------------
+// Table-Access: World Members
+// -------------------------------------------------------------
+model WorldMember {
+  id          String    @id @default(uuid())
+  worldId     String
+  world       World     @relation("WorldMemberWorld", fields: [worldId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation("WorldMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  role        String    @default("PLAYER") // PLAYER (extensible later)
+  status      String    @default("ACTIVE") // ACTIVE | REVOKED
+  joinedAt    DateTime  @default(now())
+  revokedAt   DateTime?
+  revokedById String?
+
+  @@unique([worldId, userId])
+  @@index([userId, status])
+  @@index([worldId, status])
+}
+
+// -------------------------------------------------------------
+// Table-Access: Audience Policies
+// -------------------------------------------------------------
+model AudiencePolicy {
+  id           String          @id @default(uuid())
+  worldId      String
+  world        World           @relation("AudiencePolicyWorld", fields: [worldId], references: [id], onDelete: Cascade)
+  resourceKind String
+  resourceId   String
+  mode         String          @default("GM_ONLY") // GM_ONLY | PLAYER_SNAPSHOT | PUBLIC
+  createdById  String?
+  createdBy    User?           @relation("AudiencePolicyCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime        @default(now())
+  grants       AudienceGrant[]
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([resourceKind, resourceId])
+  @@index([worldId, mode])
+}
+
+// -------------------------------------------------------------
+// Table-Access: Audience Grants (player snapshot)
+// -------------------------------------------------------------
+model AudienceGrant {
+  id          String         @id @default(uuid())
+  policyId    String
+  policy      AudiencePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User           @relation("AudienceGrantUser", fields: [userId], references: [id], onDelete: Cascade)
+  grantedById String?
+  grantedBy   User?          @relation("GrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  grantedAt   DateTime       @default(now())
+  revokedAt   DateTime?
+  revokedById String?
+
+  @@unique([policyId, userId])
+  @@index([userId, revokedAt])
+}
+
+// -------------------------------------------------------------
+// Table-Access: Append-Only Audit
+// -------------------------------------------------------------
+model AccessAuditEvent {
+  id            String   @id @default(uuid())
+  worldId       String
+  world         World    @relation("AccessAuditWorld", fields: [worldId], references: [id])
+  resourceKind  String?
+  resourceId    String?
+  actorId       String?
+  actor         User?    @relation("AccessAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action        String
+  beforeJson    String?
+  afterJson     String?
+  parentEventId String?
+  createdAt     DateTime @default(now())
+
+  @@index([worldId, createdAt])
+  @@index([resourceKind, resourceId, createdAt])
+}
+
+// -------------------------------------------------------------
+// Table-Access: Preview Sessions
+// -------------------------------------------------------------
+model PreviewSession {
+  tokenHash     String    @id
+  userId        String
+  user          User      @relation("PreviewUser", fields: [userId], references: [id], onDelete: Cascade)
+  worldId       String
+  world         World     @relation("PreviewWorld", fields: [worldId], references: [id], onDelete: Cascade)
+  issuedById    String?
+  issuedBy      User?     @relation("PreviewIssuer", fields: [issuedById], references: [id], onDelete: SetNull)
+  memberAtGrant Boolean   @default(true)
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId, worldId])
+}
+
+// -------------------------------------------------------------
+// Campaign Sessions
+// -------------------------------------------------------------
+model CampaignSession {
+  id               String              @id @default(uuid())
+  worldId          String
+  world            World               @relation("CampaignSessionWorld", fields: [worldId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
+  sessionDate      DateTime?
+  inWorldDate      String?
+  currentLocation  String?
+  status           String              @default("PLANNED") // PLANNED | PLAYED | CANCELLED
+  recap            String?
+  nextPrep         String?
+  order            Int                 @default(0)
+  isNext           Boolean             @default(false)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  revealedArticles Article[]           @relation("SessionReveals")
+  linkedEntities   SessionEntityLink[]
+
+  @@index([worldId, status])
+  @@index([worldId, order])
+}
+
+// -------------------------------------------------------------
+// Session Entity Links
+// -------------------------------------------------------------
+model SessionEntityLink {
+  id        String          @id @default(uuid())
+  sessionId String
+  session   CampaignSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  worldId   String
+  world     World           @relation("SessionLinkWorld", fields: [worldId], references: [id], onDelete: Cascade)
+  kind      String
+  entityId  String
+  label     String?
+  order     Int             @default(0)
+  createdAt DateTime        @default(now())
+
+  @@index([sessionId])
+  @@index([worldId, kind, entityId])
+}
+
+// -------------------------------------------------------------
+// Article Revision History
+// -------------------------------------------------------------
+model ArticleRevision {
+  id        String  @id @default(uuid())
+  articleId String
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  // Snapshot of article state at time of save
+  title       String
+  slug        String
+  excerpt     String?
+  contentHtml String?
+  contentJson String?
+  metadata    String?
+  tags        String?
+
+  // Publication state at time of save
+  publicationStatus String
+  visibility        String
+  state             String
+
+  // Metadata
+  userId  String
+  user    User     @relation(fields: [userId], references: [id])
+  savedAt DateTime @default(now())
+
+  // For concurrent edit detection
+  articleVersionAtSave Int
+
+  createdAt DateTime @default(now())
+
+  @@index([articleId])
+  @@index([articleId, savedAt])
+}
