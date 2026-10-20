@@ -1,0 +1,13 @@
+# Article links and backlinks
+
+Type `@` in the article editor to search the world's articles, or use the `@ Article` toolbar button. Search matches titles, ranks prefixes first and shows up to 12 results. Results include the template, category where available and a short ID to distinguish duplicate titles. Use Up/Down and Enter, or click a result; Escape and outside clicks dismiss the picker. Code blocks and inline code do not trigger article suggestions.
+
+References are atomic inline `articleLink` nodes containing an article ID and fallback label, saved in JSON and HTML. In the article preview they display the target's current title and support click or Enter navigation. Renaming a target preserves the reference. A deleted or unavailable target displays the fallback label with “missing article” and cannot navigate. Drafts remain available in this author workspace; this feature does not introduce public access or new visibility rules.
+
+The existing References and Backlinks panels use the ArticleMention table. POST and content PATCH save the article and replace its outgoing graph edges in one Prisma transaction. Edges are deduplicated, exclude self-links and resolve only within the source world. Metadata-only API PATCH requests preserve the graph. Removing a reference removes its edge; deleting an article cascades its graph edges. No schema change or reseeding is required.
+
+For compatibility, unique exact-title `@[Title]` references become clickable when viewed or edited. Saving from the editor converts resolved references into stable IDs, including when only metadata was edited. Ambiguous titles remain literal until the author chooses the desired article from the picker. Code, external links, missing titles and unmatched syntax remain literal. Unopened legacy articles are not rewritten in bulk; unconverted title references cannot survive a target rename. HTML-only API saves clear stale JSON so reopening uses the updated content. Structured JSON is authoritative for graph indexing when supplied.
+
+Validation includes search ordering, duplicate titles, formatted/nested legacy conversion, literal code, HTML entity handling, atom serialization, API world scoping and edge replacement/removal, plus Chromium checks for keyboard and mouse flows, autosave, rename/reload, backlinks, legacy conversion and missing targets.
+
+Production verification passed: all 22 tests (including both API integration tests), TypeScript, focused ESLint and the production build. Chromium verified the linking scenarios and the existing autosave/recovery workflow on port 3033. The viewer retains two pre-existing Next.js image lint warnings. All test fixtures were removed afterward.

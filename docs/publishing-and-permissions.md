@@ -1,0 +1,86 @@
+# Publishing and permissions
+
+## Author access
+
+The workspace at `/` now requires a local author session. All author APIs use a shared server authorization boundary and verify world ownership for lists, records and mutations. Private maps, timelines, variables, secrets, categories, compendium entries and asset metadata remain owner-only. Linked map/secret records are checked against their source world. A second author cannot use another owner's IDs to read or change their workspace. There is no open registration or account-claim endpoint.
+
+Run `pnpm auth:setup` on the server to create a one-time link for the oldest world's existing owner, or `pnpm auth:setup -- existing-email@example.com` to select an existing owner explicitly. Open that link, choose the account email and a 12–128 character password, and sign in. This preserves ownership and existing content. The same command is the local administrator's recovery mechanism. Setup links expire after 24 hours, are stored as hashes and are invalidated after use. The URL token is in a fragment, so it is not sent in HTTP requests; the setup page removes it from the address bar. Keep the link private.
+
+Passwords use salted scrypt (N=131072, r=8, p=1). Sessions use random 256-bit tokens, hashed in SQLite, with HttpOnly/SameSite=Lax cookies and seven-day expiry. Logout revokes the server session. Setup/recovery revokes older sessions. Local sign-in is limited to eight attempts per email and 30 attempts globally per 15 minutes to bound password work on this self-hosted instance. Public readers need no account. Collaboration, invited players and role-based shared editing are not included; author access is ownership-based.
+
+Mutation requests require an Origin matching the browser-facing host and protocol. Behind a TLS reverse proxy, configure `WORLDFORGE_ORIGIN=https://your-host.example` so origin checks and Secure cookies use the public origin. Plain HTTP on localhost uses a non-Secure cookie for local development. API clients need the session cookie and matching Origin for writes. Never add an unauthenticated development bypass. Author responses and image bytes use private/no-store caching. Local recovery drafts remain in that browser; server logout does not erase browser storage or previously downloaded data.
+
+The password parameters follow the [OWASP Password Storage guidance](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html); hashing uses [Node.js crypto](https://nodejs.org/api/crypto.html). Session checks run inside routes and the workspace server component, using the installed Next.js Cache Components conventions.
+
+
+## Table-access system (v2)
+
+The table-access system extends per-article visibility with role-based audience policies, enabling secure player sharing without exposing GM-only content.
+
+### Architecture
+
+Authorization is an explicit domain layer. A world member has a role (`PLAYER`); every shareable object has an `AudiencePolicy`; grants are snapshot-based so a later member is not automatically included in historic player shares.
+
+### Members
+
+World members are managed through:
+
+- `POST /api/worlds/[id]/members` - Add a player to the world (owner only)
+- `DELETE /api/worlds/[id]/members/[userId]` - Revoke a player's membership (owner only)
+- `GET /api/worlds/[id]/members` - List active members (owner only)
+
+### Audience policies
+
+Every resource has an audience policy with one of three modes:
+
+| Mode | Behavior |
+|------|----------|
+| `GM_ONLY` | Default. Only the world owner/GM can read. |
+| `PLAYER_SNAPSHOT` | Only selected player IDs at policy creation can read. Future members not auto-included. |
+| `PUBLIC` | Existing anonymous-public publishing path. Separate deliberate action. |
+
+- `PUT /api/resources/[kind]/[id]/audience` - Create or update a policy (owner only)
+- `DELETE /api/resources/[kind]/[id]/audience` - Remove a policy (owner only)
+
+### Audit trail
+
+- `GET /api/worlds/[id]/audit` - View audit events (owner only)
+
+### Preview sessions
+
+- `POST /api/worlds/[id]/preview` - Issue a preview session (owner only, 15-min expiry)
+- `DELETE /api/worlds/[id]/preview` - Revoke a preview session (owner only)
+
+### Data model
+
+- **WorldMember**: world, user, role (PLAYER), status (ACTIVE|REVOKED)
+- **AudiencePolicy**: world, resource (kind+id), mode (GM_ONLY|PLAYER_SNAPSHOT|PUBLIC)
+- **AudienceGrant**: policy + user, with revocation timestamp
+- **AccessAuditEvent**: immutable actor/action/before/after/parent fields
+- **PreviewSession**: token hash, user, world, expiry, revocation
+- **CampaignSession**: planned/played dates, recap, typed entity links
+
+### Compatibility
+
+Existing articles default to `GM_ONLY` audience. `PUBLIC`+`PUBLISHED` articles continue anonymous access. The GM must explicitly create a player-share policy to make material available to players.
+## Publication controls
+
+Article `publicationStatus` is Draft, WIP or Published. Independent `visibility` is Private or Public. Readers can see an article only when its world is public, its publication status is Published, and its visibility is Public. New articles default to Draft/Private. The legacy `state` field remains synchronized for compatibility; legacy PRIVATE writes remain private and legacy PUBLISHED writes do not implicitly grant public visibility.
+
+World styling exposes Make this world public. Article editing exposes separate status and visibility controls and explains the world's override. Publication changes participate in autosave. Making a world private closes its public world, article and asset access immediately on the next request. Share copies `/w/{worldSlug}/a/{articleSlug}` only for currently public articles; world settings link to `/w/{worldSlug}`. Author preview continues to include the owner's private published entries.
+
+## Public readers
+
+Public pages use a separate server read path and a whitelist renderer. They never reuse the author API detail payload. Private article titles and IDs are redacted from inline references, and public backlinks are calculated from the reader-visible documents. GM-note blocks are removed with their entire subtree before rendering. Campaign Secret records are never sent to readers, even when marked revealed for owner tracking. Unknown/custom and inactive-profile metadata is omitted; active structured fields are shown. Private variable collections are not interpolated on public pages, so their macro syntax remains literal.
+
+Only statblocks explicitly embedded in visible content or selected as its matching linked compendium entry are rendered. Public image access requires a public world cover/global cover, a public article cover, or an image in a reader-visible public article block. An image contained only inside a GM note does not grant access. Other library files require the owner session. Hiding an image from the library still preserves legitimate references; changing publication revokes anonymous access. Data already delivered or cached by a browser before this change cannot be recalled.
+
+With Next.js streaming, an inaccessible public page can return the framework's streamed not-found screen with a 200 status and noindex rather than a pre-stream 404. Its private content is not rendered or included in the RSC response. Protected author APIs return 401 for missing/expired sessions and 404 for inaccessible records; private image bytes return 404.
+
+## Migration and verification
+
+A consistent pre-change SQLite backup is at `/tmp/worldforge-before-publishing-20261015.sqlite`. Prisma adds password/session/setup/rate-limit tables and separate article publication/visibility fields. Existing status values are backfilled, all existing article visibility stays Private, and existing world public flags were reset to false for deliberate re-publication through the new controls. SQLite WAL journaling is enabled to keep concurrent session reads and authoring writes from racing over rollback-journal files. Use SQLite-aware backups (or include its WAL in a consistent snapshot); do not copy only a live database file. No content or ownership is reassigned. Other existing installations must run `pnpm exec prisma db push`, `pnpm exec prisma generate`, and apply `prisma/publication-backfill.sql` once before enabling public routes. The SQL deliberately closes public access; do not rerun it after deliberate publication.
+
+Tests cover status/visibility combinations, GM subtree removal, HTML safety, private-reference redaction, password hashing, authenticated owner boundaries, setup-token replay, CSRF origin checks, session expiry/logout, public-reader payloads and image grants/revocation. Existing API integration tests now use isolated owner sessions. Chromium verifies first setup, password sign-in, owner authoring, publication, Share URLs, public navigation/backlinks, absence of private/GM content, WIP/world revocation and logout.
+
+Production verification passed: all 41 tests (including owner isolation across each resource, authentication lifecycle, API regression checks and public payload/image filtering), TypeScript, focused ESLint and the production build. Chromium passed setup, login, publication, Share URLs, reader navigation, private/GM redaction, WIP/world revocation and logout on port 3033. Fixtures were removed afterward. The viewer retains two pre-existing Next.js image lint warnings; the build completes without the previous prerender-catch logs.
