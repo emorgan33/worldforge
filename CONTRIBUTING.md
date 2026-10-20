@@ -14,7 +14,7 @@ test workflow, and what we look for in pull requests.
 ## Local development setup
 
 ```bash
-git clone https://github.com/<owner>/worldforge.git
+git clone https://github.com/emorgan33/worldforge.git
 cd worldforge
 pnpm install
 cp .env.example .env

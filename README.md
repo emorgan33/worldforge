@@ -8,6 +8,14 @@ your players.
 WorldForge is a local-first web app: your campaign content lives in a SQLite
 database and an image directory that you own and back up.
 
+## Screenshots
+
+![Aethelgard public world page](docs/screenshots/world.png)
+
+![Thronehold article page](docs/screenshots/article.png)
+
+Both views come from the optional Aethelgard demo seed.
+
 ## Features
 
 - **Block-based editor** — slash commands, drag/reorder, tables, images,
@@ -39,7 +47,7 @@ database and an image directory that you own and back up.
 The supported way to run WorldForge is Docker Compose.
 
 ```bash
-git clone https://github.com/<owner>/worldforge.git
+git clone https://github.com/emorgan33/worldforge.git
 cd worldforge
 cp .env.example .env        # adjust if needed; keep WORLDFORGE_ORIGIN correct
 docker compose up -d --build
