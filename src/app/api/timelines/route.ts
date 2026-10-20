@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
@@ -7,7 +8,7 @@ async function getHandler(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const worldId = searchParams.get("worldId");
 
-    const where: any = {};
+    const where: Prisma.TimelineWhereInput = {};
     if (worldId) where.worldId = worldId;
 
     const timelines = await prisma.timeline.findMany({
@@ -29,9 +30,9 @@ async function getHandler(req: NextRequest) {
     });
 
     return NextResponse.json(timelines);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to fetch timelines:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process request." }, { status: 500 });
   }
 }
 

@@ -32,7 +32,7 @@ export function EntityRelationshipPicker({ worldId, onSelect }: EntityRelationsh
       const params = new URLSearchParams({ worldId, q: q.trim() });
       const res = await fetch(`/api/articles?${params}`);
       const articles = await res.json();
-      let mapped: SearchResult[] = (Array.isArray(articles) ? articles : []).map(
+      const mapped: SearchResult[] = (Array.isArray(articles) ? articles : []).map(
         (a: { id: string; title: string }) => ({ id: a.id, title: a.title, kind: "article" as const })
       );
       setResults(mapped);

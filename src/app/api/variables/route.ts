@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
@@ -7,7 +8,7 @@ async function getHandler(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const worldId = searchParams.get("worldId");
 
-    const where: any = {};
+    const where: Prisma.VariableCollectionWhereInput = {};
     if (worldId) where.worldId = worldId;
 
     const collections = await prisma.variableCollection.findMany({
@@ -21,9 +22,9 @@ async function getHandler(req: NextRequest) {
     });
 
     return NextResponse.json(collections);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to list variables:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process request." }, { status: 500 });
   }
 }
 
@@ -48,9 +49,9 @@ async function postHandler(req: NextRequest) {
     });
 
     return NextResponse.json(variable, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to create variable:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process request." }, { status: 500 });
   }
 }
 
@@ -73,9 +74,9 @@ async function patchHandler(req: NextRequest) {
     });
 
     return NextResponse.json(updated);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to update variable:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process request." }, { status: 500 });
   }
 }
 

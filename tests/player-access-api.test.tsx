@@ -26,7 +26,7 @@ test("player access: denied paths return 404 without leaking resource info", { s
   const bFetch = await authorFetch(db, playerB.id, origin!);
   const outFetch = await authorFetch(db, outsider.id, origin!);
 
-  const checkDenied = async (fetchFn: Function, path: string) => {
+  const checkDenied = async (fetchFn: (input: string | URL | Request, init?: RequestInit) => Promise<Response>, path: string) => {
     const res = await fetchFn(`${origin}${path}`);
     assert.equal(res.status, 404);
     const body = await res.json();

@@ -56,20 +56,28 @@ Unit tests and server-backed integration tests share one command:
 pnpm test
 ```
 
+Test files run serially. This matters because the integration suites share a
+SQLite database with the dev server; parallel processes can race on the
+rollback journal and produce spurious `disk I/O error` failures.
+
 Many suites are **integration tests** that require a running dev server (not a
 production build). Next.js 16.4.1 production builds do not reliably read Cookie
 headers via `cookies()`, so use the dev server:
 
 ```bash
-# terminal 1
+# terminal 1 — use an isolated database and a single connection
+export DATABASE_URL="file:./test.db?connection_limit=1"
+pnpm db:deploy
 WORLDFORGE_ORIGIN=http://localhost:3131 pnpm exec next dev --port 3131
 
 # terminal 2
+export DATABASE_URL="file:./test.db?connection_limit=1"
 WORLDFORGE_TEST_ORIGIN=http://localhost:3131 pnpm test
 ```
 
-Tests that need the origin skip when `WORLDFORGE_TEST_ORIGIN` is unset. Use an
-isolated database for integration work; never point tests at real data.
+Relative SQLite paths resolve from `prisma/`, so `file:./test.db` is
+`prisma/test.db`. Never point tests at real data. Tests that need the origin
+skip when `WORLDFORGE_TEST_ORIGIN` is unset.
 
 ## Before opening a pull request
 
@@ -78,7 +86,7 @@ Run all of these and make sure they pass:
 ```bash
 pnpm lint
 pnpm build
-pnpm test
+pnpm test        # unit suites; start the dev server first for integration
 ```
 
 ## Pull request expectations

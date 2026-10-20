@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
@@ -8,7 +9,7 @@ async function getHandler(req: NextRequest) {
     const worldId = searchParams.get("worldId");
     const articleId = searchParams.get("articleId");
 
-    const where: any = {};
+    const where: Prisma.SecretWhereInput = {};
     if (worldId) where.worldId = worldId;
     if (articleId) where.articleId = articleId;
 
@@ -23,9 +24,9 @@ async function getHandler(req: NextRequest) {
     });
 
     return NextResponse.json(secrets);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to fetch secrets:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process request." }, { status: 500 });
   }
 }
 
@@ -50,9 +51,9 @@ async function postHandler(req: NextRequest) {
     });
 
     return NextResponse.json(secret, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to create secret:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process request." }, { status: 500 });
   }
 }
 
@@ -75,9 +76,9 @@ async function patchHandler(req: NextRequest) {
     });
 
     return NextResponse.json(updated);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to update secret:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process request." }, { status: 500 });
   }
 }
 

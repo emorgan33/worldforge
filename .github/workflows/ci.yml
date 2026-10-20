@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: "file:./ci.db"
+
+jobs:
+  quality:
+    name: Lint and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm lint
+      - run: pnpm build
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm db:deploy
+      - name: Run tests
+        # Server-backed integration suites skip unless
+        # WORLDFORGE_TEST_ORIGIN is set, so this runs the pure/unit suites.
+        run: pnpm test
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    # Server-backed suites share a SQLite file with the dev server; tests run
+    # serially and use a single connection to avoid journal lock races.
+    env:
+      DATABASE_URL: "file:./ci.db?connection_limit=1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm db:deploy
+      - name: Start dev server
+        run: |
+          WORLDFORGE_ORIGIN=http://127.0.0.1:3131 \
+            pnpm exec next dev --port 3131 > /tmp/next-dev.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -sf http://127.0.0.1:3131/login > /dev/null; then
+              echo "Dev server ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/next-dev.log
+          exit 1
+      - name: Run tests against dev server
+        env:
+          WORLDFORGE_TEST_ORIGIN: http://127.0.0.1:3131
+          WORLDFORGE_ORIGIN: http://127.0.0.1:3131
+        run: pnpm test

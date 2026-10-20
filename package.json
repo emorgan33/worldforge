@@ -8,7 +8,7 @@
     "start": "next start",
     "serve:local": "bash scripts/serve-local.sh",
     "lint": "eslint",
-    "test": "node --import tsx --test tests/*.test.ts tests/*.test.tsx",
+    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts tests/*.test.tsx",
     "auth:setup": "tsx scripts/auth-setup.ts",
     "db:generate": "prisma generate",
     "db:deploy": "prisma migrate deploy",
