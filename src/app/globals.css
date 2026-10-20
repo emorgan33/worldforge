@@ -24,3 +24,198 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.sidebar-lore-scroll { scrollbar-width: none; }
+.sidebar-lore-scroll::-webkit-scrollbar { display: none; }
+
+.block-editor > * { margin: 0.65rem 0; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }
+.block-editor > *:hover { outline: 1px solid #3f3f46; }
+.block-editor h1 { font-size: 2rem; font-weight: 700; }
+.block-editor h2 { font-size: 1.5rem; font-weight: 700; }
+.block-editor h3 { font-size: 1.2rem; font-weight: 600; }
+.block-editor ul { list-style: disc; padding-left: 2rem; }
+.block-editor ol { list-style: decimal; padding-left: 2rem; }
+.block-editor blockquote { border-left: 3px solid #a78bfa; padding-left: 1rem; color: #d4d4d8; }
+.block-editor pre { background: #18181b; padding: 1rem; white-space: pre-wrap; font-family: monospace; }
+.block-editor hr { border-top: 1px solid #52525b; margin: 1.5rem 0; }
+.block-editor p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; color: #71717a; pointer-events: none; }
+
+/* Authoring blocks and their presentation equivalents share content styling. */
+.block-editor { padding: 24px 20px 28px 58px; }
+.block-editor > * { min-height: 1.65em; margin: 0.5rem 0; }
+.block-editor > .ProseMirror-selectednode { outline: 2px solid #a78bfa; }
+.block-gutter { transition: color 120ms; }
+.campaign-callout { position: relative; margin: 1.2rem 0; border: 1px solid #3f3f46; border-left: 3px solid #a78bfa; border-radius: 8px; padding: 30px 16px 12px; background: #1c1925; }
+.campaign-callout::before { content: 'Note'; position: absolute; top: 9px; left: 16px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #c4b5fd; pointer-events: none; }
+.campaign-callout[data-callout='readAloud'] { border-left-color: #f59e0b; background: #272015; }
+.campaign-callout[data-callout='readAloud']::before { content: 'Read aloud'; color: #fbbf24; }
+.campaign-callout[data-callout='gmNote'] { border-left-color: #f87171; background: #261a1c; }
+.campaign-callout[data-callout='gmNote']::before { content: 'GM note'; color: #fca5a5; }
+.campaign-callout p { margin: 0.4rem 0; }
+.block-editor img, .article-rich-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 1rem 0; }
+.block-editor table, .article-rich-content table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 1rem 0; }
+.block-editor td, .block-editor th, .article-rich-content td, .article-rich-content th { position: relative; border: 1px solid #52525b; padding: 8px 12px; vertical-align: top; min-width: 60px; }
+.block-editor th, .article-rich-content th { background: #27272a; font-weight: 600; }
+.block-editor td p, .block-editor th p { margin: 0; min-height: 1.5em; }
+.block-editor .selectedCell { background: #4c3d68; }
+.article-rich-content p { margin: 0.8rem 0; }
+.article-rich-content h1 { margin: 1.5rem 0 0.75rem; font-size: 2rem; font-weight: 700; }
+.article-rich-content h2 { margin: 1.5rem 0 0.75rem; font-size: 1.5rem; font-weight: 700; }
+.article-rich-content h3 { margin: 1rem 0 0.5rem; font-size: 1.2rem; font-weight: 600; }
+.article-rich-content ul { list-style: disc; padding-left: 1.5rem; }
+.article-rich-content ol { list-style: decimal; padding-left: 1.5rem; }
+.article-rich-content blockquote { border-left: 3px solid #a78bfa; padding-left: 1rem; color: #d4d4d8; }
+.article-rich-content pre { border-radius: 8px; background: #18181b; padding: 1rem; white-space: pre-wrap; }
+.article-rich-content hr { border-top: 1px solid #52525b; margin: 1.5rem 0; }
+
+.article-link { display: inline; border-radius: .25rem; padding: .05rem .2rem; color: #a5b4fc; background: rgb(99 102 241 / .12); border-bottom: 1px solid rgb(129 140 248 / .5); cursor: pointer; }
+.article-link:hover, .article-link:focus-visible { color: #c7d2fe; background: rgb(99 102 241 / .25); outline: 2px solid #818cf8; outline-offset: 2px; }
+.article-link-missing { color: #a1a1aa; border-bottom-style: dashed; cursor: help; }
+.article-link-picker { position: fixed; z-index: 100; overflow-y: auto; border: 1px solid #3f3f46; border-radius: .75rem; background: #18181b; box-shadow: 0 16px 40px #0009; padding: .35rem; }
+.article-link-picker-heading { padding: .5rem; color: #a1a1aa; font-size: .65rem; }
+.article-link-picker-option { display: flex; width: 100%; flex-direction: column; gap: .15rem; text-align: left; padding: .55rem .65rem; border-radius: .4rem; color: #e4e4e7; font-size: .8rem; overflow-wrap: anywhere; }
+.article-link-picker-option small { color: #a1a1aa; font-size: .65rem; }
+.article-link-picker-option[aria-selected=true], .article-link-picker-option:hover { background: #312e81; color: #e0e7ff; }
+
+/* Reader presentation is scoped to a single world, including author previews. */
+.world-presentation { padding: clamp(12px, 3vw, 40px); background-position: center top; background-size: cover; background-repeat: no-repeat; color: var(--world-text); overflow-wrap: anywhere; }
+.world-reading-surface { margin-inline: auto; max-width: var(--world-width); background: var(--world-surface); padding: clamp(16px, 4vw, 48px); border: 1px solid var(--world-border); border-radius: 16px; box-shadow: 0 12px 40px #0003; container-type: inline-size; }
+.world-presentation :is(h1, h2, h3, h4, strong, dt, dd, .text-zinc-100, .text-zinc-200, .text-zinc-300) { color: var(--world-text); }
+.world-presentation :is(.text-zinc-400, .text-zinc-500) { color: var(--world-muted); }
+.world-presentation :is(a, button, .text-indigo-300, .text-amber-200, .text-amber-300, .text-amber-400, .text-amber-500) { color: var(--world-accent); }
+.world-presentation a:hover, .world-presentation button:hover { text-decoration: underline; }
+.world-presentation :is(a, button):focus-visible { outline: 2px solid var(--world-accent); outline-offset: 3px; }
+.world-presentation :is([class*="border-zinc-"], .campaign-callout, td, th, blockquote) { border-color: var(--world-border); }
+.world-presentation :is([class*="bg-zinc-"], .campaign-callout, pre, th) { background-color: var(--world-surface); }
+.world-presentation .campaign-callout::before { color: var(--world-accent); }
+.world-presentation .article-link { background: transparent; color: var(--world-accent); border-color: var(--world-accent); }
+.world-presentation .public-article-content { color: var(--world-text); }
+.world-presentation img { max-width: 100%; }
+@container (min-width: 720px) {
+  .world-article-layout { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+  .world-article-layout > article { grid-column: auto; }
+}
+.world-presentation .statblock-card { background: var(--world-surface); color: var(--world-text); }
+.world-presentation .statblock-card :is([class*="text-amber-50"], .text-amber-100) { color: var(--world-text); }
+.world-presentation .statblock-card [class*="bg-amber-"] { background: var(--world-surface); }
+.world-presentation .statblock-card [class*="border-amber-"] { border-color: var(--world-border); }
+
+/* Edition-specific book presentation. Decorative textures are CSS, with no remote dependencies. */
+.world-presentation:is([data-world-theme="dnd2014"], [data-world-theme="pf2remaster"]) { font-family: Georgia, "Times New Roman", serif; line-height: 1.65; }
+.world-presentation:is([data-world-theme="dnd2014"], [data-world-theme="pf2remaster"]) .world-reading-surface { border-radius: 2px; border-top: 5px solid #b59a68; border-bottom: 5px solid #b59a68; background-image: radial-gradient(ellipse at top left, #b58b3220, transparent 65%); box-shadow: 0 3px 0 #0004, 0 15px 45px #0007; }
+.world-presentation:is([data-world-theme="dnd2014"], [data-world-theme="pf2remaster"]) :is(h1,h2,h3,h4) { font-family: Georgia, "Times New Roman", serif; font-variant: small-caps; letter-spacing: .025em; line-height: 1.2; color: var(--world-accent); }
+
+/* Statblocks follow their own rules edition, including in the compendium and GM screen. */
+.statblock-card[data-rules-style] { --game-ink: #302820; --game-accent: #822b25; --game-line: #9a4335; background: #faf1dc; color: var(--game-ink); border: 1px solid #b59a68; border-top: 5px solid #b59a68; border-bottom: 5px solid #b59a68; border-radius: 0; font-family: Georgia, "Times New Roman", serif; line-height: 1.5; box-shadow: 0 3px 8px #0003; }
+.statblock-card[data-rules-style] :is(h3,h4,strong,dt,dd,[class*="text-amber-"]) { color: var(--game-ink); }
+.statblock-card[data-rules-style] :is(h3,h4,dt,.text-amber-300,.text-amber-400,.text-amber-500) { color: var(--game-accent); }
+.statblock-card[data-rules-style] :is(h3,h4) { font-family: Georgia, "Times New Roman", serif; font-variant: small-caps; letter-spacing: .02em; }
+.statblock-card[data-rules-style] [class*="border-amber-"] { border-color: var(--game-line); }
+.statblock-card[data-rules-style] [class*="bg-amber-"] { background: #e7d9b9; color: var(--game-accent); }
+.statblock-card[data-rules-style] .statblock-heading { border-bottom: 3px solid var(--game-line); }
+@media (max-width: 480px) {
+  .statblock-card[data-rules-style] { padding: 16px; }
+}
+
+.public-article-content > .statblock-card { margin-block: 1.5rem; }
+
+.rules-emblem { width: 2.5rem; height: 2.5rem; flex: none; color: var(--game-accent); }
+.rules-action-badge { display: inline-flex; align-items: center; gap: .4rem; vertical-align: middle; white-space: nowrap; }
+.rules-action-icon { display: inline-block; width: 1rem; height: 1rem; flex: none; }
+
+/* pf2e-style 0.2.0 reference: Remaster greens, compact rules blocks and ruled read-aloud text. */
+.world-presentation[data-world-theme="pf2remaster"] { font-family: Roboto, "Liberation Sans", Arial, sans-serif; line-height: 1.55; }
+.world-presentation[data-world-theme="pf2remaster"] .world-reading-surface { border: 0; border-radius: 0; background-image: none; box-shadow: 0 3px 16px #64411726; }
+.world-presentation[data-world-theme="pf2remaster"] :is(h1,h2,h3,h4):not(.statblock-card *) { font-family: Roboto, "Liberation Sans", Arial, sans-serif; font-variant: normal; letter-spacing: 0; font-weight: 700; }
+.world-presentation[data-world-theme="pf2remaster"] h1:not(.statblock-card *) { font-family: Taroca, "Palatino Linotype", Georgia, serif; color: var(--world-accent); }
+.world-presentation[data-world-theme="pf2remaster"] h2:not(.statblock-card *) { color: #4e1b0e; border: 0; }
+.world-presentation[data-world-theme="pf2remaster"] h3:not(.statblock-card *) { color: #015d4e; }
+.world-presentation[data-world-theme="pf2remaster"] main > header { padding: 1.5rem; background: #f4eee0; border-bottom: 3px solid #644117; text-align: center; }
+.world-presentation[data-world-theme="pf2remaster"] .public-article-content > p + p { text-indent: 1em; }
+.world-presentation[data-world-theme="pf2remaster"] .campaign-callout { background: #e2d7d3; color: #181818; border: 0; border-radius: 0; padding: 30px 16px 12px; }
+.world-presentation[data-world-theme="pf2remaster"] .campaign-callout[data-callout="readAloud"] { background: transparent; color: #644117; border-block: 1px solid #644117; padding: 12px 0; }
+.world-presentation[data-world-theme="pf2remaster"] .campaign-callout[data-callout="readAloud"]::before { content: none; }
+.world-presentation[data-world-theme="pf2remaster"] th { background: #002a16; color: white; border: 0; }
+.world-presentation[data-world-theme="pf2remaster"] td { border: 0; }
+.world-presentation[data-world-theme="pf2remaster"] tbody tr:nth-child(even) { background: #ede3c7; }
+.world-presentation[data-world-theme="pf2remaster"] tbody tr:nth-child(odd) { background: #f4eee0; }
+
+.statblock-card[data-rules-style="pf2-remaster"] { --game-ink: #181818; --game-accent: #181818; --game-line: #181818; --pf-action-cutout: #fff; background: #fff; border: 0; border-radius: 0; padding: 20px clamp(16px, 2vw, 24px); font-family: Roboto, "Liberation Sans", Arial, sans-serif; font-size: .9rem; line-height: 1.45; box-shadow: none; }
+.statblock-card[data-rules-style="pf2-remaster"] .statblock-heading { margin: 0; padding: 0 0 6px; background: transparent; border-bottom: 1px solid #181818; align-items: center; }
+.statblock-card[data-rules-style="pf2-remaster"] .statblock-heading :is(h3,p,span) { color: #181818; }
+.statblock-card[data-rules-style="pf2-remaster"] .statblock-heading h3 { font-family: "Arial Narrow", "Liberation Sans Narrow", Arial, sans-serif; font-size: 1.2rem; font-variant: normal; letter-spacing: -.025em; font-weight: 800; text-transform: uppercase; }
+.statblock-card[data-rules-style="pf2-remaster"] .statblock-heading > span { border: 0; padding: 0; text-transform: uppercase; font-size: .95rem; }
+.statblock-card[data-rules-style="pf2-remaster"] .statblock-heading p { font-size: .55rem; letter-spacing: .08em; }
+.statblock-card[data-rules-style="pf2-remaster"] .rules-emblem { --game-emblem-cutout: #fff; color: #002a16; width: 1.6rem; height: 1.6rem; }
+.statblock-card[data-rules-style="pf2-remaster"] h4.text-amber-300 { color: #181818; font-family: inherit; font-variant: normal; font-weight: 700; border-bottom: 1px solid #181818; padding-bottom: 4px; }
+.statblock-card[data-rules-style="pf2-remaster"] > dl { margin-top: 10px; }
+.statblock-card[data-rules-style="pf2-remaster"] > dl > div + div { margin-top: 3px; }
+.statblock-card[data-rules-style="pf2-remaster"] > .grid { border: 0; border-block: 1px solid #181818; border-radius: 0; background: transparent; padding: 8px 0; }
+.statblock-card[data-rules-style="pf2-remaster"] .rules-action-badge { --pf-action-cutout: #fff; background: transparent; color: #181818; padding: 0; }
+.pf-trait-strip { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; list-style: none; padding: 0; }
+.pf-trait-strip li { padding: 2px 7px; border: 1px solid #dac285; border-inline-width: 2px; background: #5d0000; color: white; text-transform: uppercase; font-size: .65rem; font-weight: 700; letter-spacing: .035em; }
+.pf-trait-strip li:is([data-trait="tiny"],[data-trait="small"],[data-trait="medium"],[data-trait="large"],[data-trait="huge"],[data-trait="gargantuan"]) { background: #3a7a58; }
+.pf-trait-strip li[data-trait="unique"] { background: #871f78; }
+.pf-trait-strip li[data-trait="rare"] { background: #002b6f; }
+.pf-trait-strip li[data-trait="uncommon"] { background: #9b4700; }
+
+/* Homebrewery's PHB typography and local assets; scoped to the D&D presentation. */
+@font-face { font-family: "WorldBook"; src: url('/themes/homebrewery/fonts/book.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "WorldBook"; src: url('/themes/homebrewery/fonts/book-bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "WorldBook"; src: url('/themes/homebrewery/fonts/book-italic.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "WorldBook"; src: url('/themes/homebrewery/fonts/book-bold-italic.woff2') format('woff2'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: "WorldHeadings"; src: url('/themes/homebrewery/fonts/headings.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "WorldScaly"; src: url('/themes/homebrewery/fonts/sans.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "WorldScaly"; src: url('/themes/homebrewery/fonts/sans-bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "WorldScaly"; src: url('/themes/homebrewery/fonts/sans-italic.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+.world-presentation[data-world-theme="dnd2014"] { font-family: "WorldBook", Georgia, serif; line-height: 1.45; }
+.world-presentation[data-world-theme="dnd2014"] .world-reading-surface { background-image: url('/themes/homebrewery/parchmentBackground.jpg'); background-size: cover; border: 0; border-bottom: 4px double #c0ad6a; border-radius: 0; box-shadow: 0 4px 24px #0005; }
+.world-presentation[data-world-theme="dnd2014"] :is(h1,h2,h3,h4):not(.statblock-card *) { font-family: "WorldHeadings", Georgia, serif; font-weight: 400; font-variant: normal; letter-spacing: 0; line-height: 1.1; color: var(--world-accent); }
+.world-presentation[data-world-theme="dnd2014"] h3:not(.statblock-card *) { border-bottom: 2px solid #c0ad6a; padding-bottom: .1em; }
+.world-presentation[data-world-theme="dnd2014"] .public-article-content > p + p { text-indent: 1em; }
+.world-presentation[data-world-theme="dnd2014"] .public-article-content { line-height: 1.45; }
+.world-presentation[data-world-theme="dnd2014"] :is(table,.campaign-callout) { font-family: "WorldScaly", Arial, sans-serif; line-height: 1.35; }
+.world-presentation[data-world-theme="dnd2014"] :is(td,th) { border: 0; padding: .3em .5em; }
+.world-presentation[data-world-theme="dnd2014"] th { background: transparent; color: #181818; font-weight: 700; }
+.world-presentation[data-world-theme="dnd2014"] tbody tr:nth-child(even) { background: #e0e5c1; }
+.world-presentation[data-world-theme="dnd2014"] .campaign-callout { color: #181818; background: #e0e5c1; border: 1px solid; border-image: url('/themes/homebrewery/noteBorder.png') 12 stretch; border-image-width: 11px; border-image-outset: 9px 0; border-radius: 0; box-shadow: 1px 4px 12px #0003; }
+.world-presentation[data-world-theme="dnd2014"] .campaign-callout[data-callout="readAloud"] { background: #faf7ea; border: 7px solid; border-image: url('/themes/homebrewery/descriptiveBorder.png') 12 stretch; border-image-outset: 4px; box-shadow: 0 0 6px #faf7ea; }
+.world-presentation[data-world-theme="dnd2014"] .campaign-callout::before { color: #58180d; }
+
+.statblock-card[data-rules-style="dnd-2014"] { --game-ink: #181818; --game-accent: #58180d; --game-line: #9c2b1b; --game-emblem-cutout: #f2e5b5; color: #181818; background-color: #f2e5b5; background-image: url('/themes/homebrewery/parchmentBackgroundGrayscale.jpg'); background-blend-mode: overlay; background-size: cover; font-family: "WorldScaly", Arial, sans-serif; line-height: 1.35; border: solid; border-width: 7px 6px; border-image: url('/themes/homebrewery/monsterBorderFancy.png') 14 round; border-image-outset: 0 2px; border-radius: 0; padding: 16px; box-shadow: 1px 4px 12px #0003; }
+.statblock-card[data-rules-style="dnd-2014"] h3.text-amber-100 { font-family: "WorldHeadings", Georgia, serif; font-weight: 400; font-variant: normal; letter-spacing: 0; }
+.statblock-card[data-rules-style="dnd-2014"] h4.text-amber-300 { font-family: "WorldScaly", Arial, sans-serif; font-variant: small-caps; font-size: 1.2rem; font-weight: 400; border-bottom: 1.5px solid #58180d; }
+.statblock-card[data-rules-style="dnd-2014"] .statblock-heading { position: relative; border: 0; padding-bottom: 15px; }
+.statblock-card[data-rules-style="dnd-2014"] .statblock-heading::after,
+.statblock-card[data-rules-style="dnd-2014"] > .grid::before,
+.statblock-card[data-rules-style="dnd-2014"] > .grid::after { content: ''; position: absolute; inset-inline: 0; height: 6px; background: #9c2b1b; clip-path: polygon(0 0,100% 50%,0 100%); }
+.statblock-card[data-rules-style="dnd-2014"] .statblock-heading::after { bottom: 0; }
+.statblock-card[data-rules-style="dnd-2014"] > .grid { position: relative; border: 0; border-radius: 0; background: transparent; padding: 14px 0; }
+.statblock-card[data-rules-style="dnd-2014"] > .grid::before { top: 0; }
+.statblock-card[data-rules-style="dnd-2014"] > .grid::after { bottom: 0; }
+.statblock-card[data-rules-style="dnd-2014"] > dl :is(dt,dd),
+.statblock-card[data-rules-style="dnd-2014"] > .grid { color: #58180d; }
+.statblock-card[data-rules-style="dnd-2014"] .statblock-heading > span { border-color: #58180d; }
+@media (max-width: 480px) { .statblock-card[data-rules-style="dnd-2014"] { padding: 12px; } }
+
+/* Category-specific pf2e-style formatting, with consistent panel padding. */
+@font-face { font-family: "PFReference"; src: url('/themes/pathfinder/roboto.ttf') format('truetype'); font-weight: 100 900; font-stretch: 75% 100%; font-style: normal; font-display: swap; }
+.statblock-card.pf-reference[data-rules-style="pf2-remaster"] { font-family: "PFReference", "Liberation Sans", Arial, sans-serif; font-stretch: 80%; font-size: .95rem; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
+.statblock-card.pf-reference .statblock-heading { display: flex; flex-wrap: wrap; gap: .2rem .8rem; align-items: baseline; border-bottom: 1px solid #181818; padding: 0 0 .35em; }
+.pf-reference .pf-title { display: flex; flex: 1 1 180px; align-items: baseline; gap: .3em; min-width: 0; }
+.statblock-card.pf-reference .statblock-heading h3 { margin: 0; font-family: inherit; font-stretch: 75%; font-size: 1.3em; font-variant: normal; font-weight: 900; letter-spacing: 0; text-transform: uppercase; }
+.pf-reference .pf-title .rules-emblem { width: 1em; height: 1em; align-self: center; }
+.statblock-card.pf-reference .pf-type { flex: none; font-family: inherit; font-stretch: 75%; font-size: 1.3em; font-weight: 900; white-space: nowrap; }
+.pf-reference .pf-trait-strip { gap: 3px; margin: .4em 0; }
+.pf-reference .pf-trait-strip li { font-size: .8em; font-weight: 600; padding: 3px 6px; line-height: 1.1; }
+.statblock-card.pf-reference :is(p.pf-line,p.pf-result) { margin: .35em 0; padding-left: 1em; text-indent: -1em; white-space: pre-wrap; }
+.statblock-card.pf-reference p.pf-effect { margin: .6em 0; text-indent: 1em; white-space: pre-wrap; }
+.statblock-card.pf-reference .pf-description { margin: .4em 0; font-style: italic; }
+.statblock-card.pf-reference .pf-rule-section { border-top: 1px solid #181818; margin-top: .6em; padding-top: .35em; }
+.statblock-card.pf-reference .pf-entry { margin: .4em 0; }
+.statblock-card.pf-reference strong { font-weight: 700; color: #181818; }
+.statblock-card.pf-reference .rules-action-badge { font: inherit; vertical-align: baseline; line-height: 1; gap: 0; }
+.pf-reference .rules-action-badge:has(svg) > span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.pf-reference .rules-action-icon { height: 1em; }
+.statblock-card.pf-reference :is(.pf-line,.pf-result,.pf-effect):first-child { margin-top: 0; }
+.statblock-card.pf-reference:is([data-pf-block="spell"],[data-pf-block="feat"]) .statblock-heading :is(h3,.pf-type) { font-size: 1.4em; }

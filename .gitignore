@@ -39,3 +39,19 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Persistent uploaded images
+/data/assets/*
+!/data/assets/.gitkeep
+
+# SQLite runtime journals
+/prisma/*.db
+/prisma/*.db.*
+/prisma/*.db-wal
+/prisma/*.db-shm
+/prisma/*.db-journal
+
+# local agent/scaffolding scratch
+.aider*
+.hermes/
+.tmp-isolated/
