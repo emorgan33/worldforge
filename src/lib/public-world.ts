@@ -53,6 +53,7 @@ export async function assetIsPublic(id: string, worldId: string) {
       OR: [
         { coverImage: assetUrlPattern },
         { contentHtml: { contains: assetUrlPattern } },
+        { contentJson: { contains: assetUrlPattern } },
       ],
     },
     select: { contentJson: true, contentHtml: true, coverImage: true },
@@ -65,8 +66,8 @@ export async function assetIsPublic(id: string, worldId: string) {
   const ids = new Set([id]);
   return articles.some(article => {
     if (article.coverImage && localAssetId(article.coverImage) === id) return true;
-    // Only parse if there's a match in contentHtml to avoid parsing every article
-    if (!article.contentHtml?.includes(assetUrlPattern)) return false;
+    // Only parse if a stored body field actually references the asset
+    if (!article.contentHtml?.includes(assetUrlPattern) && !article.contentJson?.includes(assetUrlPattern)) return false;
     const doc = publicDocument(parseArticleDocument(article.contentJson, article.contentHtml), [], ids, new Set());
     return [...documentReferences(doc, "image", "src")].some(src => localAssetId(src) === id);
   });

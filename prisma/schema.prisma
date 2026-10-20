@@ -608,7 +608,7 @@ model AudienceGrant {
 model AccessAuditEvent {
   id            String   @id @default(uuid())
   worldId       String
-  world         World    @relation("AccessAuditWorld", fields: [worldId], references: [id])
+  world         World    @relation("AccessAuditWorld", fields: [worldId], references: [id], onDelete: Cascade)
   resourceKind  String?
   resourceId    String?
   actorId       String?
@@ -711,7 +711,7 @@ model ArticleRevision {
 
   // Metadata
   userId  String
-  user    User     @relation(fields: [userId], references: [id])
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   savedAt DateTime @default(now())
 
   // For concurrent edit detection

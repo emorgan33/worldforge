@@ -88,15 +88,16 @@ export function articleSearchWhere(worldId: string, filters: CampaignSearchFilte
     ...(filters.template ? { template: filters.template } : {}),
     ...(filters.status ? { publicationStatus: filters.status } : {}),
     ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
-    // Note: We search title, excerpt, and tags only — contentHtml/contentJson
-    // are very large columns and searching them with LIKE always scans the full table.
-    // For content search, the client-side filter or a dedicated FTS index would be needed.
+    // Search article body text as well. contentHtml/contentJson are large
+    // columns, so a dedicated FTS index is the long-term optimization.
     ...(terms.length ? {
       AND: terms.map(term => ({
         OR: [
           { title: { contains: term } },
           { excerpt: { contains: term } },
           { tags: { contains: term } },
+          { contentHtml: { contains: term } },
+          { contentJson: { contains: term } },
         ],
       })),
     } : {}),
