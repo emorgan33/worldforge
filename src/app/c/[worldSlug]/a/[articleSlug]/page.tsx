@@ -1,0 +1,188 @@
+/* eslint-disable @next/next/no-img-element */
+export const ensureStatic = false;
+export const instant = false;
+import { Suspense } from "react";
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/db";
+import { resolveActor, requireReadableResource, readableWhere } from "@/lib/access";
+import { publicDocument, parseArticleDocument, documentReferences } from "@/lib/public-content";
+import { categoryAncestors } from "@/lib/category-tree";
+import { parseAppearance } from "@/lib/world-appearance";
+import { WorldPresentation } from "@/components/public/WorldPresentation";
+import { publicImage } from "@/lib/public-content";
+import { PublicRichText } from "@/components/public/PublicRichText";
+import { ReaderBreadcrumbs } from "@/components/public/ReaderBreadcrumbs";
+import { ReaderCategoryTree } from "@/components/public/ReaderCategoryTree";
+import { ReaderSearch } from "@/components/public/ReaderSearch";
+import { ArticleQuickFacts } from "@/components/article/ArticleQuickFacts";
+import { getArticleTemplate } from "@/lib/templates";
+import { systemProfile } from "@/lib/rpg";
+import { BookOpen, ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import type { ArticleTemplateType } from "@/types";
+
+async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: string; articleSlug: string }> }) {
+  const { worldSlug, articleSlug } = await params;
+  const actor = await resolveActor();
+
+  // Find world by slug
+  const world = await prisma.world.findFirst({
+    where: { slug: worldSlug },
+    select: { id: true, slug: true, title: true, system: true, appearance: true, ownerId: true },
+  });
+  if (!world) notFound();
+  if (actor.kind === "PREVIEW" && actor.previewWorldId !== world.id) notFound();
+
+  // Check access: owner gets redirected, anonymous gets notFound
+  if (actor.userId === null) notFound();
+  const isOwner = actor.userId === world.ownerId;
+
+  // Find article by slug
+  const article = await prisma.article.findFirst({
+    where: { worldId: world.id, slug: articleSlug },
+    select: { id: true, title: true, template: true, contentJson: true, contentHtml: true, metadata: true, coverImage: true, excerpt: true, categoryId: true, slug: true },
+  });
+  if (!article) notFound();
+
+  // Use requireReadableResource to check if the actor can read this article
+  try {
+    await requireReadableResource({ worldId: world.id, kind: "articles", id: article.id }, actor);
+  } catch {
+    notFound();
+  }
+
+  // Every reader-facing reference must use the same policy filter as the
+  // article itself; otherwise titles and embedded resource IDs leak.
+  const { where: readableArticleWhere } = await readableWhere(world.id, "articles", actor);
+  const { where: readableBlockWhere } = await readableWhere(world.id, "statblocks", actor);
+  const { where: readableAssetWhere } = await readableWhere(world.id, "assets", actor);
+  const allCategories = await prisma.category.findMany({
+    where: { worldId: world.id },
+    select: { id: true, name: true, parentId: true, order: true, icon: true },
+    orderBy: [{ order: "asc" }, { id: "asc" }],
+  });
+  const worldArticles = await prisma.article.findMany({
+    where: readableArticleWhere,
+    select: { id: true, slug: true, title: true, template: true, order: true, categoryId: true },
+    orderBy: [{ order: "asc" }, { id: "asc" }],
+  });
+  // Category names are campaign metadata: expose only paths to articles the
+  // reader may actually open, not empty GM-only folders.
+  const categoryById = new Map(allCategories.map(category => [category.id, category]));
+  const visibleCategoryIds = new Set<string>();
+  for (const readableArticle of worldArticles) {
+    let categoryId = readableArticle.categoryId;
+    while (categoryId && !visibleCategoryIds.has(categoryId)) {
+      visibleCategoryIds.add(categoryId);
+      categoryId = categoryById.get(categoryId)?.parentId ?? null;
+    }
+  }
+  const categories = allCategories.filter(category => visibleCategoryIds.has(category.id));
+
+  const assets = await prisma.imageAsset.findMany({
+    where: readableAssetWhere,
+    select: { id: true },
+  });
+  const assetIds = new Set(assets.map(a => a.id));
+
+  const blocks = await prisma.rpgBlock.findMany({ where: readableBlockWhere });
+
+  // Build public document (strips GM notes, private references, etc.)
+  const doc = publicDocument(parseArticleDocument(article.contentJson, article.contentHtml), worldArticles, assetIds, new Set(blocks.map(b => b.id)));
+
+  let rawMetadata: Record<string, unknown> = {};
+  try { const value = JSON.parse(article.metadata || "{}"); if (value && typeof value === "object" && !Array.isArray(value)) rawMetadata = value; } catch {}
+
+  const system = typeof rawMetadata.rulesSystem === "string" ? rawMetadata.rulesSystem : world.system;
+  const definition = getArticleTemplate(article.template as ArticleTemplateType, system);
+  const metadata: Record<string, unknown> = Object.fromEntries(
+    definition.fields.filter(f => typeof rawMetadata[f.key] === "string").map(f => [f.key, rawMetadata[f.key]])
+  );
+  metadata.rulesSystem = system;
+
+  const references = documentReferences(doc, "articleLink", "articleId");
+  const links = worldArticles
+    .filter(a => references.has(a.id))
+    .map(a => ({ id: a.id, title: a.title, href: `/c/${world.slug}/a/${a.slug}` }));
+
+  const ancestors = categoryAncestors(categories, article.categoryId);
+  const isPreview = actor.kind === "PREVIEW";
+  const actorName = actor.userId
+    ? (await prisma.user.findUnique({ where: { id: actor.userId }, select: { name: true } }))?.name
+    : null;
+
+  const appearance = parseAppearance(world.appearance);
+  appearance.backgroundImage = publicImage(appearance.backgroundImage, assetIds) || "";
+  const coverImage = publicImage(article.coverImage, assetIds);
+
+  const breadcrumbs = [
+    { label: world.title, href: `/c/${world.slug}` },
+    ...ancestors.map(category => ({ label: category.name })),
+    { label: article.title },
+  ];
+
+  return (
+    <WorldPresentation appearance={appearance}>
+      {/* Preview Banner */}
+      {isPreview && (
+        <div className="mb-6 rounded-xl border border-amber-600/50 bg-amber-950/30 px-5 py-3 text-sm text-amber-200 flex items-center gap-3">
+          <BookOpen className="h-4 w-4 shrink-0" />
+          <span>
+            Previewing as <strong>{actorName || "Player"}</strong>
+            {actor.realUserId && (
+              <Link href="/" className="ml-3 text-indigo-300 hover:underline inline-flex items-center gap-1">
+                <ArrowLeft className="h-3 w-3" /> Back to GM workspace
+              </Link>
+            )}
+          </span>
+        </div>
+      )}
+      <main className="space-y-7">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800 pb-4">
+          <ReaderBreadcrumbs items={breadcrumbs} />
+        </div>
+
+        {coverImage && <img src={coverImage} alt="" className="h-72 w-full rounded-2xl object-cover" />}
+        <header>
+          <p className="text-xs uppercase tracking-wider text-amber-400">{article.template}</p>
+          <h1 className="mt-2 font-serif text-4xl">{article.title}</h1>
+          {article.excerpt && <p className="mt-3 text-zinc-400">{article.excerpt}</p>}
+        </header>
+
+        <div className="world-article-layout grid gap-8">
+          <article className="min-w-0">
+            <PublicRichText doc={doc} links={links} blocks={blocks} />
+            {references.size > 0 && (
+              <div className="mt-10 border-t border-zinc-800 pt-6">
+                <section>
+                  <h2 className="text-sm font-bold text-amber-300">References</h2>
+                  <ul className="mt-3 space-y-2">
+                    {links.map(link => (
+                      <li key={link.id}><a href={link.href} className="text-sm text-indigo-300 hover:underline">{link.title}</a></li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
+            )}
+          </article>
+
+          <aside className="space-y-6">
+            <ArticleQuickFacts template={article.template as ArticleTemplateType} system={system} metadata={metadata} blocks={blocks} />
+            <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3">
+              <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-400/90">World Contents</h2>
+              <ReaderCategoryTree categories={categories} articles={worldArticles} worldSlug={world.slug} currentArticleId={article.id} />
+            </div>
+          </aside>
+        </div>
+      </main>
+    </WorldPresentation>
+  );
+}
+
+export default function PlayerArticlePage(props: { params: Promise<{ worldSlug: string; articleSlug: string }> }) {
+  return (
+    <Suspense fallback={<p className="p-8 text-zinc-400">Opening article…</p>}>
+      <PlayerArticleContent {...props} />
+    </Suspense>
+  );
+}

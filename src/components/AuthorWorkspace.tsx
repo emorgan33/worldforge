@@ -1,0 +1,974 @@
+"use client";
+
+import { CommandSearch, SearchCommand } from "@/components/CommandSearch";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { AssetLibrary } from "@/components/assets/AssetLibrary";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CategoryManager, CategoryAction } from "@/components/organization/CategoryManager";
+import { categoryAncestors, sortOrdered } from "@/lib/category-tree";
+import { getHistoryCompensation, getWorldHistoryIndex, isWorldDatasetSnapshot, readStoredWorldId, resolveWorldSelection, WORLD_HISTORY_INDEX_KEY, writeStoredWorldId } from "@/lib/world-selection";
+import { applyRegistration, evaluateTransition, type GuardRegistration, type GuardRegistry } from "@/lib/navigation-guard";
+import { TreeMove } from "@/components/ArticleTree";
+import { BlockStudio } from "@/components/blocks/BlockStudio";
+import { CampaignOverview } from "@/components/campaign/CampaignOverview";
+import { NextSessionDesk } from "@/components/campaign/NextSessionDesk";
+import { BlockCategory, BlockInput, RpgBlockItem } from "@/lib/rpg";
+import { WorldHome, WorldSummary } from "@/components/WorldHome";
+import { Sidebar } from "@/components/Sidebar";
+import { NewWorldForm } from "@/components/worlds/NewWorldForm";
+import { WorldGuardProvider } from "@/components/worlds/WorldGuard";
+import { ArticleViewer } from "@/components/article/ArticleViewer";
+import { ArticleEditorForm, ArticleSaveInput } from "@/components/article/ArticleEditorForm";
+import { InteractiveMap } from "@/components/map/InteractiveMap";
+import { TimelineViewer } from "@/components/timeline/TimelineViewer";
+import { VariableManager } from "@/components/variables/VariableManager";
+import { GmNotebook } from "@/components/campaign/GmNotebook";
+import { ArticleDetail, ArticleListItem, ArticleTemplateType, VariableCollectionItem } from "@/types";
+import { Globe } from "lucide-react";
+
+export default function WorldForgeApp() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [actorId, setActorId] = useState<string | null>(null);
+  const [worlds, setWorlds] = useState<WorldSummary[]>([]);
+  const [world, setWorld] = useState<WorldSummary | null>(null);
+  const [articles, setArticles] = useState<ArticleListItem[]>([]);
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  const [currentArticle, setCurrentArticle] = useState<ArticleDetail | null>(null);
+  const [collections, setCollections] = useState<VariableCollectionItem[]>([]);
+  const [maps, setMaps] = useState<React.ComponentProps<typeof InteractiveMap>["mapData"][]>([]);
+  const [timelines, setTimelines] = useState<React.ComponentProps<typeof TimelineViewer>["timeline"][]>([]);
+  const [secrets, setSecrets] = useState<React.ComponentProps<typeof GmNotebook>["secrets"]>([]);
+  const [rpgBlocks, setRpgBlocks] = useState<RpgBlockItem[]>([]);
+  const [sessions, setSessions] = useState<React.ComponentProps<typeof NextSessionDesk>["sessions"]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [editorCategoryId, setEditorCategoryId] = useState<string | null>(null);
+  const [organizationBusy, setOrganizationBusy] = useState(false);
+  const [organizationError, setOrganizationError] = useState("");
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [articleSaving, setArticleSaving] = useState(false);
+  const [compendiumCategory, setCompendiumCategory] = useState<BlockCategory | undefined>();
+  const [compendiumSession, setCompendiumSession] = useState(0);
+  const [focusBlockId, setFocusBlockId] = useState<string | null>(null);
+
+  const [activeView, setActiveView] = useState<
+    "home" | "article" | "editor" | "map" | "timeline" | "variables" | "gm" | "blocks" | "manager" | "assets" | "sessions"
+  >("home");
+  const [editorInitialTemplate, setEditorInitialTemplate] = useState<ArticleTemplateType>("GENERIC");
+  const [isLoading, setIsLoading] = useState(true);
+  const [worldError, setWorldError] = useState("");
+  const [worldUnavailable, setWorldUnavailable] = useState(false);
+  // Destination of the most recent failed load (kept until a successful
+  // commit) so the error state can offer a real retry of that world.
+  const [failedTarget, setFailedTarget] = useState<string | null>(null);
+  const [newWorldOpen, setNewWorldOpen] = useState(false);
+  const [creationBusy, setCreationBusy] = useState(false);
+  // Shared navigation-guard registry: mounted child forms register their
+  // dirty/busy state under stable ids (see src/lib/navigation-guard.ts).
+  const [guards, setGuards] = useState<GuardRegistry>(new Map());
+  const setGuard = useCallback((id: string, registration: GuardRegistration) => {
+    setGuards(previous => applyRegistration(previous, id, registration));
+  }, []);
+  const guardHandlers = useMemo(() => {
+    const make = (id: string) => (registration: GuardRegistration) => setGuard(id, registration);
+    return {
+      settings: make("settings"),
+      compendium: make("compendium"),
+      variable: make("variable"),
+      map: make("map"),
+      session: make("session"),
+      asset: make("asset"),
+      foundry: make("foundry"),
+    };
+  }, [setGuard]);
+  // In-flight parent writes (uploads and API PATCHes issued outside a child's
+  // own busy reporting) block switching until they settle.
+  const [writeBusy, setWriteBusy] = useState<ReadonlySet<string>>(new Set());
+  const runWrite = useCallback(async <T,>(label: string, task: () => Promise<T>): Promise<T> => {
+    setWriteBusy(previous => new Set(previous).add(label));
+    try { return await task(); }
+    finally {
+      setWriteBusy(previous => { const next = new Set(previous); next.delete(label); return next; });
+    }
+  }, []);
+  // Synchronous transition latch: holds the epoch of the in-flight world
+  // load (0 = idle). Async callbacks like autosave read this ref instead of
+  // possibly-stale state, so no write starts mid-transition, and a superseded
+  // load never clears a newer transition's latch.
+  const transitionRef = useRef(0);
+  const activeLoadController = useRef<AbortController | null>(null);
+  const historyIndex = useRef(0);
+  const pendingHistoryPush = useRef(false);
+  const acceptedHistoryWorld = useRef<{ id: string | null } | null>(null);
+  const historyReturnIndex = useRef<number | null>(null);
+  const suppressedPop = useRef(false);
+  const canceledHistoryDestination = useRef<string | null | undefined>(undefined);
+
+  // Prompt-only leave check: busy blocks silently, dirty asks for an explicit
+  // discard. It NEVER clears dirty state — callers clear only after a
+  // successful commit, so a failed destination load cannot consume the
+  // discard confirmation.
+  const confirmLeave = useCallback(() => {
+    const busyLabels = [
+      ...(isLoading && world ? ["world transition"] : []),
+      ...(articleSaving ? ["article save"] : []),
+      ...(organizationBusy ? ["category writes"] : []),
+      ...(creationBusy ? ["world creation"] : []),
+      ...writeBusy,
+    ];
+    const decision = evaluateTransition({ registry: guards, busyLabels, editorDirty });
+    if (decision.blocked === "busy") return false;
+    if (decision.blocked === "dirty") return window.confirm(decision.message);
+    return true;
+  }, [guards, editorDirty, articleSaving, organizationBusy, creationBusy, writeBusy, isLoading, world]);
+
+  // Called only after a transition actually committed (view change, switch
+  // success, create-and-open success).
+  const clearConfirmedLeave = useCallback(() => { setEditorDirty(false); }, []);
+
+  // Refresh the owned-world list when the picker opens; the requested
+  // selection is always validated against this authorized list on load.
+  const refreshWorlds = useCallback(async () => {
+    if (transitionRef.current) return;
+    try {
+      const response = await fetch("/api/worlds");
+      if (response.status === 401) { router.replace("/login"); router.refresh(); throw new Error("Sign in again to refresh worlds."); }
+      if (!response.ok) throw new Error("Could not refresh worlds.");
+      const list: unknown = await response.json();
+      if (!Array.isArray(list)) throw new Error("World list response was invalid.");
+      if (!transitionRef.current) setWorlds(list as WorldSummary[]);
+    } catch (error) {
+      setWorldError(error instanceof Error ? error.message : "Could not refresh worlds.");
+      throw error;
+    }
+  }, [router]);
+  // Monotonic load epoch: every world load (initial, switch, retry) takes the
+  // next epoch; only the newest epoch may commit state. Reversed network
+  // order, aborted loads, late article-detail responses and stale mutation
+  // callbacks therefore cannot mix one world's records into another.
+  const loadEpoch = useRef(0);
+  const worldIdRef = useRef<string | null>(null);
+  useEffect(() => { worldIdRef.current = world?.id ?? null; }, [world?.id]);
+
+  // Keep a small index in the existing Next history state. `replaceState`
+  // preserves Next's fields, and Next's router remains responsible for URL
+  // navigation. The index lets a canceled pop traverse back to the entry the
+  // user came from instead of replacing the destination entry.
+  useEffect(() => {
+    if (getWorldHistoryIndex(window.history.state) === null) {
+      window.history.replaceState({ ...(window.history.state ?? {}), [WORLD_HISTORY_INDEX_KEY]: historyIndex.current }, "");
+    }
+    historyIndex.current = getWorldHistoryIndex(window.history.state) ?? 0;
+    function onPopState(event: PopStateEvent) {
+      if (suppressedPop.current) { suppressedPop.current = false; return; }
+      const nextIndex = getWorldHistoryIndex(event.state);
+      if (nextIndex === null) return;
+      const previousIndex = historyIndex.current;
+      historyIndex.current = nextIndex;
+      const destination = new URL(window.location.href).searchParams.get("world");
+      const destinationIsMounted = destination === worldIdRef.current;
+      if (previousIndex !== nextIndex && worldIdRef.current && !destinationIsMounted && !confirmLeave()) {
+        historyIndex.current = previousIndex;
+        canceledHistoryDestination.current = destination;
+        suppressedPop.current = true;
+        window.history.go(getHistoryCompensation(previousIndex, nextIndex));
+        return;
+      }
+      if (destinationIsMounted) {
+        acceptedHistoryWorld.current = null;
+        historyReturnIndex.current = null;
+      } else if (previousIndex !== nextIndex) {
+        acceptedHistoryWorld.current = { id: destination };
+        historyReturnIndex.current ??= previousIndex;
+      }
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [confirmLeave]);
+
+  useEffect(() => {
+    if (pendingHistoryPush.current) {
+      pendingHistoryPush.current = false;
+      historyIndex.current += 1;
+      window.history.replaceState({ ...(window.history.state ?? {}), [WORLD_HISTORY_INDEX_KEY]: historyIndex.current }, "");
+    }
+  }, [searchParams]);
+
+  const writeUrlForWorld = useCallback((worldId: string | null, options?: { replace?: boolean }) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (worldId) params.set("world", worldId); else params.delete("world");
+    const query = params.toString();
+    const target = query ? `${pathname}?${query}` : pathname;
+    // Skip no-op writes so router-driven updates don't retrigger the
+    // searchParams selection effect.
+    const currentQuery = searchParams.toString();
+    const current = currentQuery ? `${pathname}?${currentQuery}` : pathname;
+    if (target === current) return;
+    if (options?.replace) {
+      router.replace(target, { scroll: false });
+    } else {
+      pendingHistoryPush.current = true;
+      router.push(target, { scroll: false });
+    }
+  }, [pathname, router, searchParams]);
+
+  // Load the owned-world list, resolve ?world=/stored/default selection
+  // against it, then load that world's datasets in parallel.
+  // Returns true when the target mounted; false leaves the mounted world,
+  // its forms and the URL untouched (callers roll back/picker stays).
+  const loadWorld = useCallback(async (targetId: string, owned: WorldSummary[], epoch: number, replaceHistory = false): Promise<boolean> => {
+    const target = owned.find(item => item.id === targetId);
+    if (!target) {
+      if (loadEpoch.current !== epoch) return false;
+      // Explicit invalid URLs are a navigation destination. Keep the mounted
+      // editor intact unless the same dirty/busy boundary approves leaving it.
+      if (worldIdRef.current && !confirmLeave()) return false;
+      setFailedTarget(targetId);
+      setWorld(null);
+      setArticles([]); setCollections([]); setMaps([]); setTimelines([]); setSecrets([]); setRpgBlocks([]); setSessions([]);
+      setSelectedArticleId(null); setCurrentArticle(null); setSelectedCategoryId(null);
+      setWorldUnavailable(true);
+      setWorldError("");
+      setIsLoading(false);
+      writeUrlForWorld(null, { replace: true });
+      return false;
+    }
+    transitionRef.current = epoch;
+    activeLoadController.current?.abort();
+    setWorldUnavailable(false);
+    setIsLoading(true); setWorldError("");
+    const controller = new AbortController();
+    activeLoadController.current = controller;
+    try {
+      const settled = await Promise.allSettled([
+        fetch(`/api/articles?worldId=${target.id}`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("articles"); return res.json(); }),
+        fetch(`/api/variables?worldId=${target.id}`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("variables"); return res.json(); }),
+        fetch(`/api/maps?worldId=${target.id}`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("maps"); return res.json(); }),
+        fetch(`/api/timelines?worldId=${target.id}`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("timelines"); return res.json(); }),
+        fetch(`/api/secrets?worldId=${target.id}`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("secrets"); return res.json(); }),
+        fetch(`/api/statblocks?worldId=${target.id}`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("blocks"); return res.json(); }),
+        fetch(`/api/worlds/${target.id}/sessions`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("sessions"); return res.json(); }),
+      ]);
+      if (loadEpoch.current !== epoch) { controller.abort(); return false; }
+      const failed = settled.find(result => result.status === "rejected");
+      if (failed) throw (failed as PromiseRejectedResult).reason;
+      const [artList, cols, mapList, timeList, secList, blocks, sessionList] =
+        (settled as PromiseFulfilledResult<unknown>[]).map(result => result.value);
+      const datasets = [artList, cols, mapList, timeList, secList, blocks, sessionList];
+      if (!isWorldDatasetSnapshot(datasets)) throw new Error("World data response had an invalid shape.");
+      // Commit the new world's complete datasets atomically: reset
+      // per-world UI state, then write only this epoch's data.
+      setSelectedArticleId(null); setCurrentArticle(null); setSelectedCategoryId(null);
+      setEditorCategoryId(null); setEditorDirty(false);
+      setGuards(new Map());
+      setWorld(target);
+      setArticles(artList as ArticleListItem[]);
+      setCollections(cols as VariableCollectionItem[]);
+      setMaps(mapList as React.ComponentProps<typeof InteractiveMap>["mapData"][]);
+      setTimelines(timeList as React.ComponentProps<typeof TimelineViewer>["timeline"][]);
+      setSecrets(secList as React.ComponentProps<typeof GmNotebook>["secrets"]);
+      setRpgBlocks(blocks as RpgBlockItem[]);
+      setSessions(sessionList as React.ComponentProps<typeof NextSessionDesk>["sessions"]);
+      setWorlds(previous => previous.map(item => item.id === target.id ? target : item));
+      historyReturnIndex.current = null;
+      setActiveView("home");
+      setWorldError("");
+      setFailedTarget(null);
+      if (actorId) {
+        try { writeStoredWorldId(actorId, target.id, sessionStorage); } catch { /* blocked storage is harmless */ }
+      }
+      // Successful switches push a history entry so Back returns to the
+      // previous world. The initial load replaces to avoid a duplicate entry.
+      writeUrlForWorld(target.id, { replace: replaceHistory || !worldIdRef.current });
+      return true;
+    } catch (error) {
+      if (loadEpoch.current !== epoch || controller.signal.aborted) return false;
+      console.error("World load error:", error);
+      setFailedTarget(targetId);
+      // Failed loads keep the previously mounted world and its state intact;
+      // only surface the error when nothing is mounted yet.
+      if (!worldIdRef.current) {
+        setWorld(null);
+        setWorldError("This world could not be loaded. Check your connection and try again.");
+      } else {
+        setWorldError(`Could not open “${target.title}”. Your current world is unchanged.`);
+      }
+      return false;
+    } finally {
+      if (transitionRef.current === epoch) transitionRef.current = 0;
+      if (activeLoadController.current === controller) activeLoadController.current = null;
+      if (loadEpoch.current === epoch) setIsLoading(false);
+    }
+  }, [actorId, confirmLeave, writeUrlForWorld]);
+
+  // Initial world list + selection. Back/Forward navigation changes
+  // `searchParams`, which re-resolves selection against the authorized list.
+  // The mounted world id acts as the loop guard: router URL writes for an
+  // already-mounted world are no-ops, and loads only start for a different id.
+  const bootstrapped = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    async function bootstrap() {
+      const urlWorldId = searchParams.get("world");
+      if (canceledHistoryDestination.current !== undefined) {
+        if (canceledHistoryDestination.current === urlWorldId) { setIsLoading(false); return; }
+        canceledHistoryDestination.current = undefined;
+      }
+      // Already showing exactly what the URL asks for: nothing to do.
+      // (Covers the router.replace/push echo after a successful load.)
+      if (bootstrapped.current && urlWorldId && urlWorldId === worldIdRef.current) return;
+      if (!bootstrapped.current) setIsLoading(true);
+      try {
+        const [sessionRes, worldsRes] = await Promise.all([fetch("/api/auth/session"), fetch("/api/worlds")]);
+        if (cancelled) return;
+        if (worldsRes.status === 401 || sessionRes.status === 401) { router.replace("/login"); router.refresh(); return; }
+        if (!worldsRes.ok || !sessionRes.ok) throw new Error("Your worlds could not be loaded.");
+        const ownedValue: unknown = await worldsRes.json();
+        const sessionValue: unknown = await sessionRes.json();
+        if (!Array.isArray(ownedValue) || !sessionValue || typeof sessionValue !== "object") throw new Error("Your account response was invalid.");
+        const owned = ownedValue as WorldSummary[];
+        const actor = (sessionValue as { user?: { id?: string } | null }).user?.id ?? null;
+        if (cancelled) return;
+        setActorId(actor);
+        setWorlds(owned);
+        const { selectedId, unknownUrlId } = resolveWorldSelection(owned, {
+          urlWorldId,
+          storedWorldId: actor ? readStoredWorldId(actor, (() => { try { return sessionStorage; } catch { return null; } })()) : null,
+        });
+        if (unknownUrlId) {
+          if (worldIdRef.current && acceptedHistoryWorld.current?.id !== urlWorldId && !confirmLeave()) {
+            setIsLoading(false);
+            bootstrapped.current = true;
+            return;
+          }
+          acceptedHistoryWorld.current = null;
+          // Explicit URL for a missing/deleted/foreign world: only clear the
+          // mounted snapshot after the leave boundary approved the transition.
+          ++loadEpoch.current;
+          activeLoadController.current?.abort();
+          setWorld(null);
+          setGuards(new Map());
+          setArticles([]); setCollections([]); setMaps([]); setTimelines([]); setSecrets([]); setRpgBlocks([]); setSessions([]);
+          setSelectedArticleId(null); setCurrentArticle(null); setSelectedCategoryId(null);
+          setWorldUnavailable(true);
+          setWorldError("");
+          setIsLoading(false);
+          bootstrapped.current = true;
+          return;
+        }
+        if (!selectedId) {
+          setWorld(null); setWorldUnavailable(false); setWorldError(""); setIsLoading(false);
+          writeUrlForWorld(null, { replace: true });
+          bootstrapped.current = true;
+          return;
+        }
+        // Back/Forward to the already-mounted world: no reload needed.
+        if (selectedId === worldIdRef.current) { acceptedHistoryWorld.current = null; setIsLoading(false); bootstrapped.current = true; return; }
+        // History-driven selection follows the same guard as a user switch:
+        // busy blocks silently and a declined discard keeps the current world
+        // and its forms intact; restoring the URL re-runs this effect with the
+        // mounted world's params, so no navigation loop occurs.
+        if (worldIdRef.current && acceptedHistoryWorld.current?.id !== urlWorldId && !confirmLeave()) {
+          setIsLoading(false);
+          bootstrapped.current = true;
+          return;
+        }
+        const epoch = ++loadEpoch.current;
+        bootstrapped.current = true;
+        acceptedHistoryWorld.current = null;
+        const ok = await loadWorld(selectedId, owned, epoch);
+        if (ok) clearConfirmedLeave();
+        // On failure the destination URL stays (history entries are never
+        // lost); the error state offers an explicit return-to-current action.
+      } catch (error) {
+        if (!cancelled) { console.error("Initialization error:", error); setWorldError("Your worlds could not be loaded. Check your connection and try again."); setIsLoading(false); }
+      }
+    }
+    bootstrap();
+    return () => { cancelled = true; };
+    // Re-run when the URL world changes (Back/Forward/explicit links).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Switch worlds: the shared guard runs first (busy blocks, dirty prompts),
+  // and dirty state clears only after the destination commits — a failed load
+  // cannot consume the discard confirmation. User switches push history only
+  // on success, so a failure leaves the mounted world, its forms and the URL
+  // untouched and the picker's world list available.
+  const requestWorldSwitch = useCallback(async (targetId: string) => {
+    if (creationBusy) return false;
+    if (!targetId || targetId === worldIdRef.current) return false;
+    if (!confirmLeave()) return false;
+    const epoch = ++loadEpoch.current;
+    const ok = await loadWorld(targetId, worlds, epoch);
+    if (ok) { clearConfirmedLeave(); return true; }
+    if (loadEpoch.current === epoch && worldIdRef.current) writeUrlForWorld(worldIdRef.current, { replace: true });
+    return false;
+  }, [clearConfirmedLeave, confirmLeave, creationBusy, loadWorld, worlds, writeUrlForWorld]);
+
+  // A successful creation mounts without another network round-trip when the
+  // response already carries the new world's summary; opening retries reuse
+  // the guarded loader so a failed open offers retry-opening instead of a
+  // duplicate creation. The discard confirmation is consumed only on success.
+  const handleWorldCreated = useCallback(async (created: WorldSummary) => {
+    setWorlds(previous => previous.some(item => item.id === created.id) ? previous.map(item => item.id === created.id ? created : item) : [...previous, created]);
+    const epoch = ++loadEpoch.current;
+    const known = worlds.some(item => item.id === created.id) ? worlds : [...worlds, created];
+    const ok = await loadWorld(created.id, known, epoch);
+    if (!ok) {
+      if (loadEpoch.current === epoch && worldIdRef.current) writeUrlForWorld(worldIdRef.current, { replace: true });
+      // Keep the dialog open: its confirmed recovery shows "World created;
+      // retry opening" rather than inviting another creation.
+      throw new Error("World created; retry opening it.");
+    }
+    clearConfirmedLeave();
+    setNewWorldOpen(false);
+  }, [clearConfirmedLeave, loadWorld, worlds, writeUrlForWorld]);
+
+  // Choosing "New world" while a creation POST is in flight is disabled by
+  // the form itself; the switcher trigger is additionally inert then.
+  const openNewWorld = useCallback(() => { if (!creationBusy) setNewWorldOpen(true); }, [creationBusy]);
+
+  // Explicit return-to-current-world action shown when a destination load
+  // fails: restores the URL (history-entry for history-driven failures) and
+  // dismisses the error without touching the still-mounted forms.
+  const returnToCurrentWorld = useCallback(() => {
+    if (historyReturnIndex.current !== null) {
+      const offset = getHistoryCompensation(historyReturnIndex.current, historyIndex.current);
+      if (offset !== 0) {
+        acceptedHistoryWorld.current = { id: worldIdRef.current };
+        history.go(offset);
+      } else if (worldIdRef.current) writeUrlForWorld(worldIdRef.current);
+      historyReturnIndex.current = null;
+    } else if (worldIdRef.current) {
+      // A failed directly entered URL has no tracked source entry. Push the
+      // mounted world as a new entry so the failed destination stays intact.
+      writeUrlForWorld(worldIdRef.current);
+    }
+    setWorldError("");
+    setWorldUnavailable(false);
+    setFailedTarget(null);
+  }, [writeUrlForWorld]);
+
+  // Retry the failed destination when there was one; otherwise reload the
+  // mounted world (or the page when nothing could load at all). The guard
+  // re-runs because no dirty state was consumed by the failed attempt.
+  const retryLoad = useCallback(async () => {
+    if (failedTarget && failedTarget !== worldIdRef.current) {
+      await requestWorldSwitch(failedTarget);
+      return;
+    }
+    if (worldIdRef.current) {
+      if (!confirmLeave()) return;
+      const epoch = ++loadEpoch.current;
+      if (await loadWorld(worldIdRef.current, worlds, epoch)) clearConfirmedLeave();
+      return;
+    }
+    if (!searchParams.get("world")) window.location.reload();
+    else setWorldError("This world could not be loaded. Choose one of your worlds to continue.");
+  }, [clearConfirmedLeave, confirmLeave, failedTarget, loadWorld, requestWorldSwitch, searchParams, worlds]);
+
+  const beforeWorldManagementAction = useCallback(() => !creationBusy && confirmLeave(), [confirmLeave, creationBusy]);
+  const completeWorldManagementAction = useCallback((action: "archive" | "duplicate" | "restore" | "purge" | "export" | "import", worldId?: string, summary?: WorldSummary) => {
+    if (summary && (action === "duplicate" || action === "import")) {
+      setWorlds(previous => previous.some(item => item.id === summary.id) ? previous : [...previous, summary]);
+    }
+    if (action === "archive" && worldId) {
+      const remaining = worlds.filter(item => item.id !== worldId);
+      setWorlds(remaining);
+      if (worldIdRef.current === worldId) {
+        clearConfirmedLeave();
+        setWorld(null); setArticles([]); setCollections([]); setMaps([]); setTimelines([]); setSecrets([]); setRpgBlocks([]); setSessions([]);
+        setSelectedArticleId(null); setCurrentArticle(null); setSelectedCategoryId(null);
+        setWorldUnavailable(false); setWorldError("");
+        if (remaining[0]) {
+          const epoch = ++loadEpoch.current;
+          void loadWorld(remaining[0].id, remaining, epoch, true);
+        } else {
+          writeUrlForWorld(null, { replace: true });
+        }
+      }
+    }
+  }, [clearConfirmedLeave, loadWorld, worlds, writeUrlForWorld]);
+
+  // Fetch full article details when selected; the epoch + world check keeps a
+  // late response from world A out of world B.
+  useEffect(() => {
+    if (!selectedArticleId || !world) return;
+    const epoch = loadEpoch.current;
+    const worldId = world.id;
+    const articleId = selectedArticleId;
+
+    const controller = new AbortController();
+    async function fetchArticle() {
+      try {
+        const res = await fetch(`/api/articles/${articleId}`, { signal: controller.signal });
+        if (res.ok) {
+          const detail = await res.json();
+          if (loadEpoch.current !== epoch || worldIdRef.current !== worldId) return;
+          setCurrentArticle(detail);
+        }
+      } catch (e) {
+        if (controller.signal.aborted) return;
+        console.error("Failed to load article detail:", e);
+      }
+    }
+    fetchArticle();
+    return () => controller.abort();
+  }, [selectedArticleId, world]);
+
+  // Prompt-only guard kept under its original name for all transition call
+  // sites. It never clears dirty state; callers invoke clearConfirmedLeave()
+  // only after their transition actually committed, so a failed world load
+  // cannot consume the discard confirmation.
+  const canNavigate = useCallback(() => confirmLeave(), [confirmLeave]);
+  useEffect(() => {
+    if (!editorDirty) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [editorDirty]);
+
+  const handleSelectArticle = (id: string) => {
+    if (!canNavigate()) return;
+    clearConfirmedLeave();
+    setSelectedArticleId(id);
+    setActiveView("article");
+  };
+
+  const handleNewArticle = (template: ArticleTemplateType = "GENERIC", categoryId: string | null = null) => {
+    if (!canNavigate()) return;
+    clearConfirmedLeave();
+    setEditorCategoryId(categoryId);
+    setSelectedArticleId(null);
+    setEditorInitialTemplate(template);
+    setCurrentArticle(null);
+    setActiveView("editor");
+  };
+
+  const handleSaveArticle = async (articleData: ArticleSaveInput, options?: { autosave?: boolean; articleId?: string }) => {
+    if (!world) throw new Error("Choose a campaign first.");
+    // No write starts (or resumes) while a world transition is in flight; the
+    // editor keeps its dirty flag and local recovery draft.
+    if (transitionRef.current !== 0) throw new Error("Paused while switching worlds. Your local draft is safe — try saving again.");
+    const writeWorldId = world.id;
+    const epoch = loadEpoch.current;
+    setArticleSaving(true);
+    try {
+      const targetId = options?.articleId || currentArticle?.id;
+      const response = await fetch(targetId ? `/api/articles/${targetId}` : "/api/articles", {
+        method: targetId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(articleData),
+      });
+      if (!response.ok) throw new Error("Unable to save article. Please try again.");
+      const saved = await response.json();
+      // A committed write stays successful even if a subsequent refresh fails.
+      // Late refreshes after a world switch are dropped, never mixed in.
+      const [listResult, detailResult] = await Promise.allSettled([
+        fetch(`/api/articles?worldId=${writeWorldId}`).then(async result => { if (!result.ok) throw new Error(); return result.json(); }),
+        fetch(`/api/articles/${saved.id}`).then(async result => { if (!result.ok) throw new Error(); return result.json(); }),
+      ]);
+      if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return saved.id as string;
+      setArticles(previous => listResult.status === "fulfilled" && Array.isArray(listResult.value) ? listResult.value : sortOrdered([...previous.filter(article => article.id !== saved.id), saved]));
+      if (options?.autosave) {
+        if (currentArticle?.id === saved.id) setCurrentArticle(detailResult.status === "fulfilled" ? detailResult.value : { ...currentArticle, ...saved });
+        return saved.id as string;
+      }
+      setCurrentArticle(detailResult.status === "fulfilled" ? detailResult.value : { children: [], inboundMentions: [], outboundMentions: [], secrets: [], ...currentArticle, ...saved });
+      setEditorDirty(false);
+      setSelectedArticleId(saved.id);
+      setActiveView("article");
+      return saved.id as string;
+    } finally { setArticleSaving(false); }
+  };
+
+  const handleUpdateVariable = async (id: string, value: string) => {
+    if (!world) return;
+    const writeWorldId = world.id;
+    const epoch = loadEpoch.current;
+    try {
+      await fetch("/api/variables", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, value }),
+      });
+      // Refresh variable collections
+      const resVars = await fetch(`/api/variables?worldId=${writeWorldId}`);
+      if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
+      setCollections(await resVars.json());
+    } catch (e) {
+      console.error("Variable update error:", e);
+    }
+  };
+
+  // Secret reveal, map pins and rules-profile changes have no child-side busy
+  // reporting, so the parent registers them; switching waits for their settle.
+  const handleToggleSecretReveal = (secretId: string, current: boolean) => runWrite("secret update", async () => {
+    if (!world) return;
+    const writeWorldId = world.id;
+    const epoch = loadEpoch.current;
+    try {
+      await fetch("/api/secrets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: secretId, isRevealed: !current }),
+      });
+      // Refresh secrets and current article
+      const resSecrets = await fetch(`/api/secrets?worldId=${writeWorldId}`);
+      if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
+      setSecrets(await resSecrets.json());
+      if (selectedArticleId) {
+        const resArt = await fetch(`/api/articles/${selectedArticleId}`);
+        if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
+        setCurrentArticle(await resArt.json());
+      }
+    } catch (e) {
+      console.error("Secret reveal toggle error:", e);
+    }
+  });
+
+  const handleAddMarker = (markerData: Parameters<NonNullable<React.ComponentProps<typeof InteractiveMap>["onAddMarker"]>>[0]) => runWrite("map pin save", async () => {
+    if (!world) return;
+    const writeWorldId = world.id;
+    const epoch = loadEpoch.current;
+    try {
+      await fetch("/api/maps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(markerData),
+      });
+      const resMaps = await fetch(`/api/maps?worldId=${writeWorldId}`);
+      if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
+      setMaps(await resMaps.json());
+    } catch (e) {
+      console.error("Marker add error:", e);
+    }
+  });
+
+  const refreshOrganization = async () => {
+    if (!world) return;
+    const writeWorldId = world.id;
+    const epoch = loadEpoch.current;
+    const [categoryResponse, articleResponse] = await Promise.all([fetch(`/api/categories?worldId=${writeWorldId}`), fetch(`/api/articles?worldId=${writeWorldId}`)]);
+    if (!categoryResponse.ok || !articleResponse.ok) throw new Error("Unable to reload the article tree. Please try again.");
+    const [categories, articleList] = await Promise.all([categoryResponse.json(), articleResponse.json()]);
+    if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
+    setWorld(previous => previous && previous.id === writeWorldId ? { ...previous, categories } : previous);
+    setArticles(articleList);
+    setCurrentArticle(previous => {
+      const item = (articleList as ArticleListItem[]).find(article => article.id === previous?.id);
+      return previous && item ? { ...previous, categoryId: item.categoryId, category: item.category, order: item.order } : previous;
+    });
+  };
+
+  const organize = async (method: string, body: Record<string, unknown>) => {
+    if (!world) throw new Error("Choose a world first.");
+    setOrganizationBusy(true); setOrganizationError("");
+    try {
+      const response = await fetch("/api/categories", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, worldId: world.id }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Unable to update the article tree.");
+      await refreshOrganization();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update the article tree.";
+      setOrganizationError(message); throw new Error(message);
+    } finally { setOrganizationBusy(false); }
+  };
+  const handleTreeMove = (move: TreeMove) => organize("PATCH", { action: move.kind === "category" ? "moveCategory" : "moveArticle", id: move.id, parentId: move.parentId, beforeId: move.beforeId ?? null });
+  const handleCategoryAction = (action: CategoryAction) => organize(action.action === "create" ? "POST" : action.action === "delete" ? "DELETE" : "PATCH", action);
+  const selectCategory = (id: string | null) => { if (!canNavigate()) return; clearConfirmedLeave(); setSelectedCategoryId(id); setActiveView("manager"); };
+
+  const handleSaveBlock = async (input: BlockInput) => {
+    const writeWorldId = worldIdRef.current;
+    const epoch = loadEpoch.current;
+    const response = await fetch(input.id ? `/api/statblocks/${input.id}` : "/api/statblocks", {
+      method: input.id ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Unable to save statblock.");
+    if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return result as RpgBlockItem;
+    setRpgBlocks(previous => [...previous.filter(block => block.id !== result.id), result].sort((a, b) => a.name.localeCompare(b.name)));
+    return result as RpgBlockItem;
+  };
+
+  const handleDeleteBlock = async (id: string) => {
+    const writeWorldId = worldIdRef.current;
+    const epoch = loadEpoch.current;
+    const response = await fetch(`/api/statblocks/${id}`, { method: "DELETE" });
+    if (!response.ok) throw new Error("Unable to delete statblock.");
+    if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
+    setRpgBlocks(previous => previous.filter(block => block.id !== id));
+  };
+
+  const refreshBlocks = async () => {
+    if (!world) return;
+    const writeWorldId = world.id;
+    const epoch = loadEpoch.current;
+    const response = await fetch(`/api/statblocks?worldId=${writeWorldId}`);
+    if (!response.ok) throw new Error("Unable to refresh compendium entries.");
+    const list = await response.json();
+    if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
+    setRpgBlocks(list);
+  };
+
+  const handleRefreshSessions = async () => {
+    if (!world) return;
+    const writeWorldId = world.id;
+    const epoch = loadEpoch.current;
+    try {
+      const res = await fetch(`/api/worlds/${writeWorldId}/sessions`);
+      if (res.ok) {
+        const list = await res.json();
+        if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
+        setSessions(list);
+      }
+    } catch (e) {
+      console.error("Failed to refresh sessions:", e);
+    }
+  };
+
+  const openCompendium = (category?: BlockCategory) => {
+    if (!canNavigate()) return;
+    clearConfirmedLeave();
+    setCompendiumCategory(category);
+    setCompendiumSession(previous => previous + 1);
+    setActiveView("blocks");
+  };
+
+  const handleChangeSystem = (system: string) => runWrite("campaign system save", async () => {
+    if (!world || system === world.system) return;
+    const writeWorldId = world.id;
+    const epoch = loadEpoch.current;
+    const response = await fetch("/api/worlds", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: writeWorldId, title: world.title, description: world.description ?? "", coverImage: world.coverImage ?? "", bannerImage: world.bannerImage ?? "", system }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Unable to update campaign system.");
+    // Campaign rules selection writes the mounted world only; a mid-flight
+    // switch drops the late response instead of overwriting the new world.
+    if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
+    setWorld(result);
+    setWorlds(previous => previous.map(item => item.id === result.id ? { ...item, ...result } : item));
+  });
+
+  const saveWorldSummary = useCallback((saved: WorldSummary) => {
+    setWorld(saved);
+    setWorlds(previous => previous.map(item => item.id === saved.id ? { ...item, ...saved } : item));
+  }, []);
+
+  const isTransitioning = isLoading && !!world;
+  const savesPaused = isTransitioning || [...guards].some(([id, registration]) => id.startsWith("world-management:") && registration.busy);
+  if (isLoading && !world) {
+    // First load (nothing mounted yet): full-screen loader.
+    return (
+      <div className="w-full h-screen bg-zinc-950 flex flex-col items-center justify-center text-zinc-400 space-y-4">
+        <div className="w-12 h-12 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 animate-spin">
+          <Globe className="w-6 h-6" />
+        </div>
+        <p className="text-sm font-semibold tracking-wide">Opening your campaign...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
+      {/* Keyed by world id: child-local state resets only when a destination
+          snapshot commits. During a transition the previous subtree stays
+          MOUNTED but inert beneath the loading boundary, so unsaved forms,
+          dirty flags and recovery survive a failed load. */}
+      <WorldGuardProvider onGuardChange={setGuard} paused={savesPaused}>
+      <div key={world?.id ?? "no-world"} className="contents" inert={isTransitioning || undefined}>
+      <CommandSearch key={searchOpen ? "open" : "closed"} open={searchOpen} onOpenChange={setSearchOpen} worldId={world?.id} categories={world?.categories || []} onSelectArticle={handleSelectArticle} commands={[
+        ...(world?.categories || []).map(category => ({ id: `category-${category.id}`, title: category.name, description: `Category · ${categoryAncestors(world?.categories || [], category.id).map(item => item.name).join(" / ")}`, run: () => selectCategory(category.id) })),
+        { id: "new-article", title: "New article", description: "Create an article", run: () => handleNewArticle() },
+        ...([ ["home", "Campaign home"], ["manager", "Articles & Categories"], ["assets", "Image library"], ["blocks", "RPG compendium"], ["map", "Maps"], ["timeline", "Timelines"], ["sessions", "Sessions"], ["variables", "Variables"], ["gm", "GM Screen & Secrets"] ] as const).filter(([view]) => (view !== "map" || maps.length > 0) && (view !== "timeline" || timelines.length > 0)).map(([view, title]): SearchCommand => ({ id: `tool-${view}`, title, description: "Workspace tool", run: () => { if (view === "blocks") openCompendium(); else if (canNavigate()) { clearConfirmedLeave(); setActiveView(view); } } })),
+      ]} />
+      {/* WorldForge Sidebar */}
+      <button type="button" className="fixed right-5 top-3 z-50 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs text-zinc-300" onClick={async () => { if (!canNavigate()) return; clearConfirmedLeave(); const response = await fetch("/api/auth/logout", { method: "POST" }); if (response.ok) { router.replace("/login"); router.refresh(); } }}>Sign out</button>
+      <Sidebar
+        onOpenSearch={() => setSearchOpen(true)}
+        worldTitle={world?.title || "WorldForge"}
+        system={world?.system || "DND_5E"}
+        articles={articles}
+        categories={world?.categories || []}
+        selectedCategoryId={selectedCategoryId}
+        onSelectCategory={selectCategory}
+        onMove={handleTreeMove}
+        organizationBusy={organizationBusy || activeView === "editor" || (isLoading && !!world)}
+        organizationError={organizationError}
+        activeView={activeView}
+        selectedArticleId={selectedArticleId}
+        onSelectArticle={handleSelectArticle}
+        onNavigateView={(view) => { if (view === "blocks") openCompendium(); else if (canNavigate()) { clearConfirmedLeave(); setActiveView(view); } }}
+        onNewArticle={handleNewArticle}
+        worlds={worlds}
+        currentWorldId={world?.id ?? null}
+        worldSwitchDisabled={(isLoading && !world) || creationBusy}
+        onSelectWorld={requestWorldSwitch}
+        onNewWorld={openNewWorld}
+        onRefreshWorlds={refreshWorlds}
+        actorId={actorId}
+        onBeforeManageAction={beforeWorldManagementAction}
+        onManageWorld={completeWorldManagementAction}
+      />
+
+      {/* Main Content Workspace */}
+      <main className="flex-1 h-screen overflow-y-auto bg-zinc-950 p-6 md:p-8 lg:p-10">
+        <div className="max-w-6xl mx-auto">
+          {worldUnavailable && <section aria-live="polite" className="mb-6 rounded-xl border border-amber-800 bg-amber-950/30 p-6">
+            <h2 className="text-lg font-semibold text-amber-200">This world isn’t available</h2>
+            <p className="mt-1 text-sm text-amber-200/80">It may have been deleted, or the link belongs to another account. Choose one of your worlds to continue.</p>
+          </section>}
+          {worldError && <p role="alert" className="mb-6 rounded-xl border border-red-900 bg-red-950/40 p-4 text-sm text-red-200">
+            {worldError}
+            {world && <button type="button" onClick={returnToCurrentWorld} className="ml-3 underline">Return to {world.title}</button>}
+            <button type="button" onClick={() => void retryLoad()} className="ml-3 underline">Try again</button>
+          </p>}
+          {!world && !worldUnavailable && !worldError && worlds.length === 0 && <section aria-live="polite" className="mx-auto max-w-xl rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 text-center">
+            <p className="text-xs uppercase tracking-widest text-amber-400">Private campaign</p>
+            <h2 className="mt-2 font-serif text-3xl text-amber-100">Create your first world</h2>
+            <p className="mt-3 text-sm text-zinc-300">New worlds start private and empty. Give yours a title and a rules system to begin your campaign.</p>
+            <button type="button" onClick={openNewWorld} className="mt-6 rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-500">Create your first world</button>
+          </section>}
+          {activeView === "home" && world && <div className="space-y-10">
+            <CampaignOverview
+              system={world.system}
+              worldId={world.id}
+              articles={articles}
+              blocks={rpgBlocks}
+              sessions={sessions}
+              onChangeSystem={handleChangeSystem}
+              onNewArticle={handleNewArticle}
+              onOpenCompendium={openCompendium}
+              onOpenGm={() => { if (canNavigate()) { clearConfirmedLeave(); setActiveView("gm"); } }}
+              onRefreshSessions={handleRefreshSessions}
+            />
+            <WorldHome world={world} articles={articles} onSave={saveWorldSummary} onSelectArticle={handleSelectArticle} onRefreshBlocks={refreshBlocks} onGuardChange={guardHandlers.settings} onOpenBlock={id => { if (!canNavigate()) return; clearConfirmedLeave(); setFocusBlockId(id); setCompendiumCategory(undefined); setCompendiumSession(session => session + 1); setActiveView("blocks"); }} />
+          </div>}
+          {activeView === "assets" && world && <AssetLibrary worldId={world.id} onGuardChange={guardHandlers.asset} />}
+          {activeView === "blocks" && world && <BlockStudio key={`${world.system}-${compendiumSession}`} system={world.system} worldId={world.id} initialCategory={compendiumCategory} focusBlockId={focusBlockId} blocks={rpgBlocks} onSaveBlock={handleSaveBlock} onDeleteBlock={handleDeleteBlock} onRefreshBlocks={refreshBlocks} onGuardChange={guardHandlers.compendium} />}
+          {activeView === "manager" && world && <CategoryManager key={selectedCategoryId ?? "root"} categories={world.categories} articles={articles} selectedId={selectedCategoryId} onSelectCategory={setSelectedCategoryId} onSelectArticle={handleSelectArticle} onMove={handleTreeMove} onAction={handleCategoryAction} onNewArticle={handleNewArticle} busy={organizationBusy} error={organizationError} />}
+          {/* View: Article Viewer */}
+          {activeView === "article" && currentArticle && (
+            <ArticleViewer
+              publicUrl={world?.isPublic && currentArticle.publicationStatus === "PUBLISHED" && currentArticle.visibility === "PUBLIC" ? `/w/${world.slug}/a/${currentArticle.slug}` : undefined}
+              availableArticles={articles}
+              article={{ ...currentArticle, coverImage: currentArticle.coverImage || world?.bannerImage }}
+              rpgBlocks={rpgBlocks}
+              collections={collections}
+              onEdit={() => { if (canNavigate()) { clearConfirmedLeave(); setActiveView("editor"); } }}
+              onNavigateArticle={handleSelectArticle}
+              onToggleSecretReveal={handleToggleSecretReveal}
+            />
+          )}
+
+          {/* View: Article Editor */}
+          {activeView === "editor" && world && (
+            <ArticleEditorForm
+              key={currentArticle?.id ?? `new-${editorInitialTemplate}`}
+              initialArticle={currentArticle ? currentArticle : { template: editorInitialTemplate, categoryId: editorCategoryId }}
+              worldId={world?.id}
+              actorId={actorId ?? "local"}
+              system={world?.system || "DND_5E"}
+              categories={world?.categories || []}
+              availableArticles={articles.filter(article => article.id !== currentArticle?.id)}
+              variableCollections={collections}
+              availableBlocks={rpgBlocks}
+              worldPublic={world.isPublic}
+              paused={savesPaused}
+              isDirty={editorDirty}
+              onDirtyChange={setEditorDirty}
+              onSave={handleSaveArticle}
+              onCancel={() => { if (canNavigate()) { clearConfirmedLeave(); setActiveView(currentArticle ? "article" : "manager"); } }}
+            />
+          )}
+
+          {/* View: Interactive Maps */}
+          {activeView === "map" && maps.length > 0 && (
+            <div className="space-y-6">
+              <InteractiveMap
+                mapData={maps[0]}
+                onSelectArticle={handleSelectArticle}
+                onAddMarker={handleAddMarker}
+                onGuardChange={guardHandlers.map}
+              />
+            </div>
+          )}
+
+          {/* View: Chronicles & Timelines */}
+          {activeView === "timeline" && timelines.length > 0 && (
+            <TimelineViewer
+              timeline={timelines[0]}
+              onSelectArticle={handleSelectArticle}
+            />
+          )}
+
+          {/* View: Variable Macros */}
+          {activeView === "variables" && (
+            <VariableManager
+              collections={collections}
+              onUpdateVariable={handleUpdateVariable}
+              onGuardChange={guardHandlers.variable}
+              onCreateVariable={async () => {}}
+            />
+          )}
+
+          {/* View: GM Screen & Secrets */}
+          {activeView === "gm" && (
+            <GmNotebook
+              system={world?.system || "DND_5E"}
+              onOpenCompendium={() => openCompendium()}
+              secrets={secrets}
+              rpgBlocks={rpgBlocks}
+              onToggleSecretReveal={handleToggleSecretReveal}
+              onNavigateArticle={handleSelectArticle}
+            />
+          )}
+
+          {/* View: Sessions */}
+          {activeView === "sessions" && world && (
+            <div className="max-w-2xl">
+              <NextSessionDesk
+                worldId={world.id}
+                sessions={sessions}
+                onRefresh={handleRefreshSessions}
+                onGuardChange={guardHandlers.session}
+                worldSystem={world.system}
+              />
+            </div>
+          )}
+        </div>
+      </main>
+      </div>
+      </WorldGuardProvider>
+      {/* Loading boundary above the still-mounted subtree (milestone 4). */}
+      {isTransitioning && (
+        <div role="status" aria-live="polite" className="fixed inset-0 z-[60] flex flex-col items-center justify-center space-y-4 bg-zinc-950/85 text-zinc-300 backdrop-blur-sm">
+          <div className="h-10 w-10 animate-spin rounded-xl border-2 border-indigo-500/40 border-t-indigo-400" />
+          <p className="text-sm font-semibold tracking-wide">Switching worlds…</p>
+        </div>
+      )}
+      {/* New-world modal renders via portal outside settings forms (milestone 3). */}
+      {newWorldOpen && actorId && <NewWorldForm
+        actorId={actorId}
+        defaultSystem={world?.system ?? "DND_5E"}
+        onClose={() => { if (!creationBusy) setNewWorldOpen(false); }}
+        beforeCreate={async () => {
+          // Same guard as switching: creating-and-opening discards nothing
+          // without explicit confirmation; declining creates nothing.
+          if (!canNavigate()) return false;
+          return true;
+        }}
+        onCreated={handleWorldCreated}
+        onBusyChange={setCreationBusy}
+      />}
+    </div>
+  );
+}
