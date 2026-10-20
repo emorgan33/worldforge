@@ -1,0 +1,31 @@
+services:
+  worldforge:
+    build: .
+    image: worldforge:local
+    restart: unless-stopped
+    ports:
+      - "3033:3033"
+    environment:
+      # The database and uploaded images live together on the /data volume so a
+      # single backup captures the whole campaign.
+      DATABASE_URL: "file:/data/worldforge.db"
+      WORLDFORGE_ASSET_DIR: "/data/assets"
+      # Must match the URL used in the browser, or writes are rejected (403).
+      WORLDFORGE_ORIGIN: "${WORLDFORGE_ORIGIN:-http://localhost:3033}"
+    volumes:
+      - worldforge-data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3033/login').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  worldforge-data:

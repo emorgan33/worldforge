@@ -63,14 +63,15 @@ docker compose exec worldforge pnpm db:seed
 
 ### Persistent data
 
-`docker-compose.yml` mounts two named volumes:
+`docker-compose.yml` mounts a single named volume, `worldforge-data`, at `/data`:
 
-- `/app/prisma` — the SQLite database and its journals.
-- `/app/data/assets` — uploaded images (`WORLDFORGE_ASSET_DIR`).
+- `/data/worldforge.db` — the SQLite database.
+- `/data/assets` — uploaded images (`WORLDFORGE_ASSET_DIR`).
 
-Back these up together. To run behind a reverse proxy, set `WORLDFORGE_ORIGIN`
-to the public URL (including scheme and, when non-standard, port) so same-origin
-writes are accepted, and terminate TLS at the proxy.
+Back up the whole volume and you have the complete campaign. To run behind a
+reverse proxy, set `WORLDFORGE_ORIGIN` to the public URL (including scheme and,
+when non-standard, port) so same-origin writes are accepted, and terminate TLS
+at the proxy.
 
 ## Configuration
 

@@ -1,0 +1,39 @@
+# Build context hygiene. Keep the image small and never ship secrets, local
+# databases, uploaded assets or agent scratch files.
+
+node_modules
+.next
+out
+build
+
+.git
+.github
+.gitignore
+
+# Secrets and local env
+.env
+.env.*
+!.env.example
+
+# Local databases and uploaded assets
+prisma/*.db
+prisma/*.db-*
+data/assets/*
+!data/assets/.gitkeep
+
+# Agent / tooling scratch
+.hermes
+.tmp-isolated
+.aider*
+
+# Dev-only files not needed at runtime
+docs
+tests
+test
+*.md
+*.tsbuildinfo
+next-env.d.ts
+coverage
+Dockerfile
+.dockerignore
+docker-compose.yml
