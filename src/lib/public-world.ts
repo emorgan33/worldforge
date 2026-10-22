@@ -5,6 +5,7 @@ import { parseArticleDocument, publicDocument, publicImage, localAssetId, docume
 import { articleStatblockKey, articleBlockCategory } from "./article-template-content";
 import { getArticleTemplate } from "./templates";
 import type { ArticleTemplateType } from "@/types";
+import { readerCharacterRows } from "./character-sheet";
 
 export async function publicWorld(slug: string) {
   const world = await prisma.world.findFirst({ where: { slug, isPublic: true, deletedAt: null }, select: { id: true, slug: true, title: true, system: true, description: true, coverImage: true, bannerImage: true, appearance: true } });
@@ -31,6 +32,7 @@ export async function publicArticle(worldSlug: string, articleSlug: string) {
   const definition = getArticleTemplate(article.template as ArticleTemplateType, system);
   const metadata: Record<string, unknown> = Object.fromEntries(definition.fields.filter(field => typeof rawMetadata[field.key] === "string").map(field => [field.key, rawMetadata[field.key]]));
   metadata.rulesSystem = system;
+  if (article.template === "CHARACTER") Object.assign(metadata, readerCharacterRows(system, rawMetadata));
   const linkedId = rawMetadata[articleStatblockKey(system)];
   const linked = blocks.find(block => block.id === linkedId && block.system === system && block.category === articleBlockCategory(article.template));
   if (linked) metadata[articleStatblockKey(system)] = linked.id;

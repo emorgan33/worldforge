@@ -79,7 +79,7 @@ export function Sidebar({
   const [showTemplateModal, setShowTemplateModal] = useState(false);
 
   return (
-    <aside className="w-80 h-screen bg-zinc-950 border-r border-zinc-800 flex flex-col select-none">
+    <aside className="w-full h-full bg-zinc-950 border-r border-zinc-800 flex flex-col select-none">
       {/* World Switcher — replaces the display-only identity bar (milestone 3). */}
       <div className="p-4 border-b border-zinc-800 bg-zinc-900/60 flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">

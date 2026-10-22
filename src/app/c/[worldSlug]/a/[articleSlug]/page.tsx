@@ -14,6 +14,8 @@ import { ReaderBreadcrumbs } from "@/components/public/ReaderBreadcrumbs";
 import { ReaderCategoryTree } from "@/components/public/ReaderCategoryTree";
 import { ReaderSearch } from "@/components/public/ReaderSearch";
 import { ArticleQuickFacts } from "@/components/article/ArticleQuickFacts";
+import { CharacterSheet } from "@/components/article/CharacterSheet";
+import { isCharacterSystem, readerCharacterRows } from "@/lib/character-sheet";
 import { getArticleTemplate } from "@/lib/templates";
 import { systemProfile } from "@/lib/rpg";
 import { BookOpen, ArrowLeft } from "lucide-react";
@@ -98,6 +100,7 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
     definition.fields.filter(f => typeof rawMetadata[f.key] === "string").map(f => [f.key, rawMetadata[f.key]])
   );
   metadata.rulesSystem = system;
+  if (article.template === "CHARACTER") Object.assign(metadata, readerCharacterRows(system, rawMetadata));
 
   const references = documentReferences(doc, "articleLink", "articleId");
   const links = worldArticles
@@ -149,6 +152,7 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
           {article.excerpt && <p className="mt-3 text-zinc-400">{article.excerpt}</p>}
         </header>
 
+        {article.template === "CHARACTER" && isCharacterSystem(system) && <CharacterSheet system={system} metadata={metadata} title={article.title} />}
         <div className="world-article-layout grid gap-8">
           <article className="min-w-0">
             <PublicRichText doc={doc} links={links} blocks={blocks} />

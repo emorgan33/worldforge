@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { syncArticleMentions } from "@/lib/article-mention-index";
 import { validateImageReference } from "@/lib/asset-validation";
 import { prisma } from "@/lib/db";
+import { validateCharacterRows } from "@/lib/character-sheet";
 
 async function getHandler(
   req: NextRequest,
@@ -83,6 +84,11 @@ async function patchHandler(
       isPinned,
       canonState,
     } = body;
+
+    let previousMetadata: Record<string, unknown> = {};
+    try { previousMetadata = JSON.parse(existing.metadata || "{}") || {}; } catch {}
+    const sheetError = validateCharacterRows(metadata, previousMetadata);
+    if (sheetError) return NextResponse.json({ error: sheetError }, { status: 400 });
 
     let publication;
     try { publication = publicationFields({ state, publicationStatus, visibility }, existing); } catch { return NextResponse.json({ error: "Invalid publication status or visibility" }, { status: 400 }); }

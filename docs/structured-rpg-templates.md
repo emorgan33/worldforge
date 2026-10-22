@@ -2,6 +2,8 @@
 
 Character, Creature, Spell, Item and Encounter templates now provide grouped, optional structured fields for D&D 5e 2014 and Pathfinder 2e Remaster. Creature and Encounter are new article types; Species remains available for broader ecology and culture. Campaign-home shortcuts and the template chooser expose the new types. Metadata continues to use the existing serialized object; no database migration or reseeding is needed.
 
+Characters now use [interactive character sheets](character-sheets.md) for their core statistics. Additional campaign notes and compendium links remain below the sheet. The sheet includes all of its labeled sections even when empty.
+
 The profiles use separate mechanics keys. D&D creatures retain fractional CR and ability scores; Pathfinder creatures use levels (including -1 and 0), attribute modifiers and Fortitude/Reflex/Will. Spell forms separate 2014 level/components/concentration from Remaster rank/traits/traditions/heightening. Items separate attunement and charges from Remaster level, Bulk and activation. Encounter fields record party size/level, difficulty or threat, XP, objectives, opposition, terrain and outcomes. XP fields are notes, not encounter calculators.
 
 Numeric authoring checks pause autosave for changed invalid values and resume after correction. Optional blank fields are allowed. Unchanged legacy text values remain saveable. New explicit character-level and D&D spell-level keys preserve older mixed-text level fields as other saved details.

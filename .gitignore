@@ -56,3 +56,6 @@ next-env.d.ts
 .aider*
 .hermes/
 .tmp-isolated/
+
+# Local feature implementation budget
+/docs/feature-token-budget.md

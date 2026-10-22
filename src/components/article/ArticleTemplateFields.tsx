@@ -6,6 +6,7 @@ import { articleBlockCategory, articleFacts, articleStatblock, articleStatblockK
 import type { RpgBlockItem } from "@/lib/rpg";
 import { StatblockCard } from "@/components/blocks/StatblockCard";
 import { Search } from "lucide-react";
+import { characterSheetFields, isCharacterSystem } from "@/lib/character-sheet";
 
 const inputClass = "mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 focus:border-amber-500 focus:outline-none";
 const selectClass = "mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 focus:border-amber-500 focus:outline-none";
@@ -32,9 +33,11 @@ export function ArticleTemplateFields({ template, system, metadata, blocks, onCh
   const participantKeys = isEncounter ? getParticipantKeys(system) : [];
   const linkedParticipants = participantKeys.map(pk => metadata[pk]).filter(Boolean).map(id => findStatblockById(blocks, id)).filter((b): b is RpgBlockItem => b !== undefined);
   const hasParticipantLinks = linkedParticipants.length > 0;
+  const sheetKeys = new Set(template.type === "CHARACTER" && isCharacterSystem(system) ? characterSheetFields(system).map(field => field.key) : []);
+  const remainingFields = { ...template, fields: template.fields.filter(field => !sheetKeys.has(field.key)) };
 
   return <div className="space-y-5">
-    {templateFieldGroups(template).map(group => {
+    {templateFieldGroups(remainingFields).map(group => {
       if (isEncounter && group.name === "Participants") {
         const participantFields = group.fields.filter(f => f.key.includes("Participant"));
         return <>

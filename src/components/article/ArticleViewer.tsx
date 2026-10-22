@@ -22,6 +22,8 @@ import { RpgBlockItem } from "@/lib/rpg";
 import { interpolateVariables } from "@/lib/variable-parser";
 import { RulesProfileBadge } from "@/components/blocks/RulesProfileBadge";
 import { CanonStateBadge } from "@/components/blocks/CanonStateBadge";
+import { CharacterSheet } from "./CharacterSheet";
+import { isCharacterSystem } from "@/lib/character-sheet";
 
 interface ArticleViewerProps {
   publicUrl?: string;
@@ -33,6 +35,7 @@ interface ArticleViewerProps {
   onNavigateArticle: (articleId: string) => void;
   onToggleSecretReveal: (secretId: string, current: boolean) => void;
   playerView?: boolean;
+  system?: string;
 }
 
 export function ArticleViewer({
@@ -45,6 +48,7 @@ export function ArticleViewer({
   onNavigateArticle,
   onToggleSecretReveal,
   playerView = false,
+  system = "CUSTOM",
 }: ArticleViewerProps) {
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -58,7 +62,7 @@ export function ArticleViewer({
     console.error("Failed to parse metadata", e);
   }
 
-  const rulesSystem = typeof metadataObj.rulesSystem === "string" ? metadataObj.rulesSystem : "CUSTOM";
+  const rulesSystem = typeof metadataObj.rulesSystem === "string" ? metadataObj.rulesSystem : system;
 
 
   // Interpolate variables [prefix:key] in the article HTML
@@ -163,6 +167,7 @@ export function ArticleViewer({
         </div>
       </div>
 
+      {article.template === "CHARACTER" && isCharacterSystem(rulesSystem) && <CharacterSheet system={rulesSystem} metadata={metadataObj} title={article.title} />}
       {/* Main Content Layout (Grid: Content 70% | Metadata Sidebar 30%) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Main Content Body */}

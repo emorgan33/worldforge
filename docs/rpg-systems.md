@@ -26,7 +26,7 @@ References: [D&D 2014 Basic Rules: Combat](https://www.dndbeyond.com/sources/dnd
 - Statblocks retain their system and category during editing. Existing JSON fields, including spells, traits and custom properties, survive form edits. Legacy string actions remain supported alongside structured abilities with action costs.
 - D&D scores remain in `stats`; Remaster modifiers use `attributes`. Legacy Pathfinder ability scores are preserved and identified rather than silently reinterpreted as modifiers.
 - Article metadata records its own `rulesSystem`, independently of future campaign-default changes. System-specific metadata keys preserve older lore fields.
-- This is a campaign authoring workspace, not a character builder, licensed rules compendium, automated encounter balancer or VTT.
+- Character articles now have editable D&D 2014 and Pathfinder Remaster sheets. They remain manual-entry sheets rather than full character builders: most totals, progression, and rules choices are not calculated. This is not a licensed rules compendium, automated encounter balancer, or VTT.
 
 ## Verification
 

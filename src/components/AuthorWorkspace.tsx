@@ -32,6 +32,7 @@ export default function WorldForgeApp() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [actorId, setActorId] = useState<string | null>(null);
   const [worlds, setWorlds] = useState<WorldSummary[]>([]);
   const [world, setWorld] = useState<WorldSummary | null>(null);
@@ -779,7 +780,7 @@ export default function WorldForgeApp() {
   }
 
   return (
-    <div className="relative flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
+    <div className="relative flex h-dvh bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
       {/* Keyed by world id: child-local state resets only when a destination
           snapshot commits. During a transition the previous subtree stays
           MOUNTED but inert beneath the loading boundary, so unsaved forms,
@@ -792,37 +793,40 @@ export default function WorldForgeApp() {
         ...([ ["home", "Campaign home"], ["manager", "Articles & Categories"], ["assets", "Image library"], ["blocks", "RPG compendium"], ["map", "Maps"], ["timeline", "Timelines"], ["sessions", "Sessions"], ["variables", "Variables"], ["gm", "GM Screen & Secrets"] ] as const).filter(([view]) => (view !== "map" || maps.length > 0) && (view !== "timeline" || timelines.length > 0)).map(([view, title]): SearchCommand => ({ id: `tool-${view}`, title, description: "Workspace tool", run: () => { if (view === "blocks") openCompendium(); else if (canNavigate()) { clearConfirmedLeave(); setActiveView(view); } } })),
       ]} />
       {/* WorldForge Sidebar */}
+      <button type="button" aria-label="Campaign menu" aria-expanded={mobileNavigationOpen} aria-controls="campaign-navigation" className="fixed left-4 top-3 z-50 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs text-zinc-300 md:hidden" onClick={() => setMobileNavigationOpen(open => !open)}>{mobileNavigationOpen ? "Close" : "Menu"}</button>
       <button type="button" className="fixed right-28 top-3 z-50 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs text-zinc-300 hover:border-zinc-500" onClick={() => { if (!canNavigate()) return; clearConfirmedLeave(); router.push("/player"); }}>Player view</button>
       <button type="button" className="fixed right-5 top-3 z-50 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs text-zinc-300" onClick={async () => { if (!canNavigate()) return; clearConfirmedLeave(); const response = await fetch("/api/auth/logout", { method: "POST" }); if (response.ok) { router.replace("/login"); router.refresh(); } }}>Sign out</button>
+      <div id="campaign-navigation" className={`${mobileNavigationOpen ? "block" : "hidden"} h-full w-full shrink-0 pt-14 md:block md:w-80 md:pt-0`}>
       <Sidebar
-        onOpenSearch={() => setSearchOpen(true)}
+        onOpenSearch={() => { setMobileNavigationOpen(false); setSearchOpen(true); }}
         worldTitle={world?.title || "WorldForge"}
         system={world?.system || "DND_5E"}
         articles={articles}
         categories={world?.categories || []}
         selectedCategoryId={selectedCategoryId}
-        onSelectCategory={selectCategory}
+        onSelectCategory={id => { setMobileNavigationOpen(false); selectCategory(id); }}
         onMove={handleTreeMove}
         organizationBusy={organizationBusy || activeView === "editor" || (isLoading && !!world)}
         organizationError={organizationError}
         activeView={activeView}
         selectedArticleId={selectedArticleId}
-        onSelectArticle={handleSelectArticle}
-        onNavigateView={(view) => { if (view === "blocks") openCompendium(); else if (canNavigate()) { clearConfirmedLeave(); setActiveView(view); } }}
-        onNewArticle={handleNewArticle}
+        onSelectArticle={id => { setMobileNavigationOpen(false); handleSelectArticle(id); }}
+        onNavigateView={(view) => { setMobileNavigationOpen(false); if (view === "blocks") openCompendium(); else if (canNavigate()) { clearConfirmedLeave(); setActiveView(view); } }}
+        onNewArticle={template => { setMobileNavigationOpen(false); handleNewArticle(template); }}
         worlds={worlds}
         currentWorldId={world?.id ?? null}
         worldSwitchDisabled={(isLoading && !world) || creationBusy}
-        onSelectWorld={requestWorldSwitch}
-        onNewWorld={openNewWorld}
+        onSelectWorld={id => { setMobileNavigationOpen(false); requestWorldSwitch(id); }}
+        onNewWorld={() => { setMobileNavigationOpen(false); openNewWorld(); }}
         onRefreshWorlds={refreshWorlds}
         actorId={actorId}
         onBeforeManageAction={beforeWorldManagementAction}
         onManageWorld={completeWorldManagementAction}
       />
+      </div>
 
       {/* Main Content Workspace */}
-      <main className="flex-1 h-screen overflow-y-auto bg-zinc-950 p-6 md:p-8 lg:p-10">
+      <main className={`${mobileNavigationOpen ? "hidden" : "block"} mt-14 h-[calc(100dvh-3.5rem)] min-w-0 flex-1 overflow-y-auto bg-zinc-950 p-4 md:block md:p-8 lg:p-10`}>
         <div className="max-w-6xl mx-auto">
           {worldUnavailable && <section aria-live="polite" className="mb-6 rounded-xl border border-amber-800 bg-amber-950/30 p-6">
             <h2 className="text-lg font-semibold text-amber-200">This world isn’t available</h2>
@@ -861,6 +865,7 @@ export default function WorldForgeApp() {
           {activeView === "article" && currentArticle && (
             <div className="space-y-5">
             <ArticleViewer
+              system={world?.system}
               publicUrl={world?.isPublic && currentArticle.publicationStatus === "PUBLISHED" && currentArticle.visibility === "PUBLIC" ? `/w/${world.slug}/a/${currentArticle.slug}` : undefined}
               availableArticles={articles}
               article={{ ...currentArticle, coverImage: currentArticle.coverImage || world?.bannerImage }}

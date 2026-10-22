@@ -1,0 +1,67 @@
+.container { container-type: inline-size; min-width: 0; }
+.sheet { --ink: #71362e; --line: #b8a88d; --paper: #faf6ec; color: #302a23; background: var(--paper); border: 1px solid var(--line); border-top: 5px solid var(--ink); border-radius: 5px; padding: 24px; box-shadow: 0 8px 28px #0002; color-scheme: light; }
+.pathfinder { --ink: #234e50; --line: #9cafa5; --paper: #f5f7ef; }
+.header { display: flex; justify-content: space-between; align-items: end; gap: 24px; padding-bottom: 16px; border-bottom: 2px solid var(--ink); }
+.edition { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); margin: 0 0 6px; }
+.container section.sheet .header h2 { font: 700 30px Georgia, serif; font-variant: normal; color: var(--ink); margin: 0; border: 0; letter-spacing: normal; }
+.name { display: block; flex: 1; max-width: 360px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.name input { display: block; width: 100%; min-height: 44px; border: 0; border-bottom: 1px solid var(--ink); font: 24px Georgia, serif; background: transparent; color: #302a23; }
+.characterName { font: 24px Georgia, serif; overflow-wrap: anywhere; }
+.guidance { margin: 12px 0 0; font-size: 12px; color: #635a4c; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 20px; }
+.column, .mainColumn { display: flex; flex-direction: column; min-width: 0; gap: 16px; }
+.section { border: 1px solid var(--line); border-radius: 4px; min-width: 0; overflow: hidden; }
+.container section.sheet .section h3 { margin: 0; border: 0; padding: 8px 12px; background: var(--ink); color: #fffaf1; font: 700 13px Georgia, serif; font-variant: normal; letter-spacing: .04em; }
+.sectionBody { padding: 12px; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.wide { grid-column: 1 / -1; }
+.field { min-width: 0; }
+.label, .field label { display: block; font-size: 10px; line-height: 1.4; font-weight: 700; color: #514a40; }
+.field input:not([type=checkbox]), .field textarea, .field select { display: block; width: 100%; min-height: 44px; padding: 7px 5px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: #ffffff70; color: #302a23; font-size: 14px; }
+.field textarea { resize: vertical; }
+.field input[type=checkbox] { appearance: auto; width: 22px; height: 22px; margin: 11px; accent-color: var(--ink); }
+.sheet input:focus-visible, .sheet textarea:focus-visible, .sheet select:focus-visible, .sheet button:focus-visible, .sheet summary:focus-visible { outline: 3px solid #347cad; outline-offset: 2px; }
+.sheet input:hover, .sheet select:hover, .sheet textarea:hover { background-color: #fff; }
+.readValue { min-height: 38px; padding: 7px 4px; border-bottom: 1px solid var(--line); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.readValue span { color: #8b8272; }
+.legacy { font-size: 10px; color: #903e22; }
+.row { padding: 0 0 12px; margin-bottom: 12px; border-bottom: 1px dashed var(--line); }
+.rowFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.rowActions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 12px; }
+.sheet button { border: 1px solid var(--line); border-radius: 4px; background: #fff8; padding: 10px 12px; min-height: 44px; color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer; }
+.sheet button:hover { background: #fff; border-color: var(--ink); }
+.remove { margin-top: 8px; }
+.emptyRows { min-height: 90px; margin-bottom: 12px; background: repeating-linear-gradient(transparent, transparent 29px, #b8a88d55 30px); }
+.emptyColumns { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 10px; font-weight: 700; }
+.emptyRows p { font-size: 12px; padding-top: 15px; color: #635a4c; }
+.error { margin-top: 16px; padding: 12px; border: 1px solid #a4472b; font-size: 13px; }
+.error pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.footer { padding-top: 20px; margin-top: 16px; border-top: 1px solid var(--line); text-align: center; color: #635a4c; font-size: 10px; letter-spacing: .06em; }
+.abilities .field { text-align: center; border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.abilities input, .abilities .readValue { text-align: center; font-size: 24px !important; }
+.modifier { margin-top: 6px; font-size: 10px; color: #514a40; }
+.modifier output { display: block; font-size: 18px; font-weight: 700; color: var(--ink); }
+@container (min-width: 600px) {
+  .abilities .fields { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .fields:not(.paired) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .abilities .fields:not(.paired) { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .rowFields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@container (min-width: 850px) {
+  .layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); }
+  .wide > .paired { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@container (max-width: 480px) {
+  .sheet { padding: 12px; }
+  .header { align-items: stretch; flex-direction: column; gap: 16px; }
+  .name { max-width: none; }
+  .container section.sheet .header h2 { font-size: 26px; }
+  .sectionBody { padding: 10px; }
+  .fields, .rowFields { gap: 10px; }
+  .field input:not([type=checkbox]), .field textarea, .field select { font-size: 16px; }
+}
+@media print {
+  .sheet { box-shadow: none; padding: 12px; }
+  .section { break-inside: avoid; }
+  .sheet button, .guidance { display: none; }
+}

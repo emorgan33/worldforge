@@ -1,4 +1,5 @@
 import { ArticleTemplateMeta, ArticleTemplateType } from "@/types";
+import { characterSheetFields } from "./character-sheet";
 
 export const ARTICLE_TEMPLATES: Record<ArticleTemplateType, ArticleTemplateMeta> = {
   CHARACTER: {
@@ -328,6 +329,12 @@ export function getArticleTemplate(type: ArticleTemplateType, system: string): A
       : [field("dnd5eClass", "Class & subclass", "Character"), number("dnd5eCharacterLevel", "Character level", "Character", 1, 20), field("dnd5eNpcCr", "NPC challenge rating (CR)", "Character", "1/2, 1, 5…"), field("dnd5eBackground", "Background", "Character"), notes("dnd5eBond", "Ideal, bond & flaw", "Identity"), field("dnd5eLanguages", "Languages", "Character"), field("dnd5eProficiency", "Proficiency bonus", "Character", "+2")]),
     notes(`${prefix}Roleplay`, "Roleplaying cues", "Campaign"), notes(`${prefix}Goals`, "Goals & relationships", "Campaign"),
   ];
+  if (type === "CHARACTER") {
+    const sheetFields: Field[] = characterSheetFields(system).map(item => item.type === "checkbox"
+      ? { ...item, type: "select", options: ["true", "false"] } : { ...item, type: item.type });
+    const keys = new Set(sheetFields.map(item => item.key));
+    fields = [...sheetFields, ...fields.filter(item => !keys.has(item.key))];
+  }
   if (type === "CREATURE") fields = [
     ...(pf ? [number("pf2eCreatureLevel", "Creature level", "Profile", -1, 25), select("pf2eCreatureRarity", "Rarity", "Profile", pfRarity), field("pf2eCreatureTraits", "Creature traits", "Profile", "Humanoid, elf, scout…"), field("pf2eCreaturePerception", "Perception", "Awareness"), field("pf2eCreatureSenses", "Senses", "Awareness")]
       : [field("dnd5eCr", "Challenge rating (CR)", "Profile", "0, 1/8, 1/4, 1/2, 1…"), field("dnd5eCreatureType", "Creature type", "Profile", "Humanoid, dragon, undead…"), field("dnd5eAlignment", "Alignment", "Profile"), field("dnd5eCreatureSenses", "Senses", "Awareness")]),

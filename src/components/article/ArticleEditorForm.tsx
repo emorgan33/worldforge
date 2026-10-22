@@ -16,6 +16,8 @@ import { isEmptyArticle, starterOutline } from "@/lib/article-template-content";
 import { ARTICLE_TEMPLATES, getArticleTemplate, validateTemplateMetadata } from "@/lib/templates";
 import { TemplateIcon } from "@/components/TemplateIcon";
 import { TipTapEditor } from "@/components/editor/TipTapEditor";
+import { CharacterSheet } from "./CharacterSheet";
+import { isCharacterSystem } from "@/lib/character-sheet";
 
 export interface ArticleSaveInput {
   worldId: string; template: ArticleTemplateType; title: string; categoryId: string | null;
@@ -220,7 +222,7 @@ export function ArticleEditorForm({
       <p role="status" className={`text-xs ${isDirty ? "text-amber-400" : "text-zinc-500"}`}>{metadataError ? "Autosave paused: check template fields" : isSubmitting ? "Saving article…" : saveError ? "Save failed" : isDirty ? title.trim() ? "Changes pending autosave" : "Add a title to enable autosave" : lastSaved ? "All changes saved" : "Autosave on"}</p>
       <fieldset inert={savesPaused || manualSaving || !!recovery || !recoveryReady} disabled={savesPaused || manualSaving || !!recovery || !recoveryReady} className="space-y-6">
       {/* Action Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-zinc-800">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
             <TemplateIcon template={template} className="w-5 h-5" />
@@ -257,7 +259,7 @@ export function ArticleEditorForm({
       {/* Basic Metadata Grid */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
         {/* Title */}
-        <div className="md:col-span-8">
+        {!(template === "CHARACTER" && isCharacterSystem(articleSystem)) && <div className="md:col-span-8">
           <label htmlFor="article-title" className="block text-xs font-semibold text-zinc-300 mb-1">
             Article Title <span className="text-red-400">*</span>
           </label>
@@ -270,7 +272,7 @@ export function ArticleEditorForm({
             placeholder="e.g. Thronehold, the Citadel of Glass"
             className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-indigo-500 transition-colors"
           />
-        </div>
+        </div>}
 
         {/* Template Selector */}
         <div className="md:col-span-4">
@@ -327,6 +329,7 @@ export function ArticleEditorForm({
 
       <label className="block max-w-sm text-xs font-semibold text-amber-300">Article rules profile<select aria-label="Article rules profile" value={articleSystem} onChange={event => setArticleSystem(event.target.value)} className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-sm text-zinc-200">{RPG_SYSTEMS.map(profile => <option key={profile.id} value={profile.id}>{profile.short}{profile.id === "PF_2E" ? " · Remaster" : ""}</option>)}</select></label>
       {metadataError && <p role="alert" className="text-sm text-red-400">{metadataError} Autosave is paused until this field is corrected.</p>}
+      {template === "CHARACTER" && isCharacterSystem(articleSystem) && <CharacterSheet key={articleSystem} system={articleSystem} metadata={metadata} title={title} onChange={handleMetadataChange} onTitleChange={setTitle} />}
       <ArticleTemplateFields template={activeTemplateDef} system={articleSystem} metadata={metadata} blocks={availableBlocks} onChange={handleMetadataChange} />
 
       <ImageSourceField worldId={worldId} label="Article cover URL" value={coverImage} onChange={setCoverImage} />

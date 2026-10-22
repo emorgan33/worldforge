@@ -5,6 +5,8 @@ import { notFound } from "next/navigation";
 import { publicArticle, publicBacklinks } from "@/lib/public-world";
 import { PublicRichText } from "@/components/public/PublicRichText";
 import { ArticleQuickFacts } from "@/components/article/ArticleQuickFacts";
+import { CharacterSheet } from "@/components/article/CharacterSheet";
+import { isCharacterSystem } from "@/lib/character-sheet";
 import type { ArticleTemplateType } from "@/types";
 import { documentReferences } from "@/lib/public-content";
 import { categoryAncestors } from "@/lib/category-tree";
@@ -37,6 +39,7 @@ async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; 
     {data.coverImage && <img src={data.coverImage} alt="" className="h-72 w-full rounded-2xl object-cover" />}
     <header><p className="text-xs uppercase tracking-wider text-amber-400">{summary.template}</p><h1 className="mt-2 font-serif text-4xl">{summary.title}</h1>{summary.excerpt && <p className="mt-3 text-zinc-400">{summary.excerpt}</p>}</header>
 
+    {summary.template === "CHARACTER" && isCharacterSystem(data.system) && <CharacterSheet system={data.system} metadata={data.metadata} title={summary.title} />}
     <div className="world-article-layout grid gap-8">
       <article className="min-w-0">
         <PublicRichText doc={data.doc} links={links} blocks={data.blocks} />

@@ -5,6 +5,7 @@ import type { Prisma } from "@prisma/client";
 import { syncArticleMentions } from "@/lib/article-mention-index";
 import { validateImageReference } from "@/lib/asset-validation";
 import { prisma } from "@/lib/db";
+import { validateCharacterRows } from "@/lib/character-sheet";
 
 async function getHandler(req: NextRequest) {
   try {
@@ -72,6 +73,8 @@ async function postHandler(req: NextRequest) {
     if (!worldId || !title) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+    const sheetError = validateCharacterRows(metadata);
+    if (sheetError) return NextResponse.json({ error: sheetError }, { status: 400 });
 
     let publication;
     try { publication = publicationFields({ state, publicationStatus, visibility }); } catch { return NextResponse.json({ error: "Invalid publication status or visibility" }, { status: 400 }); }

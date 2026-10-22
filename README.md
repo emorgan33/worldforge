@@ -27,6 +27,9 @@ Both views come from the optional Aethelgard demo seed.
   callouts and embedded statblocks.
 - **28 article templates** with edition-specific fields for characters,
   creatures, places, organizations, lore, rules content and more.
+- **Interactive character sheets** — paper-style D&D 5e 2014 and Pathfinder 2e
+  Remaster sheets with editable statistics, resources and repeatable rows;
+  D&D ability modifiers calculate from scores.
 - **Structured compendium** — D&D 5e and PF2e creatures, NPCs, spells and items
   rendered in distinct edition themes.
 - **Wikilinks and backlinks**, hierarchical categories, and Ctrl/Cmd+K command
@@ -149,6 +152,7 @@ Design and feature references live in [`docs/`](docs/):
 - [Image library](docs/image-library.md)
 - [World appearance](docs/world-appearance.md)
 - [Campaign rules profiles](docs/rpg-systems.md)
+- [Interactive character sheets](docs/character-sheets.md)
 - [World creation and switcher](docs/world-creation-and-switcher.md)
 - [Backup and restore](docs/backup-restore.md)
 - [FoundryVTT integration](docs/foundryvtt-integration.md)
