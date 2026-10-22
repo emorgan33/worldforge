@@ -47,6 +47,20 @@ Both views come from the optional Aethelgard demo seed.
 - **FoundryVTT import** — selective, preview-first import of PF2e Item exports
   (provisional; see `docs/foundryvtt-integration.md`).
 
+## Roadmap
+
+- **Player-only accounts:** Add GM invitations, account claiming, a player home
+  page for shared worlds, and in-app membership and sharing controls. Enforce
+  read-only access and immediate revocation across pages, search and assets.
+  The membership APIs and player reader exist; the complete account flow is
+  [planned](docs/feature-improvements.md#player-only-account-flow-planned).
+- **FoundryVTT integration:** Expand the provisional PF2e Item import toward
+  export and later synchronization, after validating compatibility with real
+  Foundry exports. See the [integration proposal](docs/foundryvtt-integration.md).
+
+See the [full roadmap and feature status](docs/feature-improvements.md). Planned
+work has no committed release date.
+
 ## Self-host with Docker
 
 The supported way to run WorldForge is Docker Compose.
