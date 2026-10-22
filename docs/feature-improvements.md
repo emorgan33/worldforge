@@ -1,6 +1,6 @@
 # Feature improvement task list
 
-Updated: October 15, 2026.
+Updated: October 21, 2026.
 
 WorldForge is a block-based campaign authoring site focused on **D&D 5e 2014** and **Pathfinder 2e Remaster**. World Anvil informs its authoring and presentation workflows; exact visual parity with its authenticated editor has not been verified. Reference evidence and its limits are recorded in [the reference review](world-anvil-reference-review.md).
 
@@ -185,6 +185,43 @@ Done when owners can identify asset dependencies and recover or move a complete 
 - [x] **Performance optimization** completed October 15, 2026 (see [performance.md](performance.md))
 
 ## Future Enhancements
+
+### Player-only account flow (planned)
+
+The current foundation includes `WorldMember` records, owner-managed membership
+and audience-policy APIs, and a reader at `/c/[worldSlug]`. New accounts created
+by `auth:setup -- --create` are author accounts. Players currently lack an
+invitation flow, a player-only account boundary, and a landing page for their
+shared worlds.
+
+- [ ] Add an explicit player-only account capability and an administrator or GM
+  path to create or invite a player. Support inviting an existing account without
+  changing its ownership of other worlds. Do not turn player invitations into
+  open registration or let an invite grant author access.
+- [ ] Give GMs a membership screen to invite by email, see pending and active
+  players, resend or cancel invitations, and revoke membership. Use expiring,
+  single-use, email-bound invitation links; validate that only the world owner
+  can manage invitations and memberships.
+- [ ] Let invited players set a password or use an existing account, sign in,
+  and land on a player home page listing worlds they can read. Route player-only
+  accounts away from the author workspace and block world creation, editing,
+  owner APIs, and private GM data on the server.
+- [ ] Connect GM sharing controls to audience policies and snapshot grants so
+  GMs can choose which members see each resource. Keep new content private by
+  default, show exactly who has access, and make revocation effective for direct
+  links, search, images, and cached sessions.
+- [ ] Complete player reader navigation and empty states for worlds with no
+  shared content. Verify that titles, category paths, search results, counts,
+  assets, and links reveal only material the player may read.
+- [ ] Cover new-player claims, existing-account invitations, duplicate and
+  expired links, role transitions, owner isolation, revocation, and cross-world
+  access with integration and browser tests. Document migration and recovery
+  behavior for existing installations.
+
+Done when a GM can invite a player from the app, the player can claim or use an
+account and find their shared worlds after login, and a player-only account
+cannot create or edit worlds or access unshared material. Revoking membership or
+a grant must remove access immediately.
 
 ### FoundryVTT Integration
 A comprehensive proposal for bidirectional Foundry VTT integration has been documented at [foundryvtt-integration.md](foundryvtt-integration.md).
