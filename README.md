@@ -55,15 +55,27 @@ docker compose up -d --build
 
 Open http://localhost:3033. The container applies database migrations on start.
 
-The first account has **no password**. Generate a one-time setup link for the
-seeded GM account, then open the printed `/setup#token=...` URL in your browser
-to set a password:
+Generate a one-time setup link for the first GM account, then open the printed
+`/setup#token=...` URL in your browser to set an email and password. On an empty
+database, this command creates the first account without loading demo content:
 
 ```bash
 docker compose exec worldforge pnpm auth:setup
 ```
 
-Optionally load the sample "Aethelgard" campaign:
+To create an account with a specific email, including when other accounts
+already exist, run:
+
+```bash
+docker compose exec worldforge pnpm auth:setup -- --create you@example.com
+```
+
+Open its setup link to choose the password. New accounts can create their own
+worlds after signing in. To reset an existing account's password, run
+`docker compose exec worldforge pnpm auth:setup -- you@example.com` instead.
+
+Optionally load the sample "Aethelgard" campaign **before setting up an account**.
+The seed replaces existing data, so do not run it on an installation with content:
 
 ```bash
 docker compose exec worldforge pnpm db:seed
@@ -99,13 +111,14 @@ Requirements: **Node.js 22+** and **pnpm 10**.
 pnpm install
 cp .env.example .env
 pnpm db:deploy
-pnpm db:seed        # optional
+pnpm db:seed        # optional; replaces existing data
 pnpm dev            # http://localhost:3001
 ```
 
-Set a password for the seeded account with `pnpm auth:setup`, then sign in at
-`/login`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow, test
-commands and pull-request expectations.
+Set a password with `pnpm auth:setup`, or create an account for a specific email
+with `pnpm auth:setup -- --create you@example.com`, then sign in at `/login`.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow, test commands and
+pull-request expectations.
 
 ## Documentation
 
