@@ -8,6 +8,11 @@ your players.
 WorldForge is a local-first web app: your campaign content lives in a SQLite
 database and an image directory that you own and back up.
 
+**AI disclosure:** AI tools helped create parts of this project's code and
+documentation. AI output can contain errors; review and test the software for
+your use, and keep backups of your campaign data. See the
+[AI disclosure](docs/ai-disclosure.md).
+
 ## Screenshots
 
 ![Aethelgard public world page](docs/screenshots/world.png)
