@@ -1,7 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 export const ensureStatic = false;
 export const instant = false;
-import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { resolveActor, requireReadableResource, readableWhere } from "@/lib/access";
@@ -27,7 +26,7 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
 
   // Find world by slug
   const world = await prisma.world.findFirst({
-    where: { slug: worldSlug },
+    where: { slug: worldSlug, deletedAt: null },
     select: { id: true, slug: true, title: true, system: true, appearance: true, ownerId: true },
   });
   if (!world) notFound();
@@ -140,6 +139,7 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
       <main className="space-y-7">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800 pb-4">
           <ReaderBreadcrumbs items={breadcrumbs} />
+          {!isPreview && <Link href="/player" className="text-sm text-indigo-300 hover:underline">Your worlds</Link>}
         </div>
 
         {coverImage && <img src={coverImage} alt="" className="h-72 w-full rounded-2xl object-cover" />}
@@ -179,10 +179,6 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
   );
 }
 
-export default function PlayerArticlePage(props: { params: Promise<{ worldSlug: string; articleSlug: string }> }) {
-  return (
-    <Suspense fallback={<p className="p-8 text-zinc-400">Opening article…</p>}>
-      <PlayerArticleContent {...props} />
-    </Suspense>
-  );
+export default async function PlayerArticlePage(props: { params: Promise<{ worldSlug: string; articleSlug: string }> }) {
+  return PlayerArticleContent(props);
 }

@@ -5,6 +5,7 @@ import { BookOpen, Scroll, Shield, Sword, WandSparkles, Users, Gem, ArrowRight }
 import { ArticleListItem, ArticleTemplateType } from "@/types";
 import { BlockCategory, RpgBlockItem, systemProfile } from "@/lib/rpg";
 import { NextSessionDesk, SessionEntityLinkItem } from "./NextSessionDesk";
+import { MemberManager } from "./MemberManager";
 
 export function CampaignOverview({ system, articles, blocks, sessions, worldId, onChangeSystem, onNewArticle, onOpenCompendium, onOpenGm, onRefreshSessions }: {
   system: string;
@@ -57,5 +58,6 @@ export function CampaignOverview({ system, articles, blocks, sessions, worldId, 
         )}
       </section>
     </div>
+      {worldId && <MemberManager worldId={worldId} />}
   </div>;
 }

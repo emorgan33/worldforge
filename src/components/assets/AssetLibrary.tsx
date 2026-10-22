@@ -5,6 +5,7 @@ import { useWorldGuard } from "@/components/worlds/WorldGuard";
 import { useEffect, useRef, useState } from "react";
 import { IMAGE_ACCEPT, MAX_IMAGE_BYTES, type ImageAssetItem } from "@/lib/assets";
 import type { GuardRegistration } from "@/lib/navigation-guard";
+import { ShareResource } from "@/components/campaign/ShareResource";
 
 const inputClass = "mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200";
 async function jsonResponse(response: Response) {
@@ -94,7 +95,7 @@ export function AssetLibrary({ worldId, onSelect, onGuardChange }: { worldId: st
       <img src={asset.url} alt="" loading="lazy" className="h-28 w-full bg-zinc-950 object-contain" /><span className="block truncate p-2 text-xs text-zinc-200">{asset.title}{asset.archived ? " · Hidden" : ""}</span><span className="block px-2 pb-2 text-[10px] text-zinc-500">{asset.width} × {asset.height} · {Math.max(1, Math.round(asset.byteSize / 1024))} KB</span>
     </button>)}</div>}
     {cursor && !loading && <button type="button" disabled={loadingMore} onClick={() => void loadMore()} className="text-sm text-indigo-300">{loadingMore ? "Loading…" : "Load more images"}</button>}
-    {selected && <AssetDetails key={`${selected.id}-${selected.title}-${selected.alt}-${selected.archived}`} asset={selected} busy={busy} onUpdate={changes => update(selected, changes)} onSelect={onSelect} onMessage={setMessage} onRefresh={() => { setSelected(null); setRefresh(r => r + 1); }} />}
+    {selected && <><AssetDetails key={`${selected.id}-${selected.title}-${selected.alt}-${selected.archived}`} asset={selected} busy={busy} onUpdate={changes => update(selected, changes)} onSelect={onSelect} onMessage={setMessage} onRefresh={() => { setSelected(null); setRefresh(r => r + 1); }} /><ShareResource key={selected.id} kind="assets" resourceId={selected.id} title={selected.title} /></>}
   </section>;
 }
 

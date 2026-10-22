@@ -23,6 +23,7 @@ import { InteractiveMap } from "@/components/map/InteractiveMap";
 import { TimelineViewer } from "@/components/timeline/TimelineViewer";
 import { VariableManager } from "@/components/variables/VariableManager";
 import { GmNotebook } from "@/components/campaign/GmNotebook";
+import { ShareResource } from "@/components/campaign/ShareResource";
 import { ArticleDetail, ArticleListItem, ArticleTemplateType, VariableCollectionItem } from "@/types";
 import { Globe } from "lucide-react";
 
@@ -791,6 +792,7 @@ export default function WorldForgeApp() {
         ...([ ["home", "Campaign home"], ["manager", "Articles & Categories"], ["assets", "Image library"], ["blocks", "RPG compendium"], ["map", "Maps"], ["timeline", "Timelines"], ["sessions", "Sessions"], ["variables", "Variables"], ["gm", "GM Screen & Secrets"] ] as const).filter(([view]) => (view !== "map" || maps.length > 0) && (view !== "timeline" || timelines.length > 0)).map(([view, title]): SearchCommand => ({ id: `tool-${view}`, title, description: "Workspace tool", run: () => { if (view === "blocks") openCompendium(); else if (canNavigate()) { clearConfirmedLeave(); setActiveView(view); } } })),
       ]} />
       {/* WorldForge Sidebar */}
+      <button type="button" className="fixed right-28 top-3 z-50 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs text-zinc-300 hover:border-zinc-500" onClick={() => { if (!canNavigate()) return; clearConfirmedLeave(); router.push("/player"); }}>Player view</button>
       <button type="button" className="fixed right-5 top-3 z-50 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs text-zinc-300" onClick={async () => { if (!canNavigate()) return; clearConfirmedLeave(); const response = await fetch("/api/auth/logout", { method: "POST" }); if (response.ok) { router.replace("/login"); router.refresh(); } }}>Sign out</button>
       <Sidebar
         onOpenSearch={() => setSearchOpen(true)}
@@ -857,6 +859,7 @@ export default function WorldForgeApp() {
           {activeView === "manager" && world && <CategoryManager key={selectedCategoryId ?? "root"} categories={world.categories} articles={articles} selectedId={selectedCategoryId} onSelectCategory={setSelectedCategoryId} onSelectArticle={handleSelectArticle} onMove={handleTreeMove} onAction={handleCategoryAction} onNewArticle={handleNewArticle} busy={organizationBusy} error={organizationError} />}
           {/* View: Article Viewer */}
           {activeView === "article" && currentArticle && (
+            <div className="space-y-5">
             <ArticleViewer
               publicUrl={world?.isPublic && currentArticle.publicationStatus === "PUBLISHED" && currentArticle.visibility === "PUBLIC" ? `/w/${world.slug}/a/${currentArticle.slug}` : undefined}
               availableArticles={articles}
@@ -867,6 +870,8 @@ export default function WorldForgeApp() {
               onNavigateArticle={handleSelectArticle}
               onToggleSecretReveal={handleToggleSecretReveal}
             />
+            {world && <ShareResource key={currentArticle.id} kind="articles" resourceId={currentArticle.id} title={currentArticle.title} />}
+            </div>
           )}
 
           {/* View: Article Editor */}

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { authorFetch } from "./auth-fixture";
+import { writeAsset, removeAssetFile } from "../src/lib/asset-storage";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 
@@ -25,6 +26,16 @@ test("player access: denied paths return 404 without leaking resource info", { s
   const aFetch = await authorFetch(db, playerA.id, origin!);
   const bFetch = await authorFetch(db, playerB.id, origin!);
   const outFetch = await authorFetch(db, outsider.id, origin!);
+
+  // Author collection endpoints must never treat missing worldId as all worlds.
+  for (const path of ["/api/articles", "/api/secrets", "/api/statblocks", "/api/assets"]) {
+    assert.equal((await outFetch(`${origin}${path}`)).status, 404);
+    assert.equal((await gmFetch(`${origin}${path}`)).status, 404);
+  }
+  const upload = new FormData();
+  upload.set("worldId", world.id);
+  upload.set("file", new File(["not an image"], "probe.webp", { type: "image/webp" }));
+  assert.equal((await outFetch(`${origin}/api/assets`, { method: "POST", body: upload })).status, 404);
 
   const checkDenied = async (fetchFn: (input: string | URL | Request, init?: RequestInit) => Promise<Response>, path: string) => {
     const res = await fetchFn(`${origin}${path}`);
@@ -102,11 +113,12 @@ test("player access: membership + policy grants access", { skip: !origin }, asyn
   });
   assert.equal(policyRes.status, 200);
 
-  // Player can now read
+  // Author APIs include GM-only fields and stay owner-only after a grant.
   const allowedRes = await pFetch(`${origin}/api/articles/${article.id}`);
-  assert.equal(allowedRes.status, 200);
-  const body = await allowedRes.json();
-  assert.equal(body.title, "Shared article");
+  assert.equal(allowedRes.status, 404);
+  const readerRes = await pFetch(`${origin}/c/${world.slug}/a/${article.slug}`);
+  assert.equal(readerRes.status, 200);
+  assert((await readerRes.text()).includes("Shared article"));
 });
 
 test("player access: later member does not inherit grants", { skip: !origin }, async (context) => {
@@ -142,12 +154,13 @@ test("player access: later member does not inherit grants", { skip: !origin }, a
     body: JSON.stringify({ mode: "PLAYER_SNAPSHOT", userIds: [playerA.id] }),
   });
 
-  // Player A reads, Player B denied
-  const aRes = await aFetch(`${origin}/api/articles/${article.id}`);
+  // Player A reads via the filtered reader, while author detail stays private.
+  assert.equal((await aFetch(`${origin}/api/articles/${article.id}`)).status, 404);
+  const aRes = await aFetch(`${origin}/c/${world.slug}/a/${article.slug}`);
   assert.equal(aRes.status, 200);
 
-  const bRes = await bFetch(`${origin}/api/articles/${article.id}`);
-  assert.equal(bRes.status, 404);
+  const bRes = await bFetch(`${origin}/c/${world.slug}/a/${article.slug}`);
+  assert(!((await bRes.text()).includes("Selected share")));
 });
 
 test("player discovery surfaces only policy-readable article metadata", { skip: !origin }, async (context) => {
@@ -190,13 +203,48 @@ test("player discovery surfaces only policy-readable article metadata", { skip: 
   assert(!indexBody.includes("GM_ONLY_SENTINEL"));
 });
 
+test("shared articles reveal embedded assets and statblocks only after their own grants", { skip: !origin }, async context => {
+  const db = new PrismaClient();
+  const stamp = Date.now();
+  const owner = await db.user.create({ data: { name: "Embed GM", email: `embed-gm-${stamp}@example.invalid` } });
+  const player = await db.user.create({ data: { name: "Embed player", email: `embed-player-${stamp}@example.invalid` } });
+  const world = await db.world.create({ data: { ownerId: owner.id, title: "Embeds", slug: `embeds-${stamp}` } });
+  context.after(async () => {
+    await db.world.delete({ where: { id: world.id } });
+    await db.user.deleteMany({ where: { id: { in: [owner.id, player.id] } } });
+    await db.$disconnect();
+  });
+  const asset = await db.imageAsset.create({ data: { worldId: world.id, title: "Hidden map", originalName: "map.webp", byteSize: 1, width: 1, height: 1, sha256: `embed-${stamp}` } });
+  const block = await db.rpgBlock.create({ data: { worldId: world.id, name: "Hidden creature", system: "DND_5E", category: "MONSTER", statsJson: "{}" } });
+  const article = await db.article.create({ data: { worldId: world.id, title: "Shared page", slug: `shared-embed-${stamp}`, contentJson: JSON.stringify({ type: "doc", content: [{ type: "image", attrs: { src: `/api/assets/${asset.id}/file`, alt: "Private image" } }, { type: "campaignStatblock", attrs: { blockId: block.id } }] }) } });
+  const gmFetch = await authorFetch(db, owner.id, origin!);
+  const playerFetch = await authorFetch(db, player.id, origin!);
+  assert.equal((await gmFetch(`${origin}/api/worlds/${world.id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: player.id }) })).status, 200);
+  async function share(kind: string, id: string) {
+    const response = await gmFetch(`${origin}/api/resources/${kind}/${id}/audience`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "PLAYER_SNAPSHOT", userIds: [player.id] }) });
+    assert.equal(response.status, 200);
+  }
+  await share("articles", article.id);
+  const before = await (await playerFetch(`${origin}/c/${world.slug}/a/${article.slug}`)).text();
+  assert(!before.includes(`/api/assets/${asset.id}/file`));
+  assert(!before.includes("Hidden creature"));
+  await share("assets", asset.id);
+  await share("statblocks", block.id);
+  const after = await (await playerFetch(`${origin}/c/${world.slug}/a/${article.slug}`)).text();
+  assert(after.includes(`/api/assets/${asset.id}/file`));
+  assert(after.includes("Hidden creature"));
+  assert.equal((await playerFetch(`${origin}/api/articles/${article.id}`)).status, 404);
+});
+
 test("player access: revocation takes effect immediately", { skip: !origin }, async (context) => {
   const db = new PrismaClient();
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "GM", email: `gm4-${stamp}@example.invalid` } });
   const player = await db.user.create({ data: { name: "Player", email: `ply4-${stamp}@example.invalid` } });
 
+  let assetId: string | null = null;
   context.after(async () => {
+    if (assetId) await removeAssetFile(assetId);
     await db.accessAuditEvent.deleteMany({ where: { worldId: world.id } });
     await db.world.deleteMany({ where: { ownerId: owner.id } });
     await db.user.deleteMany({ where: { id: { in: [owner.id, player.id] } } });
@@ -205,6 +253,9 @@ test("player access: revocation takes effect immediately", { skip: !origin }, as
 
   const world = await db.world.create({ data: { ownerId: owner.id, title: "Revoke", slug: `revoke-${stamp}`, isPublic: false } });
   const article = await db.article.create({ data: { worldId: world.id, slug: `rev-${stamp}`, title: "Revocable", publicationStatus: "PUBLISHED", visibility: "PRIVATE" } });
+  const asset = await db.imageAsset.create({ data: { worldId: world.id, title: "Revocable image", originalName: "rev.webp", byteSize: 1, width: 1, height: 1, sha256: `rev-${stamp}` } });
+  assetId = asset.id;
+  await writeAsset(asset.id, Buffer.from("image bytes"));
 
   const gmFetch = await authorFetch(db, owner.id, origin!);
   const pFetch = await authorFetch(db, player.id, origin!);
@@ -216,15 +267,22 @@ test("player access: revocation takes effect immediately", { skip: !origin }, as
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ mode: "PLAYER_SNAPSHOT", userIds: [player.id] }),
   });
+  assert.equal((await gmFetch(`${origin}/api/resources/assets/${asset.id}/audience`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "PLAYER_SNAPSHOT", userIds: [player.id] }) })).status, 200);
 
-  assert.equal((await pFetch(`${origin}/api/articles/${article.id}`)).status, 200);
+  assert.equal((await pFetch(`${origin}/c/${world.slug}/a/${article.slug}`)).status, 200);
+  assert.equal((await pFetch(`${origin}/api/c/${world.slug}/search?q=Revocable`)).status, 200);
+  assert.equal((await pFetch(`${origin}/api/assets/${asset.id}/file`)).status, 200);
 
   // Revoke
   const revokeRes = await gmFetch(`${origin}/api/worlds/${world.id}/members/${player.id}`, { method: "DELETE" });
   assert.equal(revokeRes.status, 200);
 
   // Immediate denial
-  assert.equal((await pFetch(`${origin}/api/articles/${article.id}`)).status, 404);
+  assert(!((await (await pFetch(`${origin}/c/${world.slug}/a/${article.slug}`)).text()).includes("Revocable")));
+  assert.equal((await pFetch(`${origin}/api/c/${world.slug}/search?q=Revocable`)).status, 404);
+  const revokedAsset = await pFetch(`${origin}/api/assets/${asset.id}/file`);
+  assert.equal(revokedAsset.status, 404);
+  assert.equal(revokedAsset.headers.get("cache-control"), "no-store");
 });
 
 test("audit: events recorded for member actions", { skip: !origin }, async (context) => {
@@ -261,7 +319,7 @@ test("audit: events recorded for member actions", { skip: !origin }, async (cont
 
   const actions = auditBody.events.map((e: { action: string }) => e.action);
   assert(actions.includes("add_member"));
-  assert(actions.includes("create_policy"));
+  assert(actions.includes("set_policy"));
   assert(actions.includes("revoke_member"));
 
   for (const event of auditBody.events) {

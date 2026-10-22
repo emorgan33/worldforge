@@ -4,8 +4,6 @@ import type { NextRequest } from "next/server";
 import { prisma } from "./db";
 import { newToken, tokenHash } from "./passwords";
 import { SESSION_COOKIE, SESSION_SECONDS } from "./auth-constants";
-import { requireReadableResource, resolveActor } from "./access";
-import type { ResourceRef } from "./access-types";
 
 export class AccessError extends Error { constructor(message: string, public status = 404) { super(message); } }
 
@@ -13,7 +11,7 @@ export class AccessError extends Error { constructor(message: string, public sta
 export async function sessionUser() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
-  const session = await prisma.authSession.findUnique({ where: { tokenHash: tokenHash(token) }, select: { expiresAt: true, user: { select: { id: true, email: true, name: true } } } });
+  const session = await prisma.authSession.findUnique({ where: { tokenHash: tokenHash(token) }, select: { expiresAt: true, user: { select: { id: true, email: true, name: true, role: true } } } });
   return session && session.expiresAt > new Date() ? session.user : null;
 }
 
@@ -51,6 +49,7 @@ async function resourceWorld(kind: string, id: string): Promise<string | null> {
   switch (kind) {
     case "articles": return (await prisma.article.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
     case "statblocks": return (await prisma.rpgBlock.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
+    case "assets": return (await prisma.imageAsset.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
     case "secrets": return (await prisma.secret.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
     case "maps": return (await prisma.map.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
     case "collection": return (await prisma.variableCollection.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
@@ -60,7 +59,7 @@ async function resourceWorld(kind: string, id: string): Promise<string | null> {
   }
 }
 
-async function authorize(request: NextRequest, userId: string) {
+async function authorize(request: NextRequest, userId: string, role: string) {
   const url = new URL(request.url);
   const segments = url.pathname.split("/");
   const [, , resource, id, ...rest] = segments;
@@ -78,36 +77,24 @@ async function authorize(request: NextRequest, userId: string) {
   }
 
   if (["GET", "HEAD"].includes(request.method)) {
+    if (role === "PLAYER") throw new AccessError("Player accounts cannot access author APIs.", 403);
     if (resource === "worlds") {
       // For nested routes like /api/worlds/[id]/export, check ownership
       if (id === "deleted" && rest.length === 0) return;
       if (rest.length > 0) await ownedWorld(id, userId);
       return;
     }
-    // For resource reads (articles, statblocks, etc.), use requireAccess
-    // which handles ownership, membership, and policy grants
+    // Author detail endpoints include GM-only fields. Player reads use the
+    // dedicated, filtered /c reader and /api/c endpoints instead.
     const worldId = id ? await resourceWorld(resource, id) : url.searchParams.get("worldId");
-    if (worldId) {
-      if (id) {
-        try {
-          const ref: ResourceRef = { worldId, kind: resource, id };
-          const actor = await resolveActor();
-          await requireReadableResource(ref, actor);
-        } catch (e: unknown) {
-          // requireReadableResource throws its own AccessError; re-throw as ours
-          if (e instanceof Error && "status" in e && typeof (e as { status: unknown }).status === "number") {
-            throw new AccessError(e.message, (e as { status: number }).status);
-          }
-          throw e;
-        }
-      } else {
-        // List routes (e.g. /api/articles?worldId=...) require ownership
-        await ownedWorld(worldId, userId);
-      }
-    }
+    // Every author collection requires an explicit owned world. Several list
+    // handlers otherwise treat a missing worldId as an unrestricted query.
+    if (!worldId) throw new AccessError("Not found.");
+    await ownedWorld(worldId, userId);
     return;
   }
   sameOrigin(request);
+  if (role === "PLAYER") throw new AccessError("Player accounts cannot manage worlds.", 403);
   // Collection-level world writes are the only routes whose target is not in
   // the URL. Keep nested world routes and resource authorization path-bound.
   if (resource === "worlds" && id === undefined && rest.length === 0) {
@@ -144,7 +131,7 @@ export function withAuthor<H>(handler: H): H {
     try {
       const user = await sessionUser();
       if (!user) throw new AccessError("Sign in to access your workspace.", 401);
-      await authorize(request, user.id);
+      await authorize(request, user.id, user.role);
       const response = await (handler as (request: NextRequest, context: unknown) => Promise<Response>)(request, context);
       response.headers.set("Cache-Control", "private, no-store");
       return response;

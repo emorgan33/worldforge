@@ -42,6 +42,12 @@ export async function revokeMember(worldId: string, userId: string, actorId: str
     data: { status: "REVOKED", revokedAt: new Date(), revokedById: actorId },
   });
 
+  // Rejoining a world must not silently restore a prior snapshot grant.
+  await prisma.audienceGrant.updateMany({
+    where: { userId, revokedAt: null, policy: { worldId } },
+    data: { revokedAt: new Date(), revokedById: actorId },
+  });
+
   // Revoke any preview sessions for this member
   await prisma.previewSession.updateMany({
     where: { userId, worldId, revokedAt: null },

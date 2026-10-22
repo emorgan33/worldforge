@@ -1,7 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 export const ensureStatic = false;
 export const instant = false;
-import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { resolveActor, readableWhere } from "@/lib/access";
@@ -20,7 +19,7 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
   const actor = await resolveActor();
   // Find the world by slug
   const world = await prisma.world.findFirst({
-    where: { slug: worldSlug },
+    where: { slug: worldSlug, deletedAt: null },
     select: { id: true, slug: true, title: true, system: true, description: true, coverImage: true, bannerImage: true, appearance: true, ownerId: true },
   });
   if (!world) notFound();
@@ -94,6 +93,7 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
         </div>
       )}
       <main className="space-y-8">
+        {!isPreview && <nav aria-label="Player navigation"><Link href="/player" className="text-sm text-indigo-300 hover:underline">← Your worlds</Link></nav>}
         {coverImage && <img src={coverImage} alt="" className="h-72 w-full rounded-2xl object-cover" />}
         <header>
           <p className="text-xs uppercase tracking-widest text-amber-400">{systemProfile(world.system).short}{world.system === "PF_2E" ? " · Remaster" : ""}</p>
@@ -136,9 +136,5 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
 
 export default async function PlayerWorldPage(props: { params: Promise<{ worldSlug: string }> }) {
   const { worldSlug } = await props.params;
-  return (
-    <Suspense fallback={<p className="p-8 text-zinc-400">Opening world…</p>}>
-      <PlayerWorldContent worldSlug={worldSlug} />
-    </Suspense>
-  );
+  return PlayerWorldContent({ worldSlug });
 }

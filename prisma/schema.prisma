@@ -25,6 +25,7 @@ model User {
   worlds          World[]
   revisions       ArticleRevision[]
   worldMembers    WorldMember[]      @relation("WorldMemberUser")
+  issuedInvitations PlayerInvitation[] @relation("InvitationIssuer")
   createdPolicies AudiencePolicy[]   @relation("AudiencePolicyCreator")
   audienceGrants  AudienceGrant[]    @relation("AudienceGrantUser")
   grantedGrants   AudienceGrant[]    @relation("GrantedBy")
@@ -68,6 +69,7 @@ model World {
   assets              ImageAsset[]
   notebooks           Notebook[]
   members             WorldMember[]        @relation("WorldMemberWorld")
+  invitations         PlayerInvitation[]
   audiencePolicies    AudiencePolicy[]     @relation("AudiencePolicyWorld")
   auditEvents         AccessAuditEvent[]   @relation("AccessAuditWorld")
   previewSessions     PreviewSession[]     @relation("PreviewWorld")
@@ -561,6 +563,22 @@ model WorldMember {
   @@unique([worldId, userId])
   @@index([userId, status])
   @@index([worldId, status])
+}
+
+model PlayerInvitation {
+  id          String   @id @default(uuid())
+  worldId     String
+  world       World    @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  email       String
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  claimedAt   DateTime?
+  cancelledAt DateTime?
+  issuedById  String?
+  issuedBy    User?    @relation("InvitationIssuer", fields: [issuedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([worldId, email])
 }
 
 // -------------------------------------------------------------

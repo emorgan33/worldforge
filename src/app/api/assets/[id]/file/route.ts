@@ -3,8 +3,8 @@ import { assetIsPublic } from "@/lib/public-world";
 import { prisma } from "@/lib/db";
 import { isAssetId } from "@/lib/assets";
 import { readAsset } from "@/lib/asset-storage";
-const CACHE_ONE_YEAR = "public, max-age=31536000, immutable";
-const CACHE_PRIVATE_YEAR = "private, max-age=31536000, immutable";
+const CACHE_ONE_YEAR = "public, no-store";
+const CACHE_PRIVATE_YEAR = "private, no-store";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

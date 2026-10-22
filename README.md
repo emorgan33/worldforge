@@ -46,14 +46,12 @@ Both views come from the optional Aethelgard demo seed.
 - **Backup and portability** — per-world export/import and archive/restore/purge.
 - **FoundryVTT import** — selective, preview-first import of PF2e Item exports
   (provisional; see `docs/foundryvtt-integration.md`).
+- **Player accounts and sharing** — GM-generated invitation links, player home,
+  member management, and per-resource audience controls with immediate
+  revocation. See [player accounts](docs/player-accounts.md).
 
 ## Roadmap
 
-- **Player-only accounts:** Add GM invitations, account claiming, a player home
-  page for shared worlds, and in-app membership and sharing controls. Enforce
-  read-only access and immediate revocation across pages, search and assets.
-  The membership APIs and player reader exist; the complete account flow is
-  [planned](docs/feature-improvements.md#player-only-account-flow-planned).
 - **FoundryVTT integration:** Expand the provisional PF2e Item import toward
   export and later synchronization, after validating compatibility with real
   Foundry exports. See the [integration proposal](docs/foundryvtt-integration.md).

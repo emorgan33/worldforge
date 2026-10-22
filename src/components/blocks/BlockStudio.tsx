@@ -6,6 +6,7 @@ import { BookOpen, Plus, Search, Sword, X } from "lucide-react";
 import { ATTRIBUTES, BLOCK_CATEGORIES, BlockCategory, BlockInput, BlockStats, CATEGORY_LABELS, RPG_SYSTEMS, RpgBlockItem, blockFields, blockRating, isDnd, parseBlockStats, signed, starterStats, statText, systemProfile } from "@/lib/rpg";
 import { StatblockCard } from "./StatblockCard";
 import { FoundryImport } from "@/components/foundry/FoundryImport";
+import { ShareResource } from "@/components/campaign/ShareResource";
 import type { GuardRegistration } from "@/lib/navigation-guard";
 
 interface BlockStudioProps {
@@ -108,7 +109,7 @@ export function BlockStudio({ blocks, worldId, system, initialCategory, onSaveBl
       <div className="space-y-3">{selected ? <>
         <div className="flex flex-wrap items-center justify-end gap-3 text-sm">
           {deleting ? <><span className="text-red-300">Delete {selected.name}?</span><button disabled={busy} onClick={remove} className="rounded border border-red-800 px-3 py-1 text-red-300">Confirm delete</button><button onClick={() => setDeleting(false)} disabled={busy} className="px-2 text-zinc-400">Cancel</button></> : <><button onClick={() => open(selected)} className="rounded border border-zinc-700 px-3 py-1.5 hover:bg-zinc-800">Edit statblock</button><button onClick={() => setDeleting(true)} className="px-2 py-1.5 text-red-400">Delete</button></>}
-        </div><StatblockCard block={selected} />
+        </div><StatblockCard block={selected} /><ShareResource key={selected.id} kind="statblocks" resourceId={selected.id} title={selected.name} />
       </> : <div className="rounded-xl border border-zinc-800 p-12 text-center text-zinc-500">Your next encounter starts here.</div>}</div>
     </div>
     {editing && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm" onMouseDown={event => { if (event.target === event.currentTarget && !busy) setEditing(false); }}>
