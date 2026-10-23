@@ -46,7 +46,10 @@ Both views come from the optional Aethelgard demo seed and show the author works
   destination. See the [workspace design and validation](docs/feature-requests/night-watch-author-workspace.md).
 - **Table access** — world members, per-resource audience policies and grants,
   and an access audit trail.
-- **Interactive maps, timelines and variable macros** (`[prefix:key]`).
+- **Interactive maps** — multiple maps per world with layers, pins linked to
+  articles, labels, lines, circles, rectangles, freehand drawing and a
+  paint-style eraser. See [interactive maps](docs/interactive-maps.md).
+- **Timelines and variable macros** (`[prefix:key]`).
 - **Public and campaign reader pages** with breadcrumbs, expandable category
   navigation, mobile browsing controls and search scoped to readable articles.
 - **Responsive campaign navigation** with a collapsible desktop sidebar and a
@@ -167,6 +170,7 @@ Design and feature references live in [`docs/`](docs/):
 - [World appearance](docs/world-appearance.md)
 - [Campaign rules profiles](docs/rpg-systems.md)
 - [Interactive character sheets](docs/character-sheets.md)
+- [Interactive maps](docs/interactive-maps.md)
 - [World creation and switcher](docs/world-creation-and-switcher.md)
 - [Reader navigation and discovery](docs/reader-navigation-and-discovery.md)
 - [Night watch author workspace](docs/feature-requests/night-watch-author-workspace.md) · [Validation report](docs/night-watch-validation-2026-10-23.md)

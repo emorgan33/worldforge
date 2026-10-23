@@ -52,6 +52,9 @@ async function resourceWorld(kind: string, id: string): Promise<string | null> {
     case "assets": return (await prisma.imageAsset.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
     case "secrets": return (await prisma.secret.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
     case "maps": return (await prisma.map.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
+    case "map-layers": return (await prisma.mapLayer.findUnique({ where: { id }, select: { map: { select: { worldId: true } } } }))?.map.worldId || null;
+    case "map-markers": return (await prisma.marker.findUnique({ where: { id }, select: { map: { select: { worldId: true } } } }))?.map.worldId || null;
+    case "map-elements": return (await prisma.mapElement.findUnique({ where: { id }, select: { map: { select: { worldId: true } } } }))?.map.worldId || null;
     case "collection": return (await prisma.variableCollection.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
     case "variable": return (await prisma.variable.findUnique({ where: { id }, select: { collection: { select: { worldId: true } } } }))?.collection.worldId || null;
     case "sessions": return (await prisma.campaignSession.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
@@ -120,7 +123,10 @@ async function authorize(request: NextRequest, userId: string, role: string) {
   if (!body || typeof body !== "object") throw new AccessError("Invalid request.", 400);
   let worldId: unknown = body.worldId;
   if (id) worldId = await resourceWorld(resource, id);
-  else if (resource === "maps") worldId = await resourceWorld("maps", body.mapId || "");
+  else if (resource === "maps") {
+    const mapId = typeof body.mapId === "string" ? body.mapId : typeof body.id === "string" ? body.id : "";
+    if (!worldId) worldId = await resourceWorld("maps", mapId);
+  }
   else if (resource === "variables") worldId = await resourceWorld(request.method === "POST" ? "collection" : "variable", body.collectionId || body.id || "");
   else if (resource === "secrets" && request.method === "PATCH") worldId = await resourceWorld("secrets", body.id || "");
   await ownedWorld(worldId, userId);

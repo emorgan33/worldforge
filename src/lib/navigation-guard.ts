@@ -10,7 +10,7 @@ const LABELS: Record<string, string> = {
   settings: "world settings",
   compendium: "compendium entry",
   variable: "variable value",
-  map: "map pin",
+  map: "map editing",
   session: "session",
   asset: "image library upload",
   foundry: "Foundry import",

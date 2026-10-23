@@ -263,6 +263,7 @@ model Map {
   layers       MapLayer[]
   markerGroups MarkerGroup[]
   markers      Marker[]
+  elements     MapElement[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -270,14 +271,15 @@ model Map {
 }
 
 model MapLayer {
-  id        String   @id @default(uuid())
+  id        String        @id @default(uuid())
   mapId     String
-  map       Map      @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  map       Map           @relation(fields: [mapId], references: [id], onDelete: Cascade)
   name      String
-  order     Int      @default(0)
-  isVisible Boolean  @default(true)
+  order     Int           @default(0)
+  isVisible Boolean       @default(true)
   imageUrl  String?
   markers   Marker[]
+  elements  MapElement[] @relation("MapElementLayer")
 }
 
 model MarkerGroup {
@@ -308,6 +310,24 @@ model Marker {
   color       String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+}
+
+// Map annotations (labels, lines, circles, rectangles, freehand paths and
+// eraser strokes). Geometry and style are percentage-based JSON so annotations
+// stay aligned while zooming or resizing the map surface.
+model MapElement {
+  id        String    @id @default(uuid())
+  mapId     String
+  map       Map       @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  layerId   String?
+  layer     MapLayer? @relation("MapElementLayer", fields: [layerId], references: [id], onDelete: SetNull)
+  kind      String    // LABEL | LINE | CIRCLE | RECT | PATH
+  geometry  String    // Serialized JSON: percentages 0-100 relative to map size
+  style     String?   // Serialized JSON: color, strokeWidth, fontSize, erase flag
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([mapId])
 }
 
 // -------------------------------------------------------------

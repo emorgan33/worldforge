@@ -47,6 +47,7 @@ export interface WorldExportMap {
   layers: { id: string; name: string; order: number; isVisible: boolean; imageUrl: string | null }[];
   pins: { id: string; layerId: string | null; groupId: string | null; title: string; description: string | null; x: number; y: number; articleId: string | null; icon: string | null; color: string | null }[];
   groups: { id: string; name: string; color: string; icon: string }[];
+  elements: { id: string; layerId: string | null; kind: string; geometry: string; style: string | null }[];
 }
 // ---------------------------------------------------------------------------
 // v2 Manifest
@@ -170,7 +171,7 @@ export async function exportWorldV2(worldId: string): Promise<WorldExportV2> {
     prisma.accessAuditEvent.findMany({ where: { worldId }, orderBy: { createdAt: "asc" } }),
     prisma.campaignSession.findMany({ where: { worldId }, orderBy: { order: "asc" } }),
     prisma.sessionEntityLink.findMany({ where: { worldId }, orderBy: { order: "asc" } }),
-    prisma.map.findMany({ where: { worldId }, include: { layers: true, markerGroups: true, markers: true } }),
+    prisma.map.findMany({ where: { worldId }, include: { layers: true, markerGroups: true, markers: true, elements: true } }),
   ]);
   // Read asset data in batches
   const CHUNK_SIZE = 20;
@@ -293,6 +294,7 @@ export async function exportWorldV2(worldId: string): Promise<WorldExportV2> {
       layers: map.layers.map(({ id, name, order, isVisible, imageUrl }) => ({ id, name, order, isVisible, imageUrl })),
       groups: map.markerGroups.map(({ id, name, color, icon }) => ({ id, name, color, icon })),
       pins: map.markers.map(({ id, layerId, groupId, title, description, x, y, articleId, icon, color }) => ({ id, layerId, groupId, title, description, x, y, articleId, icon, color })),
+      elements: map.elements.map(({ id, layerId, kind, geometry, style }) => ({ id, layerId, kind, geometry, style })),
     })),
   };
 }
@@ -679,12 +681,17 @@ export async function importWorldV2(
       if (pin.groupId && !groupIdMap.has(pin.groupId) && allGroupIds.has(pin.groupId)) warnings.push(`Skipped cross-map marker group reference for pin "${pin.title}"`);
       return { id: randomUUID(), layerId: pin.layerId ? layerIdMap.get(pin.layerId) ?? null : null, groupId: pin.groupId ? groupIdMap.get(pin.groupId) ?? null : null, title: pin.title, description: pin.description, x: pin.x, y: pin.y, articleId: pin.articleId ? articleIdMap.get(pin.articleId) ?? null : null, icon: pin.icon, color: pin.color };
     });
+    const elements = (map.elements || []).map((element) => {
+      if (element.layerId && !layerIdMap.has(element.layerId) && allLayerIds.has(element.layerId)) warnings.push(`Skipped cross-map layer reference for a "${element.kind.toLowerCase()}" annotation`);
+      return { id: randomUUID(), layerId: element.layerId ? layerIdMap.get(element.layerId) ?? null : null, kind: element.kind, geometry: element.geometry, style: element.style };
+    });
     await prisma.map.create({ data: {
       id: mapId, worldId: newWorldId, title: map.title, description: map.description,
       imageUrl: remapUrls(map.imageUrl) || "", width: map.width, height: map.height, defaultZoom: map.defaultZoom,
       layers: { create: (map.layers || []).map((layer) => ({ id: layerIdMap.get(layer.id)!, name: layer.name, order: layer.order, isVisible: layer.isVisible, imageUrl: remapUrls(layer.imageUrl) })) },
       markerGroups: { create: (map.groups || []).map((group) => ({ id: groupIdMap.get(group.id)!, name: group.name, color: group.color, icon: group.icon })) },
       markers: { create: pins },
+      elements: { create: elements },
     } });
   }
 

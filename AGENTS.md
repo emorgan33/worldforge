@@ -25,6 +25,14 @@ Keep reader navigation usable at narrow widths: the browse tree is disclosed in 
 
 When refreshing README screenshots, use the public Aethelgard demo and an isolated temporary database. `pnpm db:seed` replaces database contents; never run it against a user's configured database just to capture screenshots.
 
+## Interactive maps
+
+The **Interactive maps** author view is a GM cartography editor with maps, layers, pins, labels, and canvas drawings. Read [the interactive maps guide](docs/interactive-maps.md) before changing it. The editor lives in `src/components/map/InteractiveMap.tsx`; the workspace mutation handler is in `src/components/AuthorWorkspace.tsx`; persistence and validation are in `src/app/api/maps/route.ts`; ownership resolution is in `src/lib/auth.ts`; export/import lives in `src/lib/world-export.ts`.
+
+Store annotation geometry as percentage JSON and keep the `MapElement` kinds (`LABEL`, `LINE`, `CIRCLE`, `RECT`, `PATH`) and eraser style (`{ "erase": true }`) consistent across the editor, API validation, rendering, and world export/import. Drawings render in chronological order on a canvas: ink uses `source-over` and eraser strokes use `destination-out`. Preserve layer visibility filtering and the rule that unlayered pins/annotations always show. Maps are currently author-only; do not describe them as reader-facing until a reader projection exists.
+
+The focused checks are `tests/interactive-map.test.tsx` (component rendering and tools) and `tests/world-export-roundtrip.test.tsx` (annotation export/import and layer remapping). See `docs/interactive-maps.md` for commands and the isolated-database test setup.
+
 ## Interactive character sheets
 
 Character articles use the D&D 5e 2014 or Pathfinder 2e Remaster sheet selected by the article rules profile. Read [the character sheet guide](docs/character-sheets.md) before changing this feature. The profile definitions, row serialization, validation, calculated D&D ability modifiers, and reader projection live in `src/lib/character-sheet.ts`; the shared editable and read-only sheet lives in `src/components/article/CharacterSheet.tsx`.

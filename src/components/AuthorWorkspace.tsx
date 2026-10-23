@@ -19,7 +19,7 @@ import { NewWorldForm } from "@/components/worlds/NewWorldForm";
 import { WorldGuardProvider } from "@/components/worlds/WorldGuard";
 import { ArticleViewer } from "@/components/article/ArticleViewer";
 import { ArticleEditorForm, ArticleSaveInput } from "@/components/article/ArticleEditorForm";
-import { InteractiveMap } from "@/components/map/InteractiveMap";
+import { InteractiveMap, type MapData, type MapMutation } from "@/components/map/InteractiveMap";
 import { TimelineViewer } from "@/components/timeline/TimelineViewer";
 import { VariableManager } from "@/components/variables/VariableManager";
 import { GmNotebook } from "@/components/campaign/GmNotebook";
@@ -54,7 +54,7 @@ export default function WorldForgeApp() {
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [currentArticle, setCurrentArticle] = useState<ArticleDetail | null>(null);
   const [collections, setCollections] = useState<VariableCollectionItem[]>([]);
-  const [maps, setMaps] = useState<React.ComponentProps<typeof InteractiveMap>["mapData"][]>([]);
+  const [maps, setMaps] = useState<MapData[]>([]);
   const [timelines, setTimelines] = useState<React.ComponentProps<typeof TimelineViewer>["timeline"][]>([]);
   const [secrets, setSecrets] = useState<React.ComponentProps<typeof GmNotebook>["secrets"]>([]);
   const [rpgBlocks, setRpgBlocks] = useState<RpgBlockItem[]>([]);
@@ -318,7 +318,7 @@ export default function WorldForgeApp() {
       setWorld(target);
       setArticles(artList as ArticleListItem[]);
       setCollections(cols as VariableCollectionItem[]);
-      setMaps(mapList as React.ComponentProps<typeof InteractiveMap>["mapData"][]);
+      setMaps(mapList as MapData[]);
       setTimelines(timeList as React.ComponentProps<typeof TimelineViewer>["timeline"][]);
       setSecrets(secList as React.ComponentProps<typeof GmNotebook>["secrets"]);
       setRpgBlocks(blocks as RpgBlockItem[]);
@@ -683,22 +683,22 @@ export default function WorldForgeApp() {
     }
   });
 
-  const handleAddMarker = (markerData: Parameters<NonNullable<React.ComponentProps<typeof InteractiveMap>["onAddMarker"]>>[0]) => runWrite("map pin save", async () => {
-    if (!world) return;
+  const handleMapMutation = (mutation: MapMutation) => runWrite("map edit", async () => {
+    if (!world) throw new Error("Choose a campaign first.");
     const writeWorldId = world.id;
     const epoch = loadEpoch.current;
-    try {
-      await fetch("/api/maps", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(markerData),
-      });
-      const resMaps = await fetch(`/api/maps?worldId=${writeWorldId}`);
-      if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
-      setMaps(await resMaps.json());
-    } catch (e) {
-      console.error("Marker add error:", e);
-    }
+    const method = mutation.action.startsWith("delete") ? "DELETE" : mutation.action.startsWith("create") ? "POST" : "PATCH";
+    const response = await fetch("/api/maps", {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ worldId: writeWorldId, ...mutation }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error((result as { error?: string }).error || "Unable to update the map.");
+    const resMaps = await fetch(`/api/maps?worldId=${writeWorldId}`);
+    if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return result as Record<string, unknown>;
+    if (resMaps.ok) setMaps(await resMaps.json());
+    return result as Record<string, unknown>;
   });
 
   const refreshOrganization = async () => {
@@ -828,7 +828,7 @@ export default function WorldForgeApp() {
       <CommandSearch key={searchOpen ? "open" : "closed"} open={searchOpen} onOpenChange={setSearchOpen} worldId={world?.id} categories={world?.categories || []} onSelectArticle={handleSelectArticle} commands={[
         ...(world?.categories || []).map(category => ({ id: `category-${category.id}`, title: category.name, description: `Category · ${categoryAncestors(world?.categories || [], category.id).map(item => item.name).join(" / ")}`, run: () => selectCategory(category.id) })),
         { id: "new-article", title: "New article", description: "Create an article", run: () => handleNewArticle() },
-        ...([ ["home", "Campaign home"], ["manager", "Articles & Categories"], ["assets", "Image library"], ["blocks", "RPG compendium"], ["map", "Maps"], ["timeline", "Timelines"], ["sessions", "Sessions"], ["variables", "Variables"], ["gm", "GM Screen & Secrets"] ] as const).filter(([view]) => (view !== "map" || maps.length > 0) && (view !== "timeline" || timelines.length > 0)).map(([view, title]): SearchCommand => ({ id: `tool-${view}`, title, description: "Workspace tool", run: () => { if (view === "blocks") openCompendium(); else if (canNavigate()) { clearConfirmedLeave(); setActiveView(view); } } })),
+        ...([ ["home", "Campaign home"], ["manager", "Articles & Categories"], ["assets", "Image library"], ["blocks", "RPG compendium"], ["map", "Maps"], ["timeline", "Timelines"], ["sessions", "Sessions"], ["variables", "Variables"], ["gm", "GM Screen & Secrets"] ] as const).filter(([view]) => view !== "timeline" || timelines.length > 0).map(([view, title]): SearchCommand => ({ id: `tool-${view}`, title, description: "Workspace tool", run: () => { if (view === "blocks") openCompendium(); else if (canNavigate()) { clearConfirmedLeave(); setActiveView(view); } } })),
       ]} />
       {/* Mobile shell controls stay above either the navigation or workspace. */}
       <header inert={mobileNavigationOpen || undefined} className={`fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-zinc-800 bg-zinc-950/95 px-3 backdrop-blur md:z-50 md:h-16 md:justify-end md:px-5 ${sidebarCollapsed ? "md:left-[68px]" : "md:left-[280px]"}`}>
@@ -953,12 +953,14 @@ export default function WorldForgeApp() {
           )}
 
           {/* View: Interactive Maps */}
-          {activeView === "map" && maps.length > 0 && (
+          {activeView === "map" && world && (
             <div className="space-y-6">
               <InteractiveMap
-                mapData={maps[0]}
+                maps={maps}
+                worldId={world.id}
+                articles={articles}
                 onSelectArticle={handleSelectArticle}
-                onAddMarker={handleAddMarker}
+                onMutate={handleMapMutation}
                 onGuardChange={guardHandlers.map}
               />
             </div>

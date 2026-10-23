@@ -92,6 +92,7 @@ test("v2 roundtrip remaps map content and session entity links, and warns on mis
   ] });
   const map = await db.map.create({ data: { worldId: sourceId, title: "Map", imageUrl: `/api/assets/${sourceAssetId}/file`, layers: { create: { name: "Terrain", imageUrl: `/api/assets/${sourceAssetId}/file` } }, markerGroups: { create: { name: "Places" } } }, include: { layers: true, markerGroups: true } });
   await db.marker.create({ data: { mapId: map.id, layerId: map.layers[0].id, groupId: map.markerGroups[0].id, title: "Village", x: 25, y: 50, articleId: article.id } });
+  await db.mapElement.create({ data: { mapId: map.id, layerId: map.layers[0].id, kind: "LABEL", geometry: JSON.stringify({ x: 10, y: 20, text: "Keep" }), style: JSON.stringify({ color: "#eab308" }) } });
   const otherMap = await db.map.create({ data: { worldId: sourceId, title: "Other map", imageUrl: "https://example.invalid/other.webp", markers: { create: { layerId: map.layers[0].id, title: "Cross-map pin", x: 20, y: 20 } } } });
   assert.ok(otherMap.id);
 
@@ -141,12 +142,16 @@ test("v2 roundtrip remaps map content and session entity links, and warns on mis
   const policies = await db.audiencePolicy.findMany({ where: { worldId: restored.worldId } });
   assert.ok(policies.some(policy => policy.resourceKind === "articles" && policy.resourceId === importedArticle.id));
   assert.ok(policies.some(policy => policy.resourceKind === "statblocks" && policy.resourceId === newBlock.id));
-  const newMap = await db.map.findFirstOrThrow({ where: { worldId: restored.worldId, title: "Map" }, include: { layers: true, markerGroups: true, markers: true } });
+  const newMap = await db.map.findFirstOrThrow({ where: { worldId: restored.worldId, title: "Map" }, include: { layers: true, markerGroups: true, markers: true, elements: true } });
   assert.notEqual(newMap.id, map.id);
   assert.equal(newMap.layers.length, 1);
   assert.equal(newMap.markers[0].layerId, newMap.layers[0].id);
   assert.equal(newMap.markers[0].groupId, newMap.markerGroups[0].id);
   assert.equal(newMap.markers[0].articleId, newArticle.id);
+  assert.equal(newMap.elements.length, 1);
+  assert.equal(newMap.elements[0].kind, "LABEL");
+  assert.equal(newMap.elements[0].layerId, newMap.layers[0].id);
+  assert.match(newMap.elements[0].geometry, /Keep/);
   assert.match(newMap.imageUrl, /^\/api\/assets\//);
   assert.notEqual(newMap.imageUrl, map.imageUrl);
   assert.equal(newMap.layers[0].imageUrl, newMap.imageUrl);

@@ -61,7 +61,7 @@ export const GET = withAuthor(async (request: Request, { params }: { params: Pro
       includePrivate ? prisma.secret.findMany({ where: { worldId: id } }) : Promise.resolve([]),
       prisma.timeline.findMany({ where: { worldId: id }, include: { events: true } }),
       prisma.variableCollection.findMany({ where: { worldId: id }, include: { variables: true } }),
-      prisma.map.findMany({ where: { worldId: id }, include: { layers: true, markerGroups: true, markers: true } }),
+      prisma.map.findMany({ where: { worldId: id }, include: { layers: true, markerGroups: true, markers: true, elements: true } }),
     ]);
 
     const filteredArticles = includePrivate ? articles : articles.filter(a => a.publicationStatus === "PUBLISHED" && a.visibility === "PUBLIC");
@@ -93,7 +93,7 @@ export const GET = withAuthor(async (request: Request, { params }: { params: Pro
       secrets: secrets.map(s => ({ id: s.id, articleId: s.articleId, title: s.title, content: s.content, isRevealed: s.isRevealed })),
       timelines: timelines.map(t => ({ id: t.id, title: t.title, description: t.description, coverImage: t.coverImage, events: t.events.map(e => ({ id: e.id, title: e.title, description: e.description, dateDisplay: e.dateDisplay, numericDate: e.numericDate, importance: e.importance, articleId: e.articleId })) })),
       variableCollections: variableCollections.map(vc => ({ id: vc.id, name: vc.name, prefix: vc.prefix, description: vc.description, variables: vc.variables.map(v => ({ id: v.id, key: v.key, title: v.title, type: v.type, value: v.value, description: v.description })) })),
-      maps: maps.map(map => ({ id: map.id, title: map.title, description: map.description, imageUrl: map.imageUrl, width: map.width, height: map.height, defaultZoom: map.defaultZoom, layers: map.layers.map(({ id, name, order, isVisible, imageUrl }) => ({ id, name, order, isVisible, imageUrl })), groups: map.markerGroups.map(({ id, name, color, icon }) => ({ id, name, color, icon })), pins: map.markers.map(({ id, layerId, groupId, title, description, x, y, articleId, icon, color }) => ({ id, layerId, groupId, title, description, x, y, articleId, icon, color })) })),
+      maps: maps.map(map => ({ id: map.id, title: map.title, description: map.description, imageUrl: map.imageUrl, width: map.width, height: map.height, defaultZoom: map.defaultZoom, layers: map.layers.map(({ id, name, order, isVisible, imageUrl }) => ({ id, name, order, isVisible, imageUrl })), groups: map.markerGroups.map(({ id, name, color, icon }) => ({ id, name, color, icon })), pins: map.markers.map(({ id, layerId, groupId, title, description, x, y, articleId, icon, color }) => ({ id, layerId, groupId, title, description, x, y, articleId, icon, color })), elements: map.elements.map(({ id, layerId, kind, geometry, style }) => ({ id, layerId, kind, geometry, style })) })),
     };
 
     return NextResponse.json(exportData, { headers: { "Content-Disposition": `attachment; filename="${world.slug}-export.json"` } });

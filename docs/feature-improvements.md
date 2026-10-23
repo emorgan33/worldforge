@@ -16,6 +16,7 @@ Checked items are implemented and verified in this workspace. Unchecked items ar
 - [x] Searchable ID-based article links, inline navigation and backlinks. [Details](article-links-and-backlinks.md)
 - [x] D&D 2014 and PF2e Remaster campaign profiles and structured Character, Creature, Spell, Item and Encounter templates. [Profiles](rpg-systems.md) · [Templates](structured-rpg-templates.md)
 - [x] Interactive D&D 2014 and Pathfinder 2e Remaster character sheets with editable statistics, repeatable sections, autosave, and reader-safe projections. [Details](character-sheets.md)
+- [x] Interactive map authoring with multiple maps, layers, linked pins, labels, lines, circles, rectangles, freehand drawing, a paint-style eraser, and export/import. [Details](interactive-maps.md)
 - [x] Persistent image uploads/library, reusable body images and article/world covers. [Details](image-library.md)
 - [x] Local email/password author accounts, owner-only APIs and separate publication status/visibility. [Details](publishing-and-permissions.md)
 - [x] Public Share URLs with GM notes, secrets and inaccessible references excluded from reader content. [Details](publishing-and-permissions.md)
