@@ -15,11 +15,11 @@ your use, and keep backups of your campaign data. See the
 
 ## Screenshots
 
-![Aethelgard public world page with updated category navigation and article cards](docs/screenshots/world-navigation.png)
+![Desktop Aethelgard author workspace with the World contents navigation pane](docs/screenshots/author-workspace-desktop.png)
 
-![Thronehold article page with breadcrumbs, search, and the updated World contents pane](docs/screenshots/article-navigation.png)
+![Mobile Aethelgard author workspace with the World contents navigation pane open](docs/screenshots/author-workspace-mobile.png)
 
-Both views come from the optional Aethelgard demo seed.
+Both views come from the optional Aethelgard demo seed and show the author workspace.
 
 ## Features
 
