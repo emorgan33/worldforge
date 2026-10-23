@@ -15,9 +15,9 @@ your use, and keep backups of your campaign data. See the
 
 ## Screenshots
 
-![Aethelgard public world page with category navigation and article cards](docs/screenshots/world.png)
+![Aethelgard public world page with updated category navigation and article cards](docs/screenshots/world-navigation.png)
 
-![Thronehold article page with breadcrumbs, search, and the World contents pane](docs/screenshots/article.png)
+![Thronehold article page with breadcrumbs, search, and the updated World contents pane](docs/screenshots/article-navigation.png)
 
 Both views come from the optional Aethelgard demo seed.
 
