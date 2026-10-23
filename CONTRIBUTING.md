@@ -65,19 +65,31 @@ production build). Next.js 16.4.1 production builds do not reliably read Cookie
 headers via `cookies()`, so use the dev server:
 
 ```bash
-# terminal 1 — use an isolated database and a single connection
-export DATABASE_URL="file:./test.db?connection_limit=1"
+# terminal 1 — create an isolated database and asset directory
+export TEST_ROOT="$(mktemp -d /tmp/worldforge-tests.XXXXXX)"
+echo "Test root: $TEST_ROOT"
+export DATABASE_URL="file:$TEST_ROOT/test.db?connection_limit=1"
+export WORLD_CREATION_TEST_DATABASE_URL="$DATABASE_URL"
+export WORLDFORGE_ASSET_DIR="$TEST_ROOT/assets"
+mkdir -p "$WORLDFORGE_ASSET_DIR"
 pnpm db:deploy
 WORLDFORGE_ORIGIN=http://localhost:3131 pnpm exec next dev --port 3131
 
-# terminal 2
-export DATABASE_URL="file:./test.db?connection_limit=1"
+# terminal 2 — paste the TEST_ROOT path printed in terminal 1
+export TEST_ROOT="/tmp/worldforge-tests.<unique-suffix>"
+export DATABASE_URL="file:$TEST_ROOT/test.db?connection_limit=1"
+export WORLD_CREATION_TEST_DATABASE_URL="$DATABASE_URL"
+export WORLDFORGE_ASSET_DIR="$TEST_ROOT/assets"
 WORLDFORGE_TEST_ORIGIN=http://localhost:3131 pnpm test
 ```
 
-Relative SQLite paths resolve from `prisma/`, so `file:./test.db` is
-`prisma/test.db`. Never point tests at real data. Tests that need the origin
-skip when `WORLDFORGE_TEST_ORIGIN` is unset.
+Use the exact `TEST_ROOT` value printed in terminal 1 in both terminals.
+Absolute SQLite paths avoid different resolution between Prisma CLI and
+generated-client test processes.
+Never point tests at real data or run `pnpm db:seed` for the test workflow.
+Tests that need the origin skip when `WORLDFORGE_TEST_ORIGIN` is unset; the
+world-creation integration test also skips unless
+`WORLD_CREATION_TEST_DATABASE_URL` is set.
 
 ## Before opening a pull request
 

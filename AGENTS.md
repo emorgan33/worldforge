@@ -8,6 +8,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
+## Tests and database isolation
+
+Read the integration-test setup in [CONTRIBUTING.md](CONTRIBUTING.md) before
+running the full suite. Run `pnpm test` only against a dedicated temporary
+SQLite database and temporary asset directory, with the dev server pointed at
+those same paths. Set `WORLD_CREATION_TEST_DATABASE_URL` as documented so the
+world-creation integration test is included rather than skipped. Never run
+tests or `pnpm db:seed` against a user's configured database.
+
 ## Reader and workspace navigation
 
 Read [reader navigation and discovery](docs/reader-navigation-and-discovery.md) before changing public or player reader navigation, reader search, or the campaign sidebar. The shared reader tree and search live in `src/components/public/ReaderCategoryTree.tsx`, `ReaderMobileBrowse.tsx`, and `ReaderSearch.tsx`; category ordering and reader URL helpers live in `src/lib/category-tree.ts`. Public and campaign routes have separate data projections. Preserve public publication/visibility filters and campaign `readableWhere()` filtering, including the rule that player readers receive only category paths containing readable articles.

@@ -20,9 +20,6 @@ export interface WorldAppearance {
 export const DEFAULT_APPEARANCE: WorldAppearance = { theme: "midnight", backgroundColor: "", backgroundImage: "", accentColor: "", readingWidth: "wide" };
 const color = (value: unknown): value is string => typeof value === "string" && (value === "" || /^#[0-9a-f]{6}$/i.test(value));
 
-// Scoped CSS selector prefix for world reader presentation only
-const SCOPE_PREFIX = ".wf-reader ";
-
 // Validate that custom CSS is scoped to reader presentation and contains no dangerous patterns
 function validateCustomCss(css: string): { valid: boolean; error?: string } {
   if (!css || typeof css !== "string") return { valid: true };

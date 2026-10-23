@@ -33,7 +33,15 @@ export default function WorldForgeApp() {
   const searchParams = useSearchParams();
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [worldSettingsRequest, setWorldSettingsRequest] = useState(0);
+  const mainWorkspaceRef = useRef<HTMLElement>(null);
   const mobileNavigationTrigger = useRef<HTMLButtonElement>(null);
+  const scrollWorkspaceTo = useCallback((target: HTMLElement) => {
+    const pane = mainWorkspaceRef.current;
+    if (!pane) return;
+    const targetOffset = target.getBoundingClientRect().top - pane.getBoundingClientRect().top;
+    pane.scrollTo({ top: pane.scrollTop + targetOffset - 16, behavior: "smooth" });
+  }, []);
   const closeMobileNavigation = () => {
     setMobileNavigationOpen(false);
     requestAnimationFrame(() => mobileNavigationTrigger.current?.focus());
@@ -95,6 +103,18 @@ export default function WorldForgeApp() {
   // Destination of the most recent failed load (kept until a successful
   // commit) so the error state can offer a real retry of that world.
   const [failedTarget, setFailedTarget] = useState<string | null>(null);
+
+  // A stalled startup request must not leave the workspace on its full-screen
+  // loader forever. Once this deadline expires, render the normal recovery
+  // state so the user can retry the page load.
+  useEffect(() => {
+    if (!isLoading || world) return;
+    const timeout = window.setTimeout(() => {
+      setWorldError("Your campaign is taking longer than expected to open. Check your connection and try again.");
+      setIsLoading(false);
+    }, 20_000);
+    return () => window.clearTimeout(timeout);
+  }, [isLoading, world]);
   const [newWorldOpen, setNewWorldOpen] = useState(false);
   const [creationBusy, setCreationBusy] = useState(false);
   // Shared navigation-guard registry: mounted child forms register their
@@ -498,9 +518,8 @@ export default function WorldForgeApp() {
       if (await loadWorld(worldIdRef.current, worlds, epoch)) clearConfirmedLeave();
       return;
     }
-    if (!searchParams.get("world")) window.location.reload();
-    else setWorldError("This world could not be loaded. Choose one of your worlds to continue.");
-  }, [clearConfirmedLeave, confirmLeave, failedTarget, loadWorld, requestWorldSwitch, searchParams, worlds]);
+    window.location.reload();
+  }, [clearConfirmedLeave, confirmLeave, failedTarget, loadWorld, requestWorldSwitch, worlds]);
 
   const beforeWorldManagementAction = useCallback(() => !creationBusy && confirmLeave(), [confirmLeave, creationBusy]);
   const completeWorldManagementAction = useCallback((action: "archive" | "duplicate" | "restore" | "purge" | "export" | "import", worldId?: string, summary?: WorldSummary) => {
@@ -775,24 +794,6 @@ export default function WorldForgeApp() {
     return true;
   };
 
-  const handleChangeSystem = (system: string) => runWrite("campaign system save", async () => {
-    if (!world || system === world.system) return;
-    const writeWorldId = world.id;
-    const epoch = loadEpoch.current;
-    const response = await fetch("/api/worlds", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: writeWorldId, title: world.title, description: world.description ?? "", coverImage: world.coverImage ?? "", bannerImage: world.bannerImage ?? "", system }),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Unable to update campaign system.");
-    // Campaign rules selection writes the mounted world only; a mid-flight
-    // switch drops the late response instead of overwriting the new world.
-    if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
-    setWorld(result);
-    setWorlds(previous => previous.map(item => item.id === result.id ? { ...item, ...result } : item));
-  });
-
   const saveWorldSummary = useCallback((saved: WorldSummary) => {
     setWorld(saved);
     setWorlds(previous => previous.map(item => item.id === saved.id ? { ...item, ...saved } : item));
@@ -817,7 +818,7 @@ export default function WorldForgeApp() {
   }
 
   return (
-    <div className="relative flex h-dvh bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
+    <div className="author-workspace relative flex h-dvh overflow-hidden bg-[var(--aw-canvas)] font-sans text-zinc-100">
       {/* Keyed by world id: child-local state resets only when a destination
           snapshot commits. During a transition the previous subtree stays
           MOUNTED but inert beneath the loading boundary, so unsaved forms,
@@ -831,12 +832,12 @@ export default function WorldForgeApp() {
       ]} />
       {/* Mobile shell controls stay above either the navigation or workspace. */}
       <header inert={mobileNavigationOpen || undefined} className={`fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-zinc-800 bg-zinc-950/95 px-3 backdrop-blur md:z-50 md:h-16 md:justify-end md:px-5 ${sidebarCollapsed ? "md:left-[68px]" : "md:left-[280px]"}`}>
-        <button ref={mobileNavigationTrigger} type="button" aria-label={mobileNavigationOpen ? "Close campaign navigation" : "Open campaign navigation"} aria-expanded={mobileNavigationOpen} aria-controls="campaign-navigation" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 md:hidden" onClick={() => setMobileNavigationOpen(open => !open)}>
+        <button ref={mobileNavigationTrigger} type="button" aria-label={mobileNavigationOpen ? "Close campaign navigation" : "Open campaign navigation"} aria-expanded={mobileNavigationOpen} aria-controls="campaign-navigation" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 md:hidden" onClick={() => setMobileNavigationOpen(open => !open)}>
           {mobileNavigationOpen ? <X aria-hidden="true" className="h-5 w-5" /> : <Menu aria-hidden="true" className="h-5 w-5" />}
         </button>
         <p className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-200 md:hidden" aria-live="polite">{mobileNavigationOpen ? "Campaign navigation" : mobileViewLabel}</p>
-        <button type="button" aria-label="Player view" title="Player view" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 md:h-10 md:w-auto md:px-3" onClick={() => { if (!canNavigate()) return; clearConfirmedLeave(); router.push("/player"); }}><Users aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Player view</span></button>
-        <button type="button" aria-label="Sign out" title="Sign out" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 md:h-10 md:w-auto md:px-3" onClick={async () => { if (!canNavigate()) return; clearConfirmedLeave(); const response = await fetch("/api/auth/logout", { method: "POST" }); if (response.ok) { router.replace("/login"); router.refresh(); } }}><LogOut aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Sign out</span></button>
+        <button type="button" aria-label="Player view" title="Player view" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 md:h-10 md:w-auto md:px-3" onClick={() => { if (!canNavigate()) return; clearConfirmedLeave(); router.push("/player"); }}><Users aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Player view</span></button>
+        <button type="button" aria-label="Sign out" title="Sign out" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 md:h-10 md:w-auto md:px-3" onClick={async () => { if (!canNavigate()) return; clearConfirmedLeave(); const response = await fetch("/api/auth/logout", { method: "POST" }); if (response.ok) { router.replace("/login"); router.refresh(); } }}><LogOut aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Sign out</span></button>
       </header>
       <div id="campaign-navigation" className={`${mobileNavigationOpen ? "fixed inset-0 z-[60] block md:static md:z-auto" : "hidden md:block"} h-full w-full shrink-0 ${sidebarCollapsed ? "md:w-[68px]" : "md:w-[280px]"}`}>
       {mobileNavigationOpen && <button type="button" aria-hidden="true" tabIndex={-1} className="absolute inset-0 bg-black/70 md:hidden" onClick={closeMobileNavigation} />}
@@ -875,7 +876,7 @@ export default function WorldForgeApp() {
       </div>
 
       {/* Main Content Workspace */}
-      <main inert={mobileNavigationOpen || isTransitioning || undefined} aria-hidden={mobileNavigationOpen || undefined} className="mt-14 h-[calc(100dvh-3.5rem)] min-w-0 flex-1 overflow-y-auto bg-zinc-950 p-4 md:mt-16 md:h-[calc(100dvh-4rem)] md:p-8 lg:p-10">
+      <main ref={mainWorkspaceRef} inert={mobileNavigationOpen || isTransitioning || undefined} aria-hidden={mobileNavigationOpen || undefined} className="mt-14 h-[calc(100dvh-3.5rem)] min-w-0 flex-1 overscroll-contain overflow-y-auto bg-[var(--aw-canvas)] p-4 md:mt-16 md:h-[calc(100dvh-4rem)] md:p-8 lg:p-10">
         <div className="max-w-6xl mx-auto">
           {worldUnavailable && <section aria-live="polite" className="mb-6 rounded-xl border border-amber-800 bg-amber-950/30 p-6">
             <h2 className="text-lg font-semibold text-amber-200">This world isn’t available</h2>
@@ -895,17 +896,19 @@ export default function WorldForgeApp() {
           {activeView === "home" && world && <div className="space-y-10">
             <CampaignOverview
               system={world.system}
+              worldTitle={world.title}
               worldId={world.id}
               articles={articles}
               blocks={rpgBlocks}
               sessions={sessions}
-              onChangeSystem={handleChangeSystem}
               onNewArticle={handleNewArticle}
+              onSelectArticle={handleSelectArticle}
               onOpenCompendium={openCompendium}
               onOpenGm={() => { if (canNavigate()) { clearConfirmedLeave(); setActiveView("gm"); } }}
+              onOpenWorldSettings={() => { if (canNavigate()) { clearConfirmedLeave(); setWorldSettingsRequest(request => request + 1); } }}
               onRefreshSessions={handleRefreshSessions}
             />
-            <WorldHome world={world} articles={articles} onSave={saveWorldSummary} onSelectArticle={handleSelectArticle} onRefreshBlocks={refreshBlocks} onGuardChange={guardHandlers.settings} onOpenBlock={id => { if (!canNavigate()) return; clearConfirmedLeave(); setFocusBlockId(id); setCompendiumCategory(undefined); setCompendiumSession(session => session + 1); setActiveView("blocks"); }} />
+            <WorldHome world={world} articles={articles} onSave={saveWorldSummary} onSelectArticle={handleSelectArticle} onRefreshBlocks={refreshBlocks} onGuardChange={guardHandlers.settings} openSettingsRequest={worldSettingsRequest} onScrollToSettings={scrollWorkspaceTo} onOpenBlock={id => { if (!canNavigate()) return; clearConfirmedLeave(); setFocusBlockId(id); setCompendiumCategory(undefined); setCompendiumSession(session => session + 1); setActiveView("blocks"); }} />
           </div>}
           {activeView === "assets" && world && <AssetLibrary worldId={world.id} onGuardChange={guardHandlers.asset} />}
           {activeView === "blocks" && world && <BlockStudio key={`${world.system}-${compendiumSession}`} system={world.system} worldId={world.id} initialCategory={compendiumCategory} focusBlockId={focusBlockId} blocks={rpgBlocks} onSaveBlock={handleSaveBlock} onDeleteBlock={handleDeleteBlock} onRefreshBlocks={refreshBlocks} onGuardChange={guardHandlers.compendium} />}
@@ -999,7 +1002,6 @@ export default function WorldForgeApp() {
                 sessions={sessions}
                 onRefresh={handleRefreshSessions}
                 onGuardChange={guardHandlers.session}
-                worldSystem={world.system}
               />
             </div>
           )}

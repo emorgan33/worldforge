@@ -41,6 +41,9 @@ Both views come from the optional Aethelgard demo seed and show the author works
 - **Revision history** — server-side snapshots, restore, and concurrent-edit
   detection.
 - **GM tools** — secrets, preview-as-player, campaign sessions and notebooks.
+- **Night watch author workspace** — a compact campaign desk for creation and
+  session preparation, with world settings and campaign rules in their own
+  destination. See the [workspace design and validation](docs/feature-requests/night-watch-author-workspace.md).
 - **Table access** — world members, per-resource audience policies and grants,
   and an access audit trail.
 - **Interactive maps, timelines and variable macros** (`[prefix:key]`).
@@ -143,6 +146,13 @@ with `pnpm auth:setup -- --create you@example.com`, then sign in at `/login`.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow, test commands and
 pull-request expectations.
 
+### Testing
+
+Run the full suite with `pnpm test` against a temporary SQLite database and
+temporary asset directory, with the dev server using the same paths. The setup
+in [CONTRIBUTING.md](CONTRIBUTING.md) includes the environment variables needed
+to run every integration test; do not run tests against your configured data.
+
 ## Documentation
 
 Design and feature references live in [`docs/`](docs/):
@@ -159,12 +169,13 @@ Design and feature references live in [`docs/`](docs/):
 - [Interactive character sheets](docs/character-sheets.md)
 - [World creation and switcher](docs/world-creation-and-switcher.md)
 - [Reader navigation and discovery](docs/reader-navigation-and-discovery.md)
+- [Night watch author workspace](docs/feature-requests/night-watch-author-workspace.md) · [Validation report](docs/night-watch-validation-2026-10-23.md)
 - [Backup and restore](docs/backup-restore.md)
 - [FoundryVTT integration](docs/foundryvtt-integration.md)
 
 ## Tech stack
 
-Next.js 16 (App Router, React 19, Turbopack) · TypeScript · Prisma 6 + SQLite ·
+Next.js 16 (App Router, React 19; Webpack production build) · TypeScript · Prisma 6 + SQLite ·
 TipTap 3 · Tailwind CSS 4.
 
 ## Contributing

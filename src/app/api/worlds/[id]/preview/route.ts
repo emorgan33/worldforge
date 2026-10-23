@@ -25,8 +25,7 @@ export const POST = withAuthor(async (request: NextRequest, { params }: { params
   return NextResponse.json(result);
 });
 
-export const DELETE = withAuthor(async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-  const { id: worldId } = await params;
+export const DELETE = withAuthor(async (request: NextRequest) => {
   const body = await request.json();
   const { token } = body;
   if (!token || typeof token !== "string") {

@@ -104,7 +104,7 @@ async function patchHandler(
     
     // Create a revision before updating (for history)
     await prisma.$transaction(async tx => {
-      const saved = await tx.article.update({
+      await tx.article.update({
         where: { id },
         data: {
           ...(categoryChanged ? { order: (lastSibling?.order ?? -1) + 1 } : {}),

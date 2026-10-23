@@ -28,6 +28,22 @@ body {
 .sidebar-lore-scroll { scrollbar-width: none; }
 .sidebar-lore-scroll::-webkit-scrollbar { display: none; }
 
+/* Night watch author workspace surfaces. Reader themes stay scoped to .world-presentation. */
+.author-workspace {
+  --aw-canvas: #111318;
+  --aw-sidebar: #181b22;
+  --aw-panel: #1c2028;
+  --aw-control: #242934;
+  --aw-border: #343a46;
+  --aw-text: #f1f2f5;
+  --aw-muted: #b1b7c2;
+  background-color: var(--aw-canvas);
+  color: var(--aw-text);
+  font-family: Arial, Helvetica, sans-serif;
+}
+.author-workspace .aw-panel { border-color: var(--aw-border); background-color: var(--aw-panel); }
+.author-workspace .aw-control { border-color: var(--aw-border); background-color: var(--aw-control); }
+
 .block-editor > * { margin: 0.65rem 0; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }
 .block-editor > *:hover { outline: 1px solid #3f3f46; }
 .block-editor h1 { font-size: 2rem; font-weight: 700; }

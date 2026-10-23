@@ -192,7 +192,7 @@ async function main() {
     },
   });
 
-  const artWyrm = await prisma.article.create({
+  await prisma.article.create({
     data: {
       worldId: world.id,
       categoryId: catCreatures.id,
@@ -246,7 +246,7 @@ async function main() {
   });
 
   console.log("Creating variable macro collections...");
-  const colCal = await prisma.variableCollection.create({
+  await prisma.variableCollection.create({
     data: {
       worldId: world.id,
       name: "Chronology & Epochs",
@@ -261,7 +261,7 @@ async function main() {
     },
   });
 
-  const colCoin = await prisma.variableCollection.create({
+  await prisma.variableCollection.create({
     data: {
       worldId: world.id,
       name: "Imperial Currency",
@@ -276,7 +276,7 @@ async function main() {
     },
   });
 
-  const colLore = await prisma.variableCollection.create({
+  await prisma.variableCollection.create({
     data: {
       worldId: world.id,
       name: "Cosmology & Laws",
@@ -477,7 +477,7 @@ async function main() {
   });
 
   console.log("Creating GM Campaign Notebook...");
-  const notebook = await prisma.notebook.create({
+  await prisma.notebook.create({
     data: {
       worldId: world.id,
       title: "Campaign: The Sundered Prophecy",

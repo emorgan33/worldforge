@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { prisma } from "./db";
 import { SESSION_COOKIE } from "./auth-constants";
 import { tokenHash } from "./passwords";
-import type { Actor, ActorKind, ResourceRef } from "./access-types";
+import type { Actor, ResourceRef } from "./access-types";
 
 // ---------------------------------------------------------------------------
 // Error type
@@ -216,6 +216,7 @@ export function sameOrigin(request: Request): void {
 // Existence predicate for efficient query-level pre-filtering
 // ---------------------------------------------------------------------------
 export function readableExists(_actor: Actor): Record<string, unknown> {
+  void _actor;
   return {};
 }
 

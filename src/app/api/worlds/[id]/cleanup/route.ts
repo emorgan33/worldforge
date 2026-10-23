@@ -35,9 +35,6 @@ export const DELETE = withAuthor(async (_request: Request, { params }: { params:
     const user = await import("@/lib/auth").then(m => m.sessionUser());
     if (user?.id !== world.ownerId) throw new AccessError("You do not have access to this world", 403);
 
-    // Get all asset IDs that are referenced in the world
-    const assetUrlPattern = (id: string) => `/api/assets/${id}/file`;
-    
     // Get all assets for this world from database
     const dbAssets = await prisma.imageAsset.findMany({
       where: { worldId },

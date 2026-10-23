@@ -45,15 +45,14 @@ interface NextSessionDeskProps {
   worldId: string;
   sessions: SessionItem[];
   onRefresh: () => void;
-  worldSystem: string;
   onGuardChange?: (registration: { dirty: boolean; busy: boolean } | null) => void;
 }
 
 function statusColor(status: string): string {
   switch (status) {
-    case "PLANNED": return "text-amber-400 bg-amber-500/10 border-amber-500/30";
-    case "PLAYED": return "text-emerald-400 bg-emerald-500/10 border-emerald-500/30";
-    case "CANCELLED": return "text-zinc-500 bg-zinc-800/40 border-zinc-700";
+    case "PLANNED": return "text-violet-200 bg-violet-500/10 border-violet-400/30";
+    case "PLAYED": return "text-emerald-200 bg-emerald-500/10 border-emerald-400/30";
+    case "CANCELLED": return "text-zinc-300 bg-zinc-800/60 border-zinc-700";
     default: return "text-zinc-400 bg-zinc-800/40 border-zinc-700";
   }
 }
@@ -71,10 +70,12 @@ function formatDate(dateStr: string | null | undefined): string {
   }
 }
 
-export function NextSessionDesk({ worldId, sessions, onRefresh, worldSystem, onGuardChange }: NextSessionDeskProps) {
+export function NextSessionDesk({ worldId, sessions, onRefresh, onGuardChange }: NextSessionDeskProps) {
   const [pendingWrites, setPendingWrites] = useState(0);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [validationMessage, setValidationMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const paused = useWorldGuard({ dirty: !!newTitle, busy: pendingWrites > 0 }, "session", onGuardChange);
   const [showPlayed, setShowPlayed] = useState(false);
@@ -89,10 +90,12 @@ export function NextSessionDesk({ worldId, sessions, onRefresh, worldSystem, onG
   const nonNextPlanned = planned.filter(s => s.id !== nextSession?.id);
 
   async function handleCreate() {
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim()) { setValidationMessage("Enter a title for this session."); return; }
     if (paused) return;
     setPendingWrites(count => count + 1);
     setError("");
+    setSuccessMessage("");
+    setValidationMessage("");
     try {
       const res = await fetch(`/api/worlds/${worldId}/sessions`, {
         method: "POST",
@@ -105,6 +108,7 @@ export function NextSessionDesk({ worldId, sessions, onRefresh, worldSystem, onG
       }
       setNewTitle("");
       setCreating(false);
+      setSuccessMessage("Session created.");
       onRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create session.");
@@ -213,17 +217,17 @@ export function NextSessionDesk({ worldId, sessions, onRefresh, worldSystem, onG
         key={session.id}
         className={`rounded-xl border p-5 transition-colors ${
           isNext
-            ? "border-amber-600/50 bg-gradient-to-br from-amber-950/30 via-zinc-900 to-zinc-950 shadow-lg shadow-amber-900/10"
+            ? "border-violet-500/50 bg-violet-950/25"
             : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700"
         }`}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h4 className="font-serif text-lg text-amber-100 truncate">{session.title}</h4>
+            <div className="flex flex-wrap items-center gap-2">
+              <h4 className="break-words text-lg font-semibold leading-snug text-zinc-100">{session.title}</h4>
               {isNext && (
-                <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-semibold text-amber-400 border border-amber-500/30">
-                  <Star size={10} /> NEXT
+                <span className="flex items-center gap-1 rounded-full border border-violet-400/40 bg-violet-500/15 px-2.5 py-1 text-xs font-semibold text-violet-200">
+                  <Star size={12} aria-hidden="true" /> Next session
                 </span>
               )}
             </div>
@@ -251,12 +255,12 @@ export function NextSessionDesk({ worldId, sessions, onRefresh, worldSystem, onG
               )}
             </div>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
             {session.status === "PLANNED" && (
               <>
                 <button
                   onClick={() => handleUpdateStatus(session.id, "PLAYED")}
-                  className="flex items-center gap-1 rounded-lg bg-emerald-600/20 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/30 transition-colors"
+                  className="flex min-h-11 items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-600/20 px-3 text-xs font-semibold text-emerald-200 transition-colors hover:bg-emerald-600/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
                   title="Mark as played"
                 >
                   <Play size={12} /> Start
@@ -264,7 +268,8 @@ export function NextSessionDesk({ worldId, sessions, onRefresh, worldSystem, onG
                 {!isNext && (
                   <button
                     onClick={() => handleMakeNext(session.id)}
-                    className="rounded-lg bg-zinc-800 p-1.5 text-zinc-400 hover:text-amber-300 hover:bg-zinc-700 transition-colors"
+                    aria-label="Make next session"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg bg-zinc-800 text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-violet-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
                     title="Make next session"
                   >
                     <Star size={13} />
@@ -274,7 +279,8 @@ export function NextSessionDesk({ worldId, sessions, onRefresh, worldSystem, onG
             )}
             <button
               onClick={() => handleDelete(session.id)}
-              className="rounded-lg p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-900/20 transition-colors"
+              aria-label="Delete session"
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-900/20 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
               title="Delete session"
             >
               <Trash2 size={13} />
@@ -294,9 +300,10 @@ export function NextSessionDesk({ worldId, sessions, onRefresh, worldSystem, onG
                 {link.label || link.entityId.slice(0, 8)}
                 <button
                   onClick={() => handleRemoveLink(session.id, link.id)}
-                  className="text-zinc-500 hover:text-red-400 ml-0.5"
+                  aria-label={`Remove ${link.label || "linked entity"}`}
+                  className="ml-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-red-900/20 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
                 >
-                  <X size={10} />
+                  <X size={12} aria-hidden="true" />
                 </button>
               </span>
             ))}
@@ -306,7 +313,7 @@ export function NextSessionDesk({ worldId, sessions, onRefresh, worldSystem, onG
         {/* Add Link Button */}
         <button
           onClick={() => setAddingLinkTo(addingLinkTo === session.id ? null : session.id)}
-          className="mt-2 text-[10px] font-semibold text-zinc-500 hover:text-amber-400 transition-colors"
+          className="mt-2 inline-flex min-h-11 items-center text-xs font-semibold text-zinc-400 transition-colors hover:text-violet-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
         >
           {addingLinkTo === session.id ? "Cancel" : "+ Link entity"}
         </button>
@@ -325,7 +332,8 @@ export function NextSessionDesk({ worldId, sessions, onRefresh, worldSystem, onG
           <div className="mt-3">
             <button
               onClick={() => setRecapOpen(prev => ({ ...prev, [session.id]: !isRecapOpen }))}
-              className="flex items-center gap-1 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
+              aria-expanded={isRecapOpen}
+              className="flex min-h-11 items-center gap-2 text-xs font-semibold text-zinc-300 transition-colors hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
               {isRecapOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               <ScrollText size={13} />
@@ -357,62 +365,68 @@ export function NextSessionDesk({ worldId, sessions, onRefresh, worldSystem, onG
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-serif text-xl text-amber-100 flex items-center gap-2">
-          <Calendar size={18} className="text-amber-500" />
+        <h3 className="flex items-center gap-2 text-xl font-semibold text-zinc-100">
+          <Calendar size={18} className="text-zinc-400" aria-hidden="true" />
           Next Session
         </h3>
-        <button
+        {!(sessions.length === 0 && !creating) && <button
           onClick={() => setCreating(!creating)}
-          className="flex items-center gap-1 rounded-lg bg-amber-600/20 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-600/30 border border-amber-500/30 transition-colors"
+          disabled={pendingWrites > 0}
+          aria-expanded={creating}
+          className={`flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 disabled:cursor-wait disabled:opacity-60 ${creating ? "border border-zinc-600 bg-transparent text-zinc-200 hover:border-zinc-400 hover:bg-zinc-800" : "bg-violet-400 text-zinc-950 hover:bg-violet-300"}`}
         >
-          <Plus size={14} />
+          <Plus size={16} aria-hidden="true" />
           {creating ? "Cancel" : "New Session"}
-        </button>
+        </button>}
       </div>
 
       {error && (
-        <p role="alert" className="rounded border border-red-900/40 bg-red-950/20 p-2 text-xs text-red-300">
+        <p role="alert" className="rounded-lg border border-red-800 bg-red-950/40 p-3 text-sm text-red-200">
           {error}
         </p>
       )}
+      {successMessage && <p role="status" className="rounded-lg border border-emerald-800 bg-emerald-950/30 p-3 text-sm text-emerald-200">{successMessage}</p>}
 
       {/* Create Form */}
       {creating && (
-        <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 p-4">
-          <label className="block text-xs font-semibold text-amber-300 mb-1.5">Session Title</label>
-          <div className="flex gap-2">
+        <form onSubmit={event => { event.preventDefault(); void handleCreate(); }} className="rounded-xl border border-zinc-700 bg-zinc-950/40 p-4">
+          <label htmlFor="new-session-title" className="mb-1.5 block text-sm font-semibold text-zinc-200">Session title</label>
+          <div className="flex flex-col gap-2 min-[1150px]:flex-row">
             <input
+              id="new-session-title"
               type="text"
               value={newTitle}
-              onChange={e => setNewTitle(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleCreate(); }}
+              onChange={e => { setNewTitle(e.target.value); setValidationMessage(""); }}
               placeholder="e.g. Session 1: The Awakening"
-              className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-colors"
+              aria-invalid={!!validationMessage}
+              aria-describedby={validationMessage ? "new-session-error" : undefined}
+              className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 transition-colors focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-400/30"
               autoFocus
             />
             <button
-              onClick={handleCreate}
-              disabled={!newTitle.trim()}
-              className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              type="submit"
+              disabled={pendingWrites > 0}
+              className="min-h-11 shrink-0 rounded-lg bg-violet-400 px-4 text-sm font-semibold text-zinc-950 transition-colors hover:bg-violet-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 disabled:cursor-wait disabled:opacity-60"
             >
-              Create
+              {pendingWrites > 0 ? "Creating…" : "Create session"}
             </button>
           </div>
-        </div>
+          {validationMessage && <p id="new-session-error" role="alert" className="mt-2 text-sm text-red-300">{validationMessage}</p>}
+        </form>
       )}
 
       {/* Empty State */}
       {sessions.length === 0 && !creating && (
-        <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/20 p-8 text-center">
-          <Calendar size={32} className="mx-auto text-zinc-600 mb-3" />
-          <p className="text-sm text-zinc-400 font-semibold">No sessions yet</p>
-          <p className="mt-1 text-xs text-zinc-500">Create your first session to start tracking your campaign.</p>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/20 p-5">
+          <Calendar size={22} aria-hidden="true" className="mb-3 text-zinc-500" />
+          <p className="text-sm font-semibold text-zinc-200">No sessions planned yet</p>
+          <p className="mt-1 text-sm text-zinc-400">Create a session to set the next date, track table notes, and link the people and places involved.</p>
           <button
             onClick={() => setCreating(true)}
-            className="mt-4 inline-flex items-center gap-1 rounded-lg bg-amber-600/20 px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-600/30 border border-amber-500/30 transition-colors"
+            className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg bg-violet-400 px-4 text-sm font-semibold text-zinc-950 transition-colors hover:bg-violet-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
           >
-            <Plus size={14} />
-            Create First Session
+            <Plus size={16} aria-hidden="true" />
+            Create first session
           </button>
         </div>
       )}
@@ -435,7 +449,8 @@ export function NextSessionDesk({ worldId, sessions, onRefresh, worldSystem, onG
         <div className="space-y-2">
           <button
             onClick={() => setShowPlayed(!showPlayed)}
-            className="flex items-center gap-1 text-xs font-semibold text-zinc-500 hover:text-zinc-300 transition-colors"
+            aria-expanded={showPlayed}
+            className="flex min-h-11 items-center gap-2 text-xs font-semibold text-zinc-400 transition-colors hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
           >
             {showPlayed ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             <CheckCircle size={13} />

@@ -1,6 +1,6 @@
 # Feature improvement task list
 
-Updated: October 21, 2026.
+Updated: October 23, 2026.
 
 WorldForge is a block-based campaign authoring site focused on **D&D 5e 2014** and **Pathfinder 2e Remaster**. World Anvil informs its authoring and presentation workflows; exact visual parity with its authenticated editor has not been verified. Reference evidence and its limits are recorded in [the reference review](world-anvil-reference-review.md).
 
@@ -9,6 +9,7 @@ Checked items are implemented and verified in this workspace. Unchecked items ar
 ## Completed improvements
 
 - [x] Separate author workspace, world homepage preview and public reader pages. [Details](publishing-and-permissions.md)
+- [x] Night watch author workspace with a compact campaign desk, world settings destination, and responsive navigation. [Design and validation](feature-requests/night-watch-author-workspace.md)
 - [x] Block editor: slash commands, inline handles, drag/reorder, duplicate/delete, undo/redo, tables, images, callouts and compendium embeds. [Details](editor-and-category-manager.md)
 - [x] Category manager: nested categories, rename/reparent/order, article assignment and content-preserving category deletion. [Details](editor-and-category-manager.md)
 - [x] Debounced autosave, save feedback, local draft recovery and unsaved-navigation protection. [Details](autosave-and-recovery.md)

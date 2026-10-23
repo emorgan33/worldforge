@@ -4,7 +4,7 @@ import { useWorldGuard } from "@/components/worlds/WorldGuard";
 import { WorldPresentation } from "@/components/public/WorldPresentation";
 import { DEFAULT_APPEARANCE, parseAppearance, rulesTheme, WORLD_THEMES, READING_WIDTHS, type WorldAppearance } from "@/lib/world-appearance";
 import { ImageSourceField } from "@/components/assets/ImageSourceField";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RPG_SYSTEMS, systemProfile } from "@/lib/rpg";
 import { sortOrdered } from "@/lib/category-tree";
 import { ArticleListItem, CategoryItem } from "@/types";
@@ -24,7 +24,7 @@ export interface WorldSummary {
   categories: CategoryItem[];
 }
 
-export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshBlocks, onOpenBlock, onGuardChange }: {
+export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshBlocks, onOpenBlock, onGuardChange, openSettingsRequest = 0, onScrollToSettings }: {
   world: WorldSummary;
   articles: ArticleListItem[];
   onSave: (world: WorldSummary) => void;
@@ -32,17 +32,29 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
   onRefreshBlocks?: () => Promise<void> | void;
   onOpenBlock?: (id: string) => void;
   onGuardChange?: (registration: GuardRegistration) => void;
+  openSettingsRequest?: number;
+  onScrollToSettings?: (target: HTMLElement) => void;
 }) {
   const [campaignSystem, setCampaignSystem] = useState(world.system);
   const [appearance, setAppearance] = useState(() => parseAppearance(world.appearance));
   const [coverImage, setCoverImage] = useState(world.coverImage || "");
   const [bannerImage, setBannerImage] = useState(world.bannerImage || "");
   const [editing, setEditing] = useState(false);
+  const settingsSection = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const published = sortOrdered(articles.filter(article => (article.publicationStatus || article.state) === "PUBLISHED"));
 
   useWorldGuard({ dirty: editing, busy }, "settings", onGuardChange);
+
+  useEffect(() => {
+    if (!openSettingsRequest) return;
+    const frame = requestAnimationFrame(() => {
+      setEditing(true);
+      if (settingsSection.current) onScrollToSettings?.(settingsSection.current);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [openSettingsRequest, onScrollToSettings]);
   
   // Build O(1) lookup: categoryId → articles (avoids scanning all articles per category)
   const articlesByCategory = new Map<string | null, ArticleListItem[]>();
@@ -77,7 +89,7 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
   function articleLinks(categoryId: string | null) {
     return (articlesByCategory.get(categoryId) ?? []).map(article => (
       <li key={article.id}>
-        <button className="py-2 text-left text-indigo-300 hover:underline" disabled={editing} onClick={() => onSelectArticle(article.id)}>{article.title}</button>
+        <button className="min-h-11 py-2 text-left text-violet-300 hover:text-violet-200 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300" disabled={editing} onClick={() => onSelectArticle(article.id)}>{article.title}</button>
       </li>
     ));
   }
@@ -91,15 +103,14 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
     ));
   }
 
-  return <section className="space-y-6">
+  return <section ref={settingsSection} id="world-home-settings" className="space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><p className="text-xs uppercase tracking-widest text-indigo-400">Articles & World Manager</p><h1 className="text-2xl font-bold">World homepage</h1></div>
-      <button className="rounded-lg border border-zinc-700 px-4 py-2 hover:bg-zinc-800" onClick={() => { setEditing(!editing); setCampaignSystem(world.system); setAppearance(parseAppearance(world.appearance)); setCoverImage(world.coverImage || ""); setBannerImage(world.bannerImage || ""); setMessage(""); }} disabled={busy}>{editing ? "Cancel" : "Edit world & styling"}</button>
+      <div><p className="text-xs uppercase tracking-widest text-violet-300">Articles & World Manager</p><h2 className="text-2xl font-bold">World homepage</h2></div>
+      <button className="min-h-11 rounded-lg border border-zinc-700 px-4 text-sm font-semibold text-zinc-200 hover:border-violet-500/60 hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300" onClick={() => { setEditing(!editing); setCampaignSystem(world.system); setAppearance(parseAppearance(world.appearance)); setCoverImage(world.coverImage || ""); setBannerImage(world.bannerImage || ""); setMessage(""); }} disabled={busy}>{editing ? "Cancel" : "Edit world & styling"}</button>
     </div>
-    {world.isPublic && <a href={`/w/${world.slug}`} target="_blank" rel="noopener noreferrer" className="inline-block text-sm text-indigo-300">Open public world →</a>}
+    {world.isPublic && <a href={`/w/${world.slug}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center text-sm text-violet-300 hover:text-violet-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">Open public world →</a>}
     {message && <p role="status" className="text-sm text-amber-300">{message}</p>}
     {editing ? <form onSubmit={save} className="space-y-5 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-      <section className="space-y-3 rounded-lg border border-zinc-700 p-4"><h2 className="font-semibold">Integrations</h2><p className="text-sm text-zinc-400">Preview and selectively import Foundry VTT Item exports into this world&apos;s compendium.</p><FoundryImport worldId={world.id} onComplete={onRefreshBlocks} onOpenBlock={onOpenBlock} /></section>
       <label className="flex items-center gap-3 text-sm"><input name="isPublic" type="checkbox" defaultChecked={world.isPublic} />Make this world public</label>
       <p className="text-xs text-zinc-400">Public worlds show only articles that are both Published and Public. Turning this off closes public access to the world, its articles and its uploaded images.</p>
       <label className="block">Campaign rules<select aria-label="Campaign rules" name="system" value={campaignSystem} onChange={event => setCampaignSystem(event.target.value)} className="mt-2 block w-full rounded border border-zinc-700 bg-zinc-950 p-3">{RPG_SYSTEMS.map(profile => <option key={profile.id} value={profile.id}>{profile.short}{profile.id === "PF_2E" ? " · Remaster" : ""}</option>)}</select></label>
@@ -109,10 +120,11 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
       <p className="text-xs text-zinc-400">Appears on your world homepage. Clear to remove.</p>
       <ImageSourceField worldId={world.id} label="Global article cover URL" name="bannerImage" value={bannerImage} onChange={setBannerImage} />
       <p className="text-xs text-zinc-400">Used when an article has no cover of its own.</p>
+      <section className="space-y-3 rounded-lg border border-zinc-700 p-4"><h2 className="font-semibold">Integrations</h2><p className="text-sm text-zinc-400">Preview and selectively import Foundry VTT Item exports into this world&apos;s compendium.</p><FoundryImport worldId={world.id} onComplete={onRefreshBlocks} onOpenBlock={onOpenBlock} /></section>
       <fieldset disabled={busy} className="space-y-4 rounded-xl border border-zinc-700 p-4">
         <legend className="px-2 font-semibold">Reader appearance</legend>
         <p className="text-xs text-zinc-400">Style your world and article reader pages. The live preview below shows unsaved appearance changes.</p>
-        <button type="button" onClick={() => setAppearance({ ...appearance, theme: rulesTheme(campaignSystem), accentColor: "", backgroundColor: "" })} className="rounded-lg border border-amber-700/60 px-3 py-2 text-sm text-amber-200">Use campaign rules style</button>
+        <button type="button" onClick={() => setAppearance({ ...appearance, theme: rulesTheme(campaignSystem), accentColor: "", backgroundColor: "" })} className="min-h-11 rounded-lg border border-violet-500/50 px-3 py-2 text-sm font-semibold text-violet-200 hover:bg-violet-950/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">Use campaign rules style</button>
         <p className="text-xs text-zinc-400">D&D 2014 uses warm parchment, oxblood headings and gold rules. Pathfinder Remaster uses clean pages, deep green headings and compact rulebook statblocks. This button resets accent/background colors to the preset and keeps your background image.</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-sm">Theme<select aria-label="World theme" value={appearance.theme} onChange={event => setAppearance({ ...appearance, theme: event.target.value as WorldAppearance["theme"] })} className="mt-2 block w-full rounded border border-zinc-700 bg-zinc-950 p-3">{Object.entries(WORLD_THEMES).map(([key, theme]) => <option key={key} value={key}>{theme.label}</option>)}</select></label>
@@ -136,7 +148,7 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
                 value={appearance.customCss || ""}
                 onChange={event => setAppearance({ ...appearance, customCss: event.target.value || undefined })}
                 placeholder={".wf-reader h1 { font-family: 'My Font', serif; }&#10;.wf-reader article { line-height: 1.8; }"}
-                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-200 focus:border-amber-500 focus:outline-none"
+                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-200 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-400/30"
               />
             </label>
             <p className="text-xs text-zinc-500">Allowed: font properties, colors, spacing, borders. Disallowed: @import, @font-face, fixed positioning, or layout-breaking overrides. Styles targeting .wf-reader are automatically scoped.</p>
@@ -148,7 +160,7 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
         
         <button type="button" onClick={() => setAppearance({ ...DEFAULT_APPEARANCE })} className="rounded-lg border border-zinc-700 px-3 py-2 text-sm">Reset appearance to defaults</button>
       </fieldset>
-      <button disabled={busy} className="rounded-lg bg-indigo-600 px-5 py-2 disabled:opacity-50">{busy ? "Saving…" : "Save world"}</button>
+      <button disabled={busy} className="min-h-11 rounded-lg bg-violet-400 px-5 text-sm font-semibold text-zinc-950 hover:bg-violet-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 disabled:cursor-wait disabled:opacity-50">{busy ? "Saving…" : "Save world"}</button>
     </form> : null}
     <div className="space-y-3">
       <p className="text-xs text-zinc-400">{editing ? "Live appearance preview · Save world to apply changes." : "Author preview"}</p>

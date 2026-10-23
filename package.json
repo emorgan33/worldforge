@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "serve:local": "bash scripts/serve-local.sh",
     "lint": "eslint",
@@ -39,6 +39,7 @@
   },
   "devDependencies": {
     "@prisma/client": "6.19.3",
+    "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

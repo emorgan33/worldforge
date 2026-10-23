@@ -7,6 +7,7 @@ import { ReaderBreadcrumbs } from "../src/components/public/ReaderBreadcrumbs";
 import { ReaderCategoryTree } from "../src/components/public/ReaderCategoryTree";
 import { ReaderMobileBrowse } from "../src/components/public/ReaderMobileBrowse";
 import { ReaderSearch } from "../src/components/public/ReaderSearch";
+import { Sidebar } from "../src/components/Sidebar";
 
 const publicArticles = [
   { id: "art-1", slug: "gate-of-dawn", title: "Gate of Dawn", template: "LANDMARK", excerpt: "An ancient portal carved in white stone.", categoryId: "cat-places" },
@@ -135,6 +136,41 @@ test("mobile browse disclosure exposes campaign navigation without duplicate sec
   assert(html.includes('href="/c/elmsworth/a/dawn-knights"'));
   assert(articleHeadingIds.length >= 2);
   assert.equal(new Set(articleHeadingIds).size, articleHeadingIds.length);
+});
+
+test("mobile author navigation gives World contents the remaining drawer space", () => {
+  const html = renderToStaticMarkup(
+    <Sidebar
+      onOpenSearch={() => {}}
+      worldTitle="Elmsworth"
+      system="DND_5E"
+      articles={[]}
+      categories={[{ id: "cat", worldId: "world", name: "Places", parentId: null, order: 0 }]}
+      selectedCategoryId={null}
+      onSelectCategory={() => {}}
+      onMove={async () => {}}
+      organizationBusy={false}
+      organizationError=""
+      activeView="home"
+      selectedArticleId={null}
+      onSelectArticle={() => {}}
+      onNavigateView={() => {}}
+      onNewArticle={() => {}}
+      mobile
+    />
+  );
+
+  assert(html.includes('aria-label="World menu"'));
+  assert(html.includes('aria-label="Campaign navigation" class="shrink-0 border-b'));
+  assert(html.includes("grid grid-cols-2 gap-x-2 gap-y-1"));
+  for (const destination of ["Home", "Articles", "Maps", "Timelines", "Sessions", "Compendium", "DM tools"]) {
+    assert(html.includes(`aria-label="${destination}"`));
+  }
+  assert(html.includes('aria-label="World contents" class="sidebar-lore-scroll min-h-0 flex-1 border-b'));
+  assert(html.includes("flex flex-col overflow-hidden"));
+  assert(html.includes("overflow-x-hidden overflow-y-auto min-h-0 flex-1"));
+  assert(html.includes('aria-label="Collapse Places"'));
+  assert(html.includes("flex h-11 w-11 shrink-0 items-center justify-center"));
 });
 
 test("ReaderSearch renders accessible input and search controls", () => {

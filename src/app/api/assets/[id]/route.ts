@@ -3,7 +3,6 @@ import { AccessError } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { imageAssetId } from "@/lib/assets";
-import { removeAssetFile } from "@/lib/asset-storage";
 
 /**
  * DELETE /api/assets/[id]

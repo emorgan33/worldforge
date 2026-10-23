@@ -10,7 +10,7 @@ test("world archive preserves settings, settings duplicate is private and empty,
   const databaseFilename = `.worldforge-management-${randomUUID()}.db`;
   const databasePath = path.join(process.cwd(), "prisma", databaseFilename);
   const assetDir = await mkdtemp(path.join(os.tmpdir(), "worldforge-assets-"));
-  process.env.DATABASE_URL = `file:./${databaseFilename}`;
+  process.env.DATABASE_URL = `file:${databasePath}`;
   process.env.WORLDFORGE_ASSET_DIR = assetDir;
   await writeFile(databasePath, "");
   execFileSync("pnpm", ["exec", "prisma", "db", "push", "--skip-generate", "--schema", "prisma/schema.prisma"], { encoding: "utf8", env: process.env });

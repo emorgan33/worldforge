@@ -19,11 +19,7 @@ export default function InviteClaimForm({ token }: { token: string }) {
 
   useEffect(() => {
     let active = true;
-    if (!token) {
-      setError("This invitation link is missing its token. Please open the complete link you received.");
-      setLoading(false);
-      return;
-    }
+    if (!token) return;
     fetch("/api/invitations/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }), cache: "no-store" })
       .then(async response => {
         const data = await response.json();
@@ -34,6 +30,8 @@ export default function InviteClaimForm({ token }: { token: string }) {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [token]);
+
+  const invitationError = token ? error : "This invitation link is missing its token. Please open the complete link you received.";
 
   const signedInMatches = !!details?.signedInEmail && details.signedInEmail.toLowerCase() === details.invitation.email.toLowerCase();
   const signedInMismatch = !!details?.signedInEmail && !signedInMatches;
@@ -68,7 +66,7 @@ export default function InviteClaimForm({ token }: { token: string }) {
   return <main className="flex min-h-screen items-center justify-center bg-zinc-950 px-5 py-10 text-zinc-100"><section className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900/60 p-7 shadow-2xl">
     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-400">WorldForge · Invitation</p>
     <h1 className="mt-3 font-serif text-3xl font-bold">Join a world</h1>
-    {loading ? <p role="status" className="mt-5 text-zinc-400">Checking your invitation…</p> : error && !details ? <div className="mt-5 space-y-5"><p role="alert" className="rounded-lg border border-red-900 bg-red-950/40 p-4 text-sm text-red-200">{error}</p><Link href="/login" className="text-sm text-indigo-300 hover:underline">Go to sign in</Link></div> : details && <>
+    {token && loading ? <p role="status" className="mt-5 text-zinc-400">Checking your invitation…</p> : invitationError && !details ? <div className="mt-5 space-y-5"><p role="alert" className="rounded-lg border border-red-900 bg-red-950/40 p-4 text-sm text-red-200">{invitationError}</p><Link href="/login" className="text-sm text-indigo-300 hover:underline">Go to sign in</Link></div> : details && <>
       <p className="mt-3 text-zinc-300">You’ve been invited to <strong className="text-amber-200">{details.invitation.worldTitle}</strong>.</p>
       <form className="mt-7 space-y-5" onSubmit={submit}>
         {error && <p role="alert" className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-200">{error}</p>}

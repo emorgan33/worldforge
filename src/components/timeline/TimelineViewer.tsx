@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Calendar, Clock, Star, ExternalLink, Bookmark } from "lucide-react";
+import { Clock, Star, ExternalLink, Bookmark } from "lucide-react";
 
 interface EraItem {
   id: string;

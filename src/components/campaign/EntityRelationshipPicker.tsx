@@ -45,12 +45,12 @@ export function EntityRelationshipPicker({ worldId, onSelect }: EntityRelationsh
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!query.trim()) { setResults([]); return; }
+    if (!query.trim()) return;
     debounceRef.current = setTimeout(() => doSearch(query), 250);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query, doSearch]);
 
-  const filtered = typeFilter === "ALL" ? results : results.filter(r => r.kind === typeFilter);
+  const filtered = !query.trim() ? [] : typeFilter === "ALL" ? results : results.filter(r => r.kind === typeFilter);
 
   function handleSelect(item: SearchResult) {
     onSelect(item.kind, item.id, item.title);

@@ -6,10 +6,8 @@ import {
   Variable as VariableIcon,
   Copy,
   Check,
-  Plus,
   Save,
   Sparkles,
-  Info,
 } from "lucide-react";
 import { VariableCollectionItem } from "@/types";
 import { interpolateVariables } from "@/lib/variable-parser";
@@ -24,7 +22,6 @@ interface VariableManagerProps {
 export function VariableManager({
   collections,
   onUpdateVariable,
-  onCreateVariable,
   onGuardChange,
 }: VariableManagerProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);

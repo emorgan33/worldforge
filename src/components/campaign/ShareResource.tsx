@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, LockKeyhole, Save, Users } from "lucide-react";
 
 type Member = { id: string; userId?: string; name?: string | null; email?: string | null; user?: { id?: string; name?: string | null; email?: string | null } };
@@ -16,17 +16,22 @@ export function ShareResource({ kind, resourceId, title }: { kind: string; resou
   const [notice, setNotice] = useState("");
   const endpoint = `/api/resources/${encodeURIComponent(kind)}/${encodeURIComponent(resourceId)}/audience`;
 
-  const load = useCallback(async () => {
-    setError("");
-    const response = await fetch(endpoint);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Could not load sharing settings.");
-    if (["GM_ONLY", "PLAYER_SNAPSHOT", "PUBLIC"].includes(data.mode)) setMode(data.mode);
-    setUserIds(Array.isArray(data.userIds) ? data.userIds : []);
-    setMembers(Array.isArray(data.members) ? data.members.map((member: Member) => ({ ...member, userId: member.userId || member.user?.id, name: member.name || member.user?.name, email: member.email || member.user?.email })) : []);
-    setLoaded(true);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(endpoint, { signal: controller.signal }).then(async response => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load sharing settings.");
+      if (controller.signal.aborted) return;
+      setError("");
+      if (["GM_ONLY", "PLAYER_SNAPSHOT", "PUBLIC"].includes(data.mode)) setMode(data.mode);
+      setUserIds(Array.isArray(data.userIds) ? data.userIds : []);
+      setMembers(Array.isArray(data.members) ? data.members.map((member: Member) => ({ ...member, userId: member.userId || member.user?.id, name: member.name || member.user?.name, email: member.email || member.user?.email })) : []);
+      setLoaded(true);
+    }).catch(error => {
+      if (!controller.signal.aborted) setError(error.message);
+    });
+    return () => controller.abort();
   }, [endpoint]);
-  useEffect(() => { load().catch(error => setError(error.message)); }, [load]);
 
   async function save() {
     setBusy(true); setError(""); setNotice("");

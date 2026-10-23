@@ -21,7 +21,7 @@ test("debug: asset upload auth", { skip: !origin }, async (context) => {
   const res1 = await fetch(`${origin}/api/worlds`, { 
     headers: { Cookie: `worldforge_session=${token}` }
   });
-  console.log("GET /api/worlds status:", res1.status);
+  assert.equal(res1.status, 200);
   
   // Test POST with JSON
   const res2 = await fetch(`${origin}/api/articles`, {
@@ -33,7 +33,7 @@ test("debug: asset upload auth", { skip: !origin }, async (context) => {
     },
     body: JSON.stringify({ worldId: world.id, title: "Test" }),
   });
-  console.log("POST /api/articles status:", res2.status);
+  assert.equal(res2.status, 201);
   if (res2.status !== 201) {
     const text = await res2.text();
     console.log("Response:", text);

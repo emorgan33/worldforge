@@ -1,4 +1,4 @@
-import { withAuthor, sessionUser, AccessError } from "@/lib/auth";
+import { withAuthor, sessionUser } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { addMember } from "@/lib/membership";

@@ -24,7 +24,6 @@ test("player access: denied paths return 404 without leaking resource info", { s
 
   const gmFetch = await authorFetch(db, owner.id, origin!);
   const aFetch = await authorFetch(db, playerA.id, origin!);
-  const bFetch = await authorFetch(db, playerB.id, origin!);
   const outFetch = await authorFetch(db, outsider.id, origin!);
 
   // Author collection endpoints must never treat missing worldId as all worlds.
