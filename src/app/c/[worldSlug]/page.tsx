@@ -9,6 +9,7 @@ import { WorldPresentation } from "@/components/public/WorldPresentation";
 import { publicImage } from "@/lib/public-content";
 import { ReaderSearch } from "@/components/public/ReaderSearch";
 import { ReaderCategoryTree } from "@/components/public/ReaderCategoryTree";
+import { ReaderMobileBrowse } from "@/components/public/ReaderMobileBrowse";
 import { systemProfile } from "@/lib/rpg";
 import { BookOpen, ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -102,13 +103,14 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
         </header>
         <section aria-labelledby="player-search-heading" className="pt-2">
           <h2 id="player-search-heading" className="sr-only">Search articles</h2>
-          <ReaderSearch worldSlug={world.slug} articles={linkableArticles} />
+          <ReaderSearch worldSlug={world.slug} articles={linkableArticles} readerType="campaign" />
         </section>
+        <ReaderMobileBrowse categories={categories} articles={linkableArticles} worldSlug={world.slug} readerType="campaign" currentPage="home" />
         <div className="grid gap-10 lg:grid-cols-[280px_1fr] pt-4 border-t border-zinc-800">
-          <aside aria-label="World contents" className="space-y-4">
+          <aside aria-label="World contents" className="hidden space-y-4 lg:block">
             <h2 className="text-sm font-bold uppercase tracking-wider text-amber-400/90">Contents</h2>
             <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3">
-              <ReaderCategoryTree categories={categories} articles={linkableArticles} worldSlug={world.slug} />
+              <ReaderCategoryTree categories={categories} articles={linkableArticles} worldSlug={world.slug} readerType="campaign" currentPage="home" />
             </div>
           </aside>
           <section aria-labelledby="readable-articles-heading" className="space-y-4">

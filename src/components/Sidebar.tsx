@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import {
-  Compass,
+  House,
+  Map,
   Clock,
   Calendar,
   Variable as VariableIcon,
@@ -13,6 +14,9 @@ import {
   Sparkles,
   FolderTree,
   Images,
+  X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { ArticleTree, TreeMove } from "./ArticleTree";
 import { ArticleListItem, ArticleTemplateType, CategoryItem } from "@/types";
@@ -47,6 +51,14 @@ interface SidebarProps {
   actorId?: string | null;
   onManageWorld?: (action: "archive" | "duplicate" | "restore" | "purge" | "export" | "import", worldId?: string, summary?: WorldSummary) => void;
   onBeforeManageAction?: () => boolean;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
+  mobile?: boolean;
+  onCloseMobile?: () => void;
+}
+
+function navItemClass(active: boolean) {
+  return `group relative flex min-h-[42px] w-full items-center gap-3 rounded-lg border-l-[3px] px-3 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-300 ${active ? "border-l-violet-400 bg-[#2b2850] text-[#f1f2f5]" : "border-l-transparent text-[#a9afbb] hover:bg-zinc-900 hover:text-zinc-100"}`;
 }
 
 export function Sidebar({
@@ -74,134 +86,62 @@ export function Sidebar({
   actorId,
   onManageWorld,
   onBeforeManageAction,
+  collapsed = false,
+  onToggleCollapsed,
+  mobile = false,
+  onCloseMobile,
 }: SidebarProps) {
-  const [searchQuery, setSearchQuery] = useState("");
   const [showTemplateModal, setShowTemplateModal] = useState(false);
 
   return (
-    <aside className="w-full h-full bg-zinc-950 border-r border-zinc-800 flex flex-col select-none">
-      {/* World Switcher — replaces the display-only identity bar (milestone 3). */}
-      <div className="p-4 border-b border-zinc-800 bg-zinc-900/60 flex items-center justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          {onSelectWorld ? <WorldSwitcher worlds={worlds} currentWorldId={currentWorldId} actorId={actorId ?? null} disabled={worldSwitchDisabled} onSelect={onSelectWorld} onNewWorld={() => onNewWorld?.()} onRefresh={onRefreshWorlds} onManage={onManageWorld} onBeforeManageAction={onBeforeManageAction} /> : <><h2 className="text-sm font-extrabold text-zinc-100 truncate tracking-tight">
-              {worldTitle}
-            </h2>
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">
-              {systemProfile(system).short}{system === "PF_2E" ? " · Remaster" : ""}
-            </span></>}
+    <aside role={mobile ? "dialog" : undefined} aria-modal={mobile || undefined} aria-label={mobile ? "World menu" : undefined} className={`relative flex h-full w-full select-none flex-col border-r border-[#303540] bg-[#111318] text-[#f1f2f5] ${collapsed && !mobile ? "md:items-center" : ""}`}>
+      {mobile && <div className="flex h-[65px] shrink-0 items-center justify-between border-b border-[#303540] bg-[#181b22] px-5"><span className="text-xs font-bold">WORLD MENU</span><button type="button" onClick={onCloseMobile} aria-label="Close campaign navigation" className="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-300 hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"><X className="h-5 w-5" /></button></div>}
+      <div className={`flex h-16 shrink-0 items-center gap-3 bg-[#181b22]/50 ${collapsed && !mobile ? "md:h-auto md:flex-col md:gap-2 md:px-2 md:py-3" : "px-4 py-2"}`}>
+        <div className={`min-w-0 ${collapsed && !mobile ? "md:hidden" : "flex-1"}`}>
+          {onSelectWorld ? <WorldSwitcher brand={!mobile} mobileCard={mobile} worlds={worlds} currentWorldId={currentWorldId} actorId={actorId ?? null} disabled={worldSwitchDisabled} onSelect={onSelectWorld} onNewWorld={() => onNewWorld?.()} onRefresh={onRefreshWorlds} onManage={onManageWorld} onBeforeManageAction={onBeforeManageAction} /> : <><h2 className="truncate text-sm font-extrabold tracking-tight">{worldTitle}</h2><span className="text-[10px] font-semibold uppercase tracking-wider text-[#717a89]">{systemProfile(system).short}{system === "PF_2E" ? " · Remaster" : ""}</span></>}
         </div>
-
-        <button
-          onClick={() => setShowTemplateModal(true)}
-          className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 transition-all shrink-0"
-          title="New article — choose a template"
-          aria-label="New article"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
+        {onSelectWorld && collapsed && !mobile && <div className="hidden md:block"><WorldSwitcher compact worlds={worlds} currentWorldId={currentWorldId} actorId={actorId ?? null} disabled={worldSwitchDisabled} onSelect={onSelectWorld} onNewWorld={() => onNewWorld?.()} onRefresh={onRefreshWorlds} onManage={onManageWorld} onBeforeManageAction={onBeforeManageAction} /></div>}
+        <div className={`${collapsed && !mobile ? "hidden md:block" : "hidden"} flex-1`} />
+        {!mobile && onToggleCollapsed && <button type="button" onClick={onToggleCollapsed} aria-label={collapsed ? "Expand navigation" : "Collapse navigation"} title={collapsed ? "Expand navigation" : "Collapse navigation"} aria-expanded={!collapsed} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-zinc-300 hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">{collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}</button>}
       </div>
-
-      <button onClick={() => onNavigateView("home")} className={`px-6 py-3 text-left text-sm font-semibold ${activeView === "home" ? "bg-indigo-500/15 text-indigo-300" : "text-zinc-400 hover:bg-zinc-900"}`}>Campaign home</button>
-
-      <button onClick={() => onNavigateView("manager")} className={`flex items-center gap-2 px-6 py-3 text-left text-xs font-semibold ${activeView === "manager" ? "bg-amber-500/10 text-amber-300" : "text-zinc-400 hover:bg-zinc-900"}`}><FolderTree size={15} />Articles & Categories</button>
-
-      <button onClick={() => onNavigateView("assets")} className={`flex items-center gap-2 px-6 py-3 text-left text-xs font-semibold ${activeView === "assets" ? "bg-indigo-500/15 text-indigo-300" : "text-zinc-400 hover:bg-zinc-900"}`}><Images size={15} />Image library</button>
-
-      {/* Primary Navigation Views */}
-      <div className="p-3 border-b border-zinc-800/80 space-y-1">
-        <button
-          onClick={() => onNavigateView("map")}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-            activeView === "map"
-              ? "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30"
-              : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-          }`}
-        >
-          <Compass className="w-4 h-4 text-sky-400" />
-          <span>Interactive Maps</span>
-        </button>
-
-        <button
-          onClick={() => onNavigateView("timeline")}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-            activeView === "timeline"
-              ? "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30"
-              : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-          }`}
-        >
-          <Clock className="w-4 h-4 text-amber-400" />
-          <span>Chronicles & Timelines</span>
-        </button>
-
-        <button
-          onClick={() => onNavigateView("sessions")}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-            activeView === "sessions"
-              ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-              : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-          }`}
-        >
-          <Calendar className="w-4 h-4 text-amber-400" />
-          <span>Sessions</span>
-        </button>
-
-        <button
-          onClick={() => onNavigateView("variables")}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-            activeView === "variables"
-              ? "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30"
-              : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-          }`}
-        >
-          <VariableIcon className="w-4 h-4 text-emerald-400" />
-          <span>Variable Macros</span>
-        </button>
-
-        <button
-          onClick={() => onNavigateView("blocks")}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-            activeView === "blocks"
-              ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-              : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-          }`}
-        >
-          <Sword className="w-4 h-4 text-amber-400" />
-          <span>Bestiary & Spellbook</span>
-        </button>
-
-        <button
-          onClick={() => onNavigateView("gm")}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-            activeView === "gm"
-              ? "bg-red-500/15 text-red-300 border border-red-500/30"
-              : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-          }`}
-        >
-          <ShieldAlert className="w-4 h-4 text-red-400" />
-          <span>{systemProfile(system).gm} Screen & Secrets</span>
-        </button>
-      </div>
-
-      <button type="button" onClick={onOpenSearch} className="mx-3 mt-3 flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:border-indigo-500 hover:text-zinc-100"><Search className="h-3.5 w-3.5" /><span className="flex-1 text-left">Search campaign</span><kbd className="text-[10px]">Ctrl/Cmd K</kbd></button>
-      {/* Article Search Bar */}
-      <div className="p-3 border-b border-zinc-800/80">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-zinc-500" />
-          <input
-            type="text"
-            placeholder="Search articles..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-zinc-900/90 border border-zinc-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
-          />
-        </div>
-      </div>
-
-      <div className="sidebar-lore-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3">
-        <div className="mb-2 flex items-center justify-between px-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500"><span>Campaign Lore</span><span>{articles.length}</span></div>
-        {organizationError && <p role="alert" className="mb-3 rounded border border-red-900/40 p-2 text-xs text-red-300">{organizationError}</p>}
-        <ArticleTree categories={categories} articles={articles} selectedArticleId={activeView === "article" ? selectedArticleId : null} selectedCategoryId={activeView === "manager" ? selectedCategoryId : undefined} onSelectArticle={onSelectArticle} onSelectCategory={onSelectCategory} onMove={onMove} query={searchQuery} disabled={organizationBusy} />
-      </div>
+      {mobile && <div className="shrink-0 px-4 pt-4"><button type="button" onClick={onOpenSearch} aria-label="Search this world" className="flex h-11 w-full items-center gap-3 rounded-lg border border-[#303540] bg-[#181b22] px-3 text-left text-sm text-[#a9afbb] hover:border-violet-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"><Search className="h-4 w-4" /><span>Search this world</span></button></div>}
+      {!mobile && <button type="button" onClick={onOpenSearch} aria-label="Search this world" title="Search this world" className={`group relative mx-3 mt-2 flex min-h-10 items-center gap-3 rounded-lg border border-[#303540] bg-[#181b22] px-3 text-xs text-[#a9afbb] hover:border-violet-500 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${collapsed ? "md:hidden" : ""}`}><Search className="h-4 w-4 shrink-0" /><span>Search this world</span><kbd className="ml-auto text-[10px] text-[#717a89]">⌘ K</kbd></button>}
+      <nav aria-label="Campaign navigation" className={`shrink-0 space-y-1 border-b border-[#303540] px-3 py-4 ${mobile ? "pt-5" : ""} ${collapsed && !mobile ? "md:w-full md:px-2 md:py-3" : ""}`}>
+        <h3 className={`mb-1 px-2 text-[10px] font-bold uppercase tracking-widest text-[#717a89] ${mobile ? "mb-3" : ""} ${collapsed && !mobile ? "md:hidden" : ""}`}>{mobile ? "Destinations" : "Workspace"}</h3>
+        {[
+          ["home", "Home", House], ["manager", "Articles", FolderTree], ["map", "Maps", Map], ["timeline", "Timelines", Clock], ["sessions", "Sessions", Calendar], ["blocks", "Compendium", Sword], ["gm", `${systemProfile(system).gm} tools`, ShieldAlert],
+        ].map(([view, label, Icon]) => {
+          const target = view as Exclude<SidebarProps["activeView"], "editor">;
+          const current = activeView === target || (target === "manager" && (activeView === "article" || activeView === "editor"));
+          return <button key={view as string} type="button" onClick={() => onNavigateView(target)} aria-label={label as string} title={collapsed && !mobile ? label as string : undefined} aria-current={current ? "page" : undefined} className={`${navItemClass(current)} ${mobile ? "min-h-[46px]" : ""} ${collapsed && !mobile ? "md:mx-auto md:h-11 md:min-h-11 md:w-11 md:justify-center md:px-0" : ""}`}>
+            <Icon aria-hidden="true" className={`h-[18px] w-[18px] shrink-0 ${current ? "text-[#9b8cfa]" : "text-[#a9afbb]"}`} />
+            <span className={collapsed && !mobile ? "md:hidden" : ""}>{label as string}</span>
+            {collapsed && !mobile && <span aria-hidden="true" className="pointer-events-none absolute left-full top-1/2 z-40 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-100 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">{label as string}</span>}
+          </button>;
+        })}
+      </nav>
+      {collapsed && !mobile && <button type="button" onClick={onOpenSearch} aria-label="Search this world" title="Search this world" className="group relative mx-2 mt-3 hidden h-11 w-11 items-center justify-center rounded-lg border border-[#303540] bg-[#181b22] text-[#a9afbb] hover:border-violet-500 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 md:flex"><Search className="h-4 w-4" /><span aria-hidden="true" className="pointer-events-none absolute left-full top-1/2 z-40 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-100 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">Search this world</span></button>}
+      <section aria-label="World contents" className={`sidebar-lore-scroll min-h-0 flex-1 overflow-y-auto border-b border-[#303540] p-3 ${collapsed && !mobile ? "md:hidden" : ""}`}>
+        <h3 className="mb-2 px-2 text-[10px] font-bold uppercase tracking-widest text-[#717a89]">World contents <span className="font-normal">· {articles.length}</span></h3>
+        {organizationError && <p role="alert" className="mb-2 rounded border border-red-900/40 p-2 text-xs text-red-300">{organizationError}</p>}
+        <div className="sidebar-lore-scroll max-h-[min(38vh,21rem)] overflow-x-hidden overflow-y-auto"><ArticleTree categories={categories} articles={articles} selectedArticleId={activeView === "article" ? selectedArticleId : null} selectedCategoryId={activeView === "manager" ? selectedCategoryId : undefined} onSelectArticle={onSelectArticle} onSelectCategory={onSelectCategory} onMove={onMove} disabled={organizationBusy} /></div>
+        {mobile && <details className="mt-3 border-t border-[#303540] pt-3">
+          <summary className="cursor-pointer rounded-lg px-2 py-2 text-xs font-semibold text-zinc-300 hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">More tools</summary>
+          <div className="mt-1 space-y-1">{[["assets", "Image library", Images], ["variables", "Variables", VariableIcon]].map(([view, label, Icon]) => <button key={view as string} type="button" onClick={() => onNavigateView(view as "assets" | "variables")} className={navItemClass(activeView === view)}><Icon aria-hidden="true" className={`h-[18px] w-[18px] shrink-0 ${activeView === view ? "text-[#9b8cfa]" : "text-[#a9afbb]"}`} /><span>{label as string}</span></button>)}</div>
+        </details>}
+      </section>
+      <nav aria-label="More workspace tools" className={`shrink-0 space-y-1 px-3 py-3 ${mobile ? "hidden" : ""} ${collapsed && !mobile ? "md:hidden" : ""}`}>
+        {[ ["assets", "Image library", Images], ["variables", "Variables", VariableIcon] ].map(([view, label, Icon]) => {
+          const target = view as "assets" | "variables";
+          const current = activeView === target;
+          return <button key={target} type="button" onClick={() => onNavigateView(target)} aria-current={current ? "page" : undefined} className={navItemClass(current)}><Icon aria-hidden="true" className={`h-[18px] w-[18px] shrink-0 ${current ? "text-[#9b8cfa]" : "text-[#a9afbb]"}`} /><span>{label as string}</span></button>;
+        })}
+      </nav>
+      {collapsed && !mobile && <nav aria-label="More workspace tools" className="hidden shrink-0 space-y-1 border-t border-[#303540] px-2 py-3 md:block">
+        {[["assets", "Image library", Images], ["variables", "Variables", VariableIcon]].map(([view, label, Icon]) => <button key={view as string} type="button" onClick={() => onNavigateView(view as "assets" | "variables")} aria-label={label as string} title={label as string} aria-current={activeView === view ? "page" : undefined} className={`${navItemClass(activeView === view)} group mx-auto h-11 min-h-11 w-11 justify-center px-0`}><Icon aria-hidden="true" className="h-[18px] w-[18px] text-[#a9afbb]" /><span aria-hidden="true" className="pointer-events-none absolute left-full top-1/2 z-40 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-100 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">{label as string}</span></button>)}
+      </nav>}
+      {!mobile && collapsed && <div className="hidden md:block"><button type="button" onClick={() => setShowTemplateModal(true)} aria-label="New article" title="New article" className="group relative mx-2 mt-3 flex h-11 w-11 items-center justify-center rounded-lg bg-[#9b8cfa] text-[#111318] hover:bg-violet-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"><Plus className="h-4 w-4" /><span aria-hidden="true" className="pointer-events-none absolute left-full top-1/2 z-40 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-100 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">New article</span></button></div>}
+      <div className={`mt-auto ${mobile ? "px-4 pb-5 pt-3" : "p-3"} ${collapsed && !mobile ? "md:hidden" : ""}`}><button type="button" onClick={() => setShowTemplateModal(true)} aria-label="New article" className={`flex w-full items-center gap-3 rounded-lg bg-[#9b8cfa] px-4 text-left text-xs font-bold text-[#111318] hover:bg-violet-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 ${mobile ? "h-[50px]" : "h-[34px]"}`}><Plus className="h-[18px] w-[18px]" /><span>New article</span></button></div>
 
       {/* New Article Template Picker Modal */}
       {showTemplateModal && (

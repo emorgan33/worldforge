@@ -15,9 +15,9 @@ your use, and keep backups of your campaign data. See the
 
 ## Screenshots
 
-![Aethelgard public world page](docs/screenshots/world.png)
+![Aethelgard public world page with category navigation and article cards](docs/screenshots/world.png)
 
-![Thronehold article page](docs/screenshots/article.png)
+![Thronehold article page with breadcrumbs, search, and the World contents pane](docs/screenshots/article.png)
 
 Both views come from the optional Aethelgard demo seed.
 
@@ -44,8 +44,11 @@ Both views come from the optional Aethelgard demo seed.
 - **Table access** — world members, per-resource audience policies and grants,
   and an access audit trail.
 - **Interactive maps, timelines and variable macros** (`[prefix:key]`).
-- **Public reader pages** with breadcrumbs, category navigation and scoped
-  search for anonymously published content.
+- **Public and campaign reader pages** with breadcrumbs, expandable category
+  navigation, mobile browsing controls and search scoped to readable articles.
+- **Responsive campaign navigation** with a collapsible desktop sidebar and a
+  mobile navigation drawer. The World contents pane stays scrollable without
+  displaying a scrollbar.
 - **Backup and portability** — per-world export/import and archive/restore/purge.
 - **FoundryVTT import** — selective, preview-first import of PF2e Item exports
   (provisional; see `docs/foundryvtt-integration.md`).
@@ -144,6 +147,7 @@ pull-request expectations.
 
 Design and feature references live in [`docs/`](docs/):
 
+- [WorldForge v0.4.0 release notes](docs/releases/v0.4.0.md)
 - [Feature status and roadmap](docs/feature-improvements.md)
 - [Publishing and permissions](docs/publishing-and-permissions.md)
 - [Article revisions](docs/article-revisions.md)
@@ -154,6 +158,7 @@ Design and feature references live in [`docs/`](docs/):
 - [Campaign rules profiles](docs/rpg-systems.md)
 - [Interactive character sheets](docs/character-sheets.md)
 - [World creation and switcher](docs/world-creation-and-switcher.md)
+- [Reader navigation and discovery](docs/reader-navigation-and-discovery.md)
 - [Backup and restore](docs/backup-restore.md)
 - [FoundryVTT integration](docs/foundryvtt-integration.md)
 

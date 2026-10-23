@@ -25,7 +25,7 @@ Checked items are implemented and verified in this workspace. Unchecked items ar
 - [x] Refine the Pathfinder theme against the supplied pf2e-style reference. [Details](pf2e-style-reference.md)
 - [x] Refine the D&D 2014 theme against Homebrewery, including local PHB fonts and textures. [Details](homebrewery-style-reference.md)
 - [x] Category-specific Pathfinder creature/NPC, hazard, feat, spell and item formatting, with expanded authoring and preview. [Details](pathfinder-statblock-formats.md)
-- [x] Hide the lower-left Campaign Lore scrollbar while retaining scrolling.
+- [x] Add responsive campaign navigation with a collapsible desktop sidebar, mobile drawer, and scrollable World contents pane without a visible scrollbar.
 - [x] Visible category navigation, breadcrumbs and reader search for public worlds and articles. [Details](reader-navigation-and-discovery.md)
 - [x] Owner-scoped author search of article bodies, with filters, pagination and category paths. [Details](search-improvements.md)
 - [x] **Article revision history and recovery** - Server-side article revisions with full content snapshots, restore functionality, concurrent edit detection via versioning, and owner-only access. [Details](article-revisions.md) (Milestone 4 completed October 15, 2026)

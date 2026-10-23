@@ -13,6 +13,7 @@ import { categoryAncestors } from "@/lib/category-tree";
 import { ReaderBreadcrumbs } from "@/components/public/ReaderBreadcrumbs";
 import { ReaderSearch } from "@/components/public/ReaderSearch";
 import { ReaderCategoryTree } from "@/components/public/ReaderCategoryTree";
+import { ReaderMobileBrowse } from "@/components/public/ReaderMobileBrowse";
 
 async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; articleSlug: string }> }) {
   const { worldSlug, articleSlug } = await params; const data = await publicArticle(worldSlug, articleSlug); if (!data) notFound();
@@ -35,6 +36,7 @@ async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; 
         <ReaderSearch worldSlug={world.slug} articles={world.articles} />
       </div>
     </div>
+    <ReaderMobileBrowse categories={world.categories} articles={world.articles} worldSlug={world.slug} currentArticleId={summary.id} readerType="public" />
 
     {data.coverImage && <img src={data.coverImage} alt="" className="h-72 w-full rounded-2xl object-cover" />}
     <header><p className="text-xs uppercase tracking-wider text-amber-400">{summary.template}</p><h1 className="mt-2 font-serif text-4xl">{summary.title}</h1>{summary.excerpt && <p className="mt-3 text-zinc-400">{summary.excerpt}</p>}</header>
@@ -59,9 +61,9 @@ async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; 
 
       <aside className="space-y-6">
         <ArticleQuickFacts template={summary.template as ArticleTemplateType} system={data.system} metadata={data.metadata} blocks={data.blocks} />
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3">
+        <div className="hidden rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3 lg:block">
           <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-400/90">World Contents</h2>
-          <ReaderCategoryTree categories={world.categories} articles={world.articles} worldSlug={world.slug} currentArticleId={summary.id} />
+          <ReaderCategoryTree categories={world.categories} articles={world.articles} worldSlug={world.slug} currentArticleId={summary.id} readerType="public" />
         </div>
       </aside>
     </div>

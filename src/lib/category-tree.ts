@@ -37,6 +37,13 @@ export interface LinkableReaderArticle {
   order?: number;
   categoryId?: string | null;
 }
+export type ReaderType = "public" | "campaign";
+export function readerWorldHref(worldSlug: string, readerType: ReaderType = "public"): string {
+  return `/${readerType === "campaign" ? "c" : "w"}/${worldSlug}`;
+}
+export function readerArticleHref(worldSlug: string, articleSlug: string, readerType: ReaderType = "public"): string {
+  return `${readerWorldHref(worldSlug, readerType)}/a/${articleSlug}`;
+}
 export function searchReaderArticles<T extends { title: string; excerpt?: string | null }>(query: string, articles: T[]): T[] {
   const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return [];

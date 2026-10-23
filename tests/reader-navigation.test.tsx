@@ -2,9 +2,10 @@ import React from "react";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { searchReaderArticles } from "../src/lib/category-tree";
+import { readerArticleHref, readerWorldHref, searchReaderArticles } from "../src/lib/category-tree";
 import { ReaderBreadcrumbs } from "../src/components/public/ReaderBreadcrumbs";
 import { ReaderCategoryTree } from "../src/components/public/ReaderCategoryTree";
+import { ReaderMobileBrowse } from "../src/components/public/ReaderMobileBrowse";
 import { ReaderSearch } from "../src/components/public/ReaderSearch";
 
 const publicArticles = [
@@ -83,8 +84,57 @@ test("ReaderCategoryTree renders nested hierarchy and root articles", () => {
   assert(html.includes('href="/w/elmsworth/a/gate-of-dawn"'));
   assert(html.includes('href="/w/elmsworth/a/dawn-knights"'));
   assert(html.includes('href="/w/elmsworth/a/wandering-bard"'));
+  assert(html.includes('href="/w/elmsworth"'));
+  assert(html.includes("World home"));
+  assert(html.includes("Articles"));
   // Active article has aria-current="page"
   assert(html.includes('aria-current="page"'));
+});
+
+test("campaign reader tree uses campaign links and marks the home location", () => {
+  const html = renderToStaticMarkup(
+    <ReaderCategoryTree
+      categories={publicCategories}
+      articles={publicArticles}
+      worldSlug="elmsworth"
+      readerType="campaign"
+      currentPage="home"
+    />
+  );
+
+  assert(html.includes('href="/c/elmsworth" aria-current="page"'));
+  assert(html.includes('href="/c/elmsworth/a/gate-of-dawn"'));
+  assert(html.includes('href="/c/elmsworth/a/dawn-knights"'));
+  assert(!html.includes('href="/w/elmsworth'));
+});
+
+test("mobile browse disclosure exposes campaign navigation without duplicate section IDs", () => {
+  const html = renderToStaticMarkup(
+    <>
+      <ReaderMobileBrowse
+        categories={publicCategories}
+        articles={publicArticles}
+        worldSlug="elmsworth"
+        currentArticleId="art-2"
+        readerType="campaign"
+      />
+      <ReaderCategoryTree
+        categories={publicCategories}
+        articles={publicArticles}
+        worldSlug="elmsworth"
+        currentArticleId="art-2"
+        readerType="campaign"
+      />
+    </>
+  );
+  const articleHeadingIds = [...html.matchAll(/id="([^"]+)"/g)].map(match => match[1]);
+
+  assert(html.includes("<details"));
+  assert(html.includes("<summary"));
+  assert(html.includes("Browse articles"));
+  assert(html.includes('href="/c/elmsworth/a/dawn-knights"'));
+  assert(articleHeadingIds.length >= 2);
+  assert.equal(new Set(articleHeadingIds).size, articleHeadingIds.length);
 });
 
 test("ReaderSearch renders accessible input and search controls", () => {
@@ -92,4 +142,11 @@ test("ReaderSearch renders accessible input and search controls", () => {
   assert(html.includes('aria-label="Search public articles"'));
   assert(html.includes('type="search"'));
   assert(html.includes('placeholder="Search public articles…"'));
+  assert.equal(readerArticleHref("elmsworth", "gate-of-dawn"), "/w/elmsworth/a/gate-of-dawn");
+
+  const campaignHtml = renderToStaticMarkup(<ReaderSearch worldSlug="elmsworth" articles={publicArticles} readerType="campaign" />);
+  assert(campaignHtml.includes('aria-label="Search articles"'));
+  assert(campaignHtml.includes('placeholder="Search articles…"'));
+  assert.equal(readerArticleHref("elmsworth", "gate-of-dawn", "campaign"), "/c/elmsworth/a/gate-of-dawn");
+  assert.equal(readerWorldHref("elmsworth", "campaign"), "/c/elmsworth");
 });

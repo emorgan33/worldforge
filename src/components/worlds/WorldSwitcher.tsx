@@ -5,11 +5,14 @@ import type { WorldSummary } from "@/components/WorldHome";
 import { RPG_SYSTEMS } from "@/lib/rpg";
 import { WorldManagement } from "@/components/worlds/WorldManagement";
 
-export function WorldSwitcher({ worlds, currentWorldId, actorId, disabled = false, onSelect, onNewWorld, onRefresh, onManage, onBeforeManageAction }: {
+export function WorldSwitcher({ worlds, currentWorldId, actorId, disabled = false, compact = false, brand = false, mobileCard = false, onSelect, onNewWorld, onRefresh, onManage, onBeforeManageAction }: {
   worlds: WorldSummary[];
   currentWorldId: string | null;
   actorId: string | null;
   disabled?: boolean;
+  compact?: boolean;
+  brand?: boolean;
+  mobileCard?: boolean;
   onSelect: (id: string) => void;
   onNewWorld: () => void;
   onRefresh?: () => Promise<void> | void;
@@ -48,8 +51,16 @@ export function WorldSwitcher({ worlds, currentWorldId, actorId, disabled = fals
   }
 
   return <div ref={root} className="relative">
-    <button ref={trigger} type="button" disabled={disabled} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(value => !value)} className="flex max-w-full items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-left text-sm text-zinc-100 hover:border-amber-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500 disabled:opacity-50">
+    <button ref={trigger} type="button" disabled={disabled} aria-label={compact || brand || mobileCard ? `Switch world${current ? `, current world ${current.title}` : ""}` : undefined} title={compact ? "Switch world" : undefined} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(value => !value)} className={`flex max-w-full items-center gap-2 rounded-lg text-left text-sm text-zinc-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-300 disabled:opacity-50 ${compact ? "h-10 w-10 justify-center border border-[#303540] bg-[#181b22] p-0" : brand ? "w-full gap-3 border-0 bg-transparent p-0 hover:bg-transparent" : mobileCard ? "h-[50px] w-full gap-3 border border-[#303540] bg-[#1d212a] px-3 py-2 hover:border-violet-500" : "border border-zinc-700 bg-zinc-900 px-3 py-2 hover:border-amber-700"}`}>
+      {compact ? <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-[#2b2850] text-base font-bold text-[#9b8cfa]">W</span> : brand ? <>
+        <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-[#2b2850] text-[19px] font-bold text-[#9b8cfa]">W</span>
+        <span className="min-w-0 text-left"><span className="block text-[11px] font-bold tracking-wide text-[#f1f2f5]">WORLDFORGE</span><span className="block truncate text-[10px] font-semibold tracking-wide text-[#717a89]">{current?.title ?? "Choose a world"}</span></span>
+      </> : mobileCard ? <>
+        <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#2b2850] text-[15px] font-bold text-[#9b8cfa]">W</span>
+        <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{current?.title ?? "Choose a world"}</span>{current && <span className="block truncate text-[10px] text-zinc-400">{RPG_SYSTEMS.find(option => option.id === current.system)?.short ?? current.system} · Switch world</span>}</span><span aria-hidden="true" className="text-zinc-400">▾</span>
+      </> : <>
       <span className="min-w-0"><span className="block truncate font-semibold">{current?.title ?? "Choose a world"}</span>{current && <span className="block text-xs text-zinc-400">{RPG_SYSTEMS.find(option => option.id === current.system)?.short ?? current.system}</span>}</span><span aria-hidden="true" className="text-zinc-400">▾</span>
+      </>}
     </button>
     {open && <div role="listbox" aria-label="Your worlds" onKeyDown={onListKeyDown} className="absolute left-0 top-full z-50 mt-2 max-h-[min(70vh,32rem)] w-[min(22rem,90vw)] overflow-auto rounded-xl border border-zinc-700 bg-zinc-950 p-2 text-zinc-100 shadow-2xl">
       {worlds.length > 5 && <label className="block px-2 pb-2 text-xs text-zinc-400">Search worlds<input ref={search} type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Find a world" className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-amber-500 focus:outline-none" /></label>}

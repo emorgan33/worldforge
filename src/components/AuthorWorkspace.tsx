@@ -25,7 +25,7 @@ import { VariableManager } from "@/components/variables/VariableManager";
 import { GmNotebook } from "@/components/campaign/GmNotebook";
 import { ShareResource } from "@/components/campaign/ShareResource";
 import { ArticleDetail, ArticleListItem, ArticleTemplateType, VariableCollectionItem } from "@/types";
-import { Globe } from "lucide-react";
+import { Globe, LogOut, Menu, Users, X } from "lucide-react";
 
 export default function WorldForgeApp() {
   const router = useRouter();
@@ -33,6 +33,12 @@ export default function WorldForgeApp() {
   const searchParams = useSearchParams();
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const mobileNavigationTrigger = useRef<HTMLButtonElement>(null);
+  const closeMobileNavigation = () => {
+    setMobileNavigationOpen(false);
+    requestAnimationFrame(() => mobileNavigationTrigger.current?.focus());
+  };
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [actorId, setActorId] = useState<string | null>(null);
   const [worlds, setWorlds] = useState<WorldSummary[]>([]);
   const [world, setWorld] = useState<WorldSummary | null>(null);
@@ -54,6 +60,30 @@ export default function WorldForgeApp() {
   const [compendiumCategory, setCompendiumCategory] = useState<BlockCategory | undefined>();
   const [compendiumSession, setCompendiumSession] = useState(0);
   const [focusBlockId, setFocusBlockId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!mobileNavigationOpen) return;
+    const closeButton = document.querySelector<HTMLButtonElement>("#campaign-navigation button[aria-label='Close campaign navigation']:not([tabindex='-1'])");
+    closeButton?.focus();
+    const getFocusable = () => [...(document.querySelectorAll<HTMLElement>("#campaign-navigation button:not([disabled]), #campaign-navigation a[href], #campaign-navigation input:not([disabled]), #campaign-navigation summary"))].filter(element => element.getClientRects().length > 0);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileNavigationOpen(false);
+        requestAnimationFrame(() => mobileNavigationTrigger.current?.focus());
+        return;
+      }
+      if (event.key === "Tab") {
+        const focusable = getFocusable();
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mobileNavigationOpen]);
 
   const [activeView, setActiveView] = useState<
     "home" | "article" | "editor" | "map" | "timeline" | "variables" | "gm" | "blocks" | "manager" | "assets" | "sessions"
@@ -533,21 +563,23 @@ export default function WorldForgeApp() {
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [editorDirty]);
 
-  const handleSelectArticle = (id: string) => {
-    if (!canNavigate()) return;
+  const handleSelectArticle = (id: string): boolean => {
+    if (!canNavigate()) return false;
     clearConfirmedLeave();
     setSelectedArticleId(id);
     setActiveView("article");
+    return true;
   };
 
-  const handleNewArticle = (template: ArticleTemplateType = "GENERIC", categoryId: string | null = null) => {
-    if (!canNavigate()) return;
+  const handleNewArticle = (template: ArticleTemplateType = "GENERIC", categoryId: string | null = null): boolean => {
+    if (!canNavigate()) return false;
     clearConfirmedLeave();
     setEditorCategoryId(categoryId);
     setSelectedArticleId(null);
     setEditorInitialTemplate(template);
     setCurrentArticle(null);
     setActiveView("editor");
+    return true;
   };
 
   const handleSaveArticle = async (articleData: ArticleSaveInput, options?: { autosave?: boolean; articleId?: string }) => {
@@ -681,7 +713,7 @@ export default function WorldForgeApp() {
   };
   const handleTreeMove = (move: TreeMove) => organize("PATCH", { action: move.kind === "category" ? "moveCategory" : "moveArticle", id: move.id, parentId: move.parentId, beforeId: move.beforeId ?? null });
   const handleCategoryAction = (action: CategoryAction) => organize(action.action === "create" ? "POST" : action.action === "delete" ? "DELETE" : "PATCH", action);
-  const selectCategory = (id: string | null) => { if (!canNavigate()) return; clearConfirmedLeave(); setSelectedCategoryId(id); setActiveView("manager"); };
+  const selectCategory = (id: string | null): boolean => { if (!canNavigate()) return false; clearConfirmedLeave(); setSelectedCategoryId(id); setActiveView("manager"); return true; };
 
   const handleSaveBlock = async (input: BlockInput) => {
     const writeWorldId = worldIdRef.current;
@@ -734,12 +766,13 @@ export default function WorldForgeApp() {
     }
   };
 
-  const openCompendium = (category?: BlockCategory) => {
-    if (!canNavigate()) return;
+  const openCompendium = (category?: BlockCategory): boolean => {
+    if (!canNavigate()) return false;
     clearConfirmedLeave();
     setCompendiumCategory(category);
     setCompendiumSession(previous => previous + 1);
     setActiveView("blocks");
+    return true;
   };
 
   const handleChangeSystem = (system: string) => runWrite("campaign system save", async () => {
@@ -767,6 +800,10 @@ export default function WorldForgeApp() {
 
   const isTransitioning = isLoading && !!world;
   const savesPaused = isTransitioning || [...guards].some(([id, registration]) => id.startsWith("world-management:") && registration.busy);
+  const mobileViewLabel = activeView === "home" ? "Campaign home"
+    : activeView === "article" ? currentArticle?.title || "Article"
+      : activeView === "editor" ? "Edit article"
+        : ({ map: "Interactive maps", timeline: "Chronicles & timelines", variables: "Variable macros", gm: "GM screen & secrets", blocks: "Bestiary & spellbook", manager: "Articles & categories", assets: "Image library", sessions: "Sessions" } as const)[activeView];
   if (isLoading && !world) {
     // First load (nothing mounted yet): full-screen loader.
     return (
@@ -792,11 +829,18 @@ export default function WorldForgeApp() {
         { id: "new-article", title: "New article", description: "Create an article", run: () => handleNewArticle() },
         ...([ ["home", "Campaign home"], ["manager", "Articles & Categories"], ["assets", "Image library"], ["blocks", "RPG compendium"], ["map", "Maps"], ["timeline", "Timelines"], ["sessions", "Sessions"], ["variables", "Variables"], ["gm", "GM Screen & Secrets"] ] as const).filter(([view]) => (view !== "map" || maps.length > 0) && (view !== "timeline" || timelines.length > 0)).map(([view, title]): SearchCommand => ({ id: `tool-${view}`, title, description: "Workspace tool", run: () => { if (view === "blocks") openCompendium(); else if (canNavigate()) { clearConfirmedLeave(); setActiveView(view); } } })),
       ]} />
-      {/* WorldForge Sidebar */}
-      <button type="button" aria-label="Campaign menu" aria-expanded={mobileNavigationOpen} aria-controls="campaign-navigation" className="fixed left-4 top-3 z-50 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs text-zinc-300 md:hidden" onClick={() => setMobileNavigationOpen(open => !open)}>{mobileNavigationOpen ? "Close" : "Menu"}</button>
-      <button type="button" className="fixed right-28 top-3 z-50 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs text-zinc-300 hover:border-zinc-500" onClick={() => { if (!canNavigate()) return; clearConfirmedLeave(); router.push("/player"); }}>Player view</button>
-      <button type="button" className="fixed right-5 top-3 z-50 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs text-zinc-300" onClick={async () => { if (!canNavigate()) return; clearConfirmedLeave(); const response = await fetch("/api/auth/logout", { method: "POST" }); if (response.ok) { router.replace("/login"); router.refresh(); } }}>Sign out</button>
-      <div id="campaign-navigation" className={`${mobileNavigationOpen ? "block" : "hidden"} h-full w-full shrink-0 pt-14 md:block md:w-80 md:pt-0`}>
+      {/* Mobile shell controls stay above either the navigation or workspace. */}
+      <header inert={mobileNavigationOpen || undefined} className={`fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-zinc-800 bg-zinc-950/95 px-3 backdrop-blur md:z-50 md:h-16 md:justify-end md:px-5 ${sidebarCollapsed ? "md:left-[68px]" : "md:left-[280px]"}`}>
+        <button ref={mobileNavigationTrigger} type="button" aria-label={mobileNavigationOpen ? "Close campaign navigation" : "Open campaign navigation"} aria-expanded={mobileNavigationOpen} aria-controls="campaign-navigation" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 md:hidden" onClick={() => setMobileNavigationOpen(open => !open)}>
+          {mobileNavigationOpen ? <X aria-hidden="true" className="h-5 w-5" /> : <Menu aria-hidden="true" className="h-5 w-5" />}
+        </button>
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-200 md:hidden" aria-live="polite">{mobileNavigationOpen ? "Campaign navigation" : mobileViewLabel}</p>
+        <button type="button" aria-label="Player view" title="Player view" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 md:h-10 md:w-auto md:px-3" onClick={() => { if (!canNavigate()) return; clearConfirmedLeave(); router.push("/player"); }}><Users aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Player view</span></button>
+        <button type="button" aria-label="Sign out" title="Sign out" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 md:h-10 md:w-auto md:px-3" onClick={async () => { if (!canNavigate()) return; clearConfirmedLeave(); const response = await fetch("/api/auth/logout", { method: "POST" }); if (response.ok) { router.replace("/login"); router.refresh(); } }}><LogOut aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Sign out</span></button>
+      </header>
+      <div id="campaign-navigation" className={`${mobileNavigationOpen ? "fixed inset-0 z-[60] block md:static md:z-auto" : "hidden md:block"} h-full w-full shrink-0 ${sidebarCollapsed ? "md:w-[68px]" : "md:w-[280px]"}`}>
+      {mobileNavigationOpen && <button type="button" aria-hidden="true" tabIndex={-1} className="absolute inset-0 bg-black/70 md:hidden" onClick={closeMobileNavigation} />}
+      <div className={`relative z-10 h-full ${mobileNavigationOpen ? "w-[min(332px,calc(100vw-58px))]" : "w-full"}`}>
       <Sidebar
         onOpenSearch={() => { setMobileNavigationOpen(false); setSearchOpen(true); }}
         worldTitle={world?.title || "WorldForge"}
@@ -804,29 +848,34 @@ export default function WorldForgeApp() {
         articles={articles}
         categories={world?.categories || []}
         selectedCategoryId={selectedCategoryId}
-        onSelectCategory={id => { setMobileNavigationOpen(false); selectCategory(id); }}
+        onSelectCategory={id => { if (selectCategory(id)) closeMobileNavigation(); }}
         onMove={handleTreeMove}
         organizationBusy={organizationBusy || activeView === "editor" || (isLoading && !!world)}
         organizationError={organizationError}
         activeView={activeView}
         selectedArticleId={selectedArticleId}
-        onSelectArticle={id => { setMobileNavigationOpen(false); handleSelectArticle(id); }}
-        onNavigateView={(view) => { setMobileNavigationOpen(false); if (view === "blocks") openCompendium(); else if (canNavigate()) { clearConfirmedLeave(); setActiveView(view); } }}
-        onNewArticle={template => { setMobileNavigationOpen(false); handleNewArticle(template); }}
+        onSelectArticle={id => { if (handleSelectArticle(id)) closeMobileNavigation(); }}
+        onNavigateView={(view) => { const accepted = view === "blocks" ? openCompendium() : canNavigate(); if (view !== "blocks" && accepted) { clearConfirmedLeave(); setActiveView(view); } if (accepted) closeMobileNavigation(); }}
+        onNewArticle={template => { if (handleNewArticle(template)) closeMobileNavigation(); }}
         worlds={worlds}
         currentWorldId={world?.id ?? null}
         worldSwitchDisabled={(isLoading && !world) || creationBusy}
-        onSelectWorld={id => { setMobileNavigationOpen(false); requestWorldSwitch(id); }}
+        onSelectWorld={id => { void requestWorldSwitch(id).then(accepted => { if (accepted) closeMobileNavigation(); }); }}
         onNewWorld={() => { setMobileNavigationOpen(false); openNewWorld(); }}
         onRefreshWorlds={refreshWorlds}
         actorId={actorId}
         onBeforeManageAction={beforeWorldManagementAction}
         onManageWorld={completeWorldManagementAction}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed(value => !value)}
+        mobile={mobileNavigationOpen}
+        onCloseMobile={closeMobileNavigation}
       />
+      </div>
       </div>
 
       {/* Main Content Workspace */}
-      <main className={`${mobileNavigationOpen ? "hidden" : "block"} mt-14 h-[calc(100dvh-3.5rem)] min-w-0 flex-1 overflow-y-auto bg-zinc-950 p-4 md:block md:p-8 lg:p-10`}>
+      <main inert={mobileNavigationOpen || isTransitioning || undefined} aria-hidden={mobileNavigationOpen || undefined} className="mt-14 h-[calc(100dvh-3.5rem)] min-w-0 flex-1 overflow-y-auto bg-zinc-950 p-4 md:mt-16 md:h-[calc(100dvh-4rem)] md:p-8 lg:p-10">
         <div className="max-w-6xl mx-auto">
           {worldUnavailable && <section aria-live="polite" className="mb-6 rounded-xl border border-amber-800 bg-amber-950/30 p-6">
             <h2 className="text-lg font-semibold text-amber-200">This world isn’t available</h2>

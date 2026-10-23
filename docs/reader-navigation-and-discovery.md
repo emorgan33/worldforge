@@ -1,47 +1,34 @@
 # Reader navigation and discovery
 
-WorldForge public readers now provide visible category tree navigation, breadcrumb trails and client-side reader search scoped exclusively to published, public articles.
+Public readers and authenticated campaign readers share a category tree, breadcrumbs on article pages, and an in-world search. The public routes are `/w/[worldSlug]` and `/w/[worldSlug]/a/[articleSlug]`; campaign readers use `/c/[worldSlug]` and `/c/[worldSlug]/a/[articleSlug]`.
 
-## Public reader capabilities
+## Browse and navigate
 
-1. **Category navigation & lore hierarchy:**
-   - Both the public world homepage (`/w/[worldSlug]`) and public article view (`/w/[worldSlug]/a/[articleSlug]`) display the world's published category hierarchy.
-   - Sibling categories and articles respect established author order (`sortOrdered`).
-   - Categories can be expanded and collapsed, maintaining clean layout across both desktop and narrow/mobile viewports.
-   - The active article is indicated with `aria-current="page"` and highlighted styling.
+- On wide screens, the world page shows a category tree beside the article cards. Article pages show a **World contents** pane alongside the article details.
+- On narrow screens, **Browse articles** opens the same tree in a compact disclosure control above the page content.
+- The tree links to the world home and articles, follows category/article order, and lets readers expand or collapse category branches. The current page is marked with `aria-current="page"`.
+- Article breadcrumbs show the world, the current article's category ancestors, and the article title.
+- The author workspace has its own responsive navigation: a collapsible sidebar on desktop and a drawer on mobile. Its World contents section remains scrollable while hiding the scrollbar.
 
-2. **Breadcrumb trails:**
-   - The public article view features an accessible `ReaderBreadcrumbs` component (`aria-label="Breadcrumb"`).
-   - Breadcrumbs show the lineage from world root through any parent categories down to the current article title.
+## Search and access boundaries
 
-3. **Reader search:**
-   - The `ReaderSearch` component provides fast, real-time search across titles and excerpts for published public articles in the active world.
-   - Exact and prefix title matches are prioritized, followed by excerpt and keyword matches.
-   - Clear button and empty states provide intuitive feedback.
+Reader search is client-side and matches all query terms against article titles and excerpts. Results prioritize titles that start with the complete query, then sort alphabetically. It does not search article bodies.
 
-4. **Strict permission separation:**
-   - `publicWorld` and `publicArticle` query filters only select published, public articles (`publicationStatus: "PUBLISHED"`, `visibility: "PUBLIC"`).
-   - Private article titles, drafts, WIPs, secret notes and unapproved media are never delivered to reader search or category navigation payloads.
+Public routes receive only published, public articles and their categories. Campaign routes use `readableWhere()` and retain only category paths needed to locate readable articles. Keep the public and campaign projections separate: private titles, drafts, secret notes, and category names unrelated to readable campaign content must not appear in reader trees, breadcrumbs, or search results.
 
-## Verification
+## Implementation and verification
 
-- Automated unit and regression tests in `tests/reader-navigation.test.tsx` verify:
-  - `searchReaderArticles` title/prefix/excerpt scoring and empty handling.
-  - `ReaderBreadcrumbs` markup, lineage ordering and accessible attributes.
-  - `ReaderCategoryTree` hierarchy rendering, root items and active selection.
-  - `ReaderSearch` accessibility and input semantics.
-- All 56 test suite cases pass cleanly with zero skipped tests.
-- TypeScript (`tsc --noEmit`) and ESLint checks pass with zero errors in public reader paths.
+- Shared reader tree, compact browse control, and search: `src/components/public/ReaderCategoryTree.tsx`, `ReaderMobileBrowse.tsx`, and `ReaderSearch.tsx`.
+- Ordering and route helpers: `src/lib/category-tree.ts`.
+- Public reader data: `src/lib/public-world.ts` and `src/app/w/[worldSlug]/`.
+- Campaign reader data: `src/app/c/[worldSlug]/`.
+- Author workspace navigation: `src/components/AuthorWorkspace.tsx` and `src/components/Sidebar.tsx`.
+- Focused regressions: `tests/reader-navigation.test.tsx`.
 
+Run the focused reader checks with:
 
-## Player reader pages
+```bash
+node --import tsx --test tests/reader-navigation.test.tsx
+```
 
-Authenticated players access the campaign through the `/c/[worldSlug]` route, separate from the anonymous `/w/...` public surface. The player reader:
-
-- Resolves the actor (supports PREVIEW mode for GM testing)
-- Uses `requireReadableResource()` to filter articles by audience policy
-- Renders only policy-allowed content with no GM callouts or private links
-- Shows a preview banner when viewing as a player through the GM preview system
-- Provides a simplified PlayerSidebar with filtered article tree and search
-
-Player search at `/api/c/[worldSlug]/search` returns only policy-filtered results.
+The server-backed campaign reader checks depend on the integration-test database setup documented by the relevant tests. Do not use the demo seed against a configured user database to prepare screenshots; see the screenshot guidance in `AGENTS.md`.

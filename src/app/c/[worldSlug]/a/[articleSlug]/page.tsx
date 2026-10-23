@@ -12,12 +12,11 @@ import { publicImage } from "@/lib/public-content";
 import { PublicRichText } from "@/components/public/PublicRichText";
 import { ReaderBreadcrumbs } from "@/components/public/ReaderBreadcrumbs";
 import { ReaderCategoryTree } from "@/components/public/ReaderCategoryTree";
-import { ReaderSearch } from "@/components/public/ReaderSearch";
+import { ReaderMobileBrowse } from "@/components/public/ReaderMobileBrowse";
 import { ArticleQuickFacts } from "@/components/article/ArticleQuickFacts";
 import { CharacterSheet } from "@/components/article/CharacterSheet";
 import { isCharacterSystem, readerCharacterRows } from "@/lib/character-sheet";
 import { getArticleTemplate } from "@/lib/templates";
-import { systemProfile } from "@/lib/rpg";
 import { BookOpen, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import type { ArticleTemplateType } from "@/types";
@@ -36,7 +35,6 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
 
   // Check access: owner gets redirected, anonymous gets notFound
   if (actor.userId === null) notFound();
-  const isOwner = actor.userId === world.ownerId;
 
   // Find article by slug
   const article = await prisma.article.findFirst({
@@ -144,6 +142,7 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
           <ReaderBreadcrumbs items={breadcrumbs} />
           {!isPreview && <Link href="/player" className="text-sm text-indigo-300 hover:underline">Your worlds</Link>}
         </div>
+        <ReaderMobileBrowse categories={categories} articles={worldArticles} worldSlug={world.slug} currentArticleId={article.id} readerType="campaign" />
 
         {coverImage && <img src={coverImage} alt="" className="h-72 w-full rounded-2xl object-cover" />}
         <header>
@@ -172,9 +171,9 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
 
           <aside className="space-y-6">
             <ArticleQuickFacts template={article.template as ArticleTemplateType} system={system} metadata={metadata} blocks={blocks} />
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3">
+            <div className="hidden rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3 lg:block">
               <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-400/90">World Contents</h2>
-              <ReaderCategoryTree categories={categories} articles={worldArticles} worldSlug={world.slug} currentArticleId={article.id} />
+              <ReaderCategoryTree categories={categories} articles={worldArticles} worldSlug={world.slug} currentArticleId={article.id} readerType="campaign" />
             </div>
           </aside>
         </div>

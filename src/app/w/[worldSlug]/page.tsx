@@ -6,6 +6,7 @@ import { publicWorld } from "@/lib/public-world";
 import { systemProfile } from "@/lib/rpg";
 import { ReaderSearch } from "@/components/public/ReaderSearch";
 import { ReaderCategoryTree } from "@/components/public/ReaderCategoryTree";
+import { ReaderMobileBrowse } from "@/components/public/ReaderMobileBrowse";
 
 async function WorldReader({ params }: { params: Promise<{ worldSlug: string }> }) {
   const { worldSlug } = await params; const world = await publicWorld(worldSlug); if (!world) notFound();
@@ -21,12 +22,13 @@ async function WorldReader({ params }: { params: Promise<{ worldSlug: string }> 
       <h2 id="public-search-heading" className="sr-only">Search public articles</h2>
       <ReaderSearch worldSlug={world.slug} articles={world.articles} />
     </section>
+    <ReaderMobileBrowse categories={world.categories} articles={world.articles} worldSlug={world.slug} readerType="public" currentPage="home" />
 
     <div className="grid gap-10 lg:grid-cols-[280px_1fr] pt-4 border-t border-zinc-800">
-      <aside aria-label="Campaign lore categories" className="space-y-4">
+      <aside aria-label="Campaign lore categories" className="hidden space-y-4 lg:block">
         <h2 className="text-sm font-bold uppercase tracking-wider text-amber-400/90">Categories & Lore</h2>
         <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3">
-          <ReaderCategoryTree categories={world.categories} articles={world.articles} worldSlug={world.slug} />
+          <ReaderCategoryTree categories={world.categories} articles={world.articles} worldSlug={world.slug} readerType="public" currentPage="home" />
         </div>
       </aside>
 
