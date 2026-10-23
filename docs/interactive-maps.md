@@ -68,4 +68,14 @@ Run the focused checks with:
 node --import tsx --test tests/interactive-map.test.tsx tests/world-export-roundtrip.test.tsx
 ```
 
-The component test renders the empty state and a populated map and asserts the available tools. The export test round-trips a label annotation and verifies layer remapping. The broader suite uses `pnpm test` against an isolated database and asset directory; see [CONTRIBUTING.md](../CONTRIBUTING.md).
+The component test renders the empty state and populated maps, asserts the available tools, and checks that drawings render while eraser strokes and hidden layers stay out of the SVG hit targets. The export test round-trips a label annotation and verifies layer remapping.
+
+The server-backed element checks require the isolated test instance described in [CONTRIBUTING.md](../CONTRIBUTING.md):
+
+```sh
+DATABASE_URL=file:/tmp/worldforge-maps.db \
+WORLDFORGE_TEST_ORIGIN=http://127.0.0.1:3131 \
+node --import tsx --test tests/map-elements-api.test.ts
+```
+
+They create a world, map, and layers through the API; exercise every annotation kind including `RECT` and an erase stroke; verify invalid geometry, unknown kinds, short paths, and cross-map layers are rejected; check updates, deletion, layer-removal nulling, and that another owner cannot read or mutate the map. The broader suite uses `pnpm test` against an isolated database and asset directory.

@@ -31,7 +31,7 @@ The **Interactive maps** author view is a GM cartography editor with maps, layer
 
 Store annotation geometry as percentage JSON and keep the `MapElement` kinds (`LABEL`, `LINE`, `CIRCLE`, `RECT`, `PATH`) and eraser style (`{ "erase": true }`) consistent across the editor, API validation, rendering, and world export/import. Drawings render in chronological order on a canvas: ink uses `source-over` and eraser strokes use `destination-out`. Preserve layer visibility filtering and the rule that unlayered pins/annotations always show. Maps are currently author-only; do not describe them as reader-facing until a reader projection exists.
 
-The focused checks are `tests/interactive-map.test.tsx` (component rendering and tools) and `tests/world-export-roundtrip.test.tsx` (annotation export/import and layer remapping). See `docs/interactive-maps.md` for commands and the isolated-database test setup.
+The focused checks are `tests/interactive-map.test.tsx` (component rendering and tools), `tests/map-elements-api.test.ts` (annotation CRUD, validation, ownership, and layer behavior), and `tests/world-export-roundtrip.test.tsx` (annotation export/import and layer remapping). See `docs/interactive-maps.md` for commands and the isolated-database test setup.
 
 ## Interactive character sheets
 

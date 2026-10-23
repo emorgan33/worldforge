@@ -299,10 +299,10 @@ async function postHandler(req: NextRequest) {
   try {
     const body = await readBody(req);
     switch (body.action) {
-      case "createMap": return createMap(body);
-      case "createLayer": return createLayer(body);
-      case "createMarker": return createMarker(body);
-      case "createElement": return createElement(body);
+      case "createMap": return await createMap(body);
+      case "createLayer": return await createLayer(body);
+      case "createMarker": return await createMarker(body);
+      case "createElement": return await createElement(body);
       default: throw new MapError("Choose a supported map action.");
     }
   } catch (error) { return failure(error); }
@@ -312,11 +312,11 @@ async function patchHandler(req: NextRequest) {
   try {
     const body = await readBody(req);
     switch (body.action) {
-      case "updateMap": return updateMap(body);
-      case "updateLayer": return updateLayer(body);
-      case "reorderLayer": return reorderLayer(body);
-      case "updateMarker": return updateMarker(body);
-      case "updateElement": return updateElement(body);
+      case "updateMap": return await updateMap(body);
+      case "updateLayer": return await updateLayer(body);
+      case "reorderLayer": return await reorderLayer(body);
+      case "updateMarker": return await updateMarker(body);
+      case "updateElement": return await updateElement(body);
       default: throw new MapError("Choose a supported map action.");
     }
   } catch (error) { return failure(error); }
