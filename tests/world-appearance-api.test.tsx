@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import sharp from "sharp";
-import { authorFetch } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
 import { DEFAULT_APPEARANCE } from "../src/lib/world-appearance";
 import { removeAssetFile } from "../src/lib/asset-storage";
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
+if (origin) assertIsolatedTestEnvironment();
 test("world appearance validates ownership, persists across ordinary edits and grants/revokes background assets", { skip: !origin }, async context => {
   const db = new PrismaClient();
   const owner = await db.user.create({ data: { name: "Appearance fixture", email: `appearance-${Date.now()}@example.invalid` } });

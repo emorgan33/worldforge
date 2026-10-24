@@ -1,10 +1,11 @@
-import { authorFetch } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
+if (origin) assertIsolatedTestEnvironment();
 
 test("placement descriptions persist, clone, restore and validate", { skip: !origin }, async context => {
   assert.match(origin!, /^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/);

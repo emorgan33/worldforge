@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
+if (origin) assertIsolatedTestEnvironment();
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 test("map elements validate, persist, update, delete and stay owner-scoped", { skip: !origin }, async context => {

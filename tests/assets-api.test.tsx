@@ -1,8 +1,9 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert";
 import { PrismaClient } from "@prisma/client";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { writeAsset, removeAssetFile } from "../src/lib/asset-storage";
+import { authorFetch as authenticatedAuthorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
 
 const db = new PrismaClient();
 const origin = process.env.WORLDFORGE_TEST_ORIGIN!;
@@ -13,54 +14,48 @@ let stamp: number;
 let testAssetId: string;
 
 before(async () => {
+  if (!origin) return;
+  assertIsolatedTestEnvironment();
   stamp = Date.now();
   user = await db.user.create({ data: { name: `Asset fixture ${stamp}`, email: `asset-${stamp}@example.invalid` } });
   world = await db.world.create({ data: { ownerId: user.id, title: "Asset world", slug: `asset-${Date.now()}` } });
   testAssetId = randomUUID();
-  try {
-    const res = await fetch("https://picsum.photos/100/100");
-    const buffer = Buffer.from(await res.arrayBuffer());
-    await writeAsset(testAssetId, buffer);
-    await db.imageAsset.create({ data: { id: testAssetId, worldId: world.id, title: "Test Asset", originalName: "test.webp", alt: "", width: 100, height: 100, byteSize: buffer.length, sha256: "test123" } });
-  } catch { console.log("SKIP: could not create test asset"); }
+  const buffer = Buffer.from("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJaQAA3AA/v89WAAAAA==", "base64");
+  await writeAsset(testAssetId, buffer);
+  await db.imageAsset.create({ data: { id: testAssetId, worldId: world.id, title: "Test Asset", originalName: "test.webp", alt: "", width: 1, height: 1, byteSize: buffer.length, sha256: createHash("sha256").update(buffer).digest("hex") } });
 });
 
 after(async () => {
-  await removeAssetFile(testAssetId).catch(() => {});
-  await db.world.deleteMany({ where: { id: world.id } });
-  await db.user.deleteMany({ where: { id: user.id } });
+  if (testAssetId) await removeAssetFile(testAssetId).catch(() => {});
+  if (world?.id) await db.world.deleteMany({ where: { id: world.id } });
+  if (user?.id) await db.user.deleteMany({ where: { id: user.id } });
   await db.$disconnect();
 });
 
 async function authorFetch(userId: string, origin: string, path: string, options?: RequestInit) {
-  const session = await db.authSession.create({ data: { tokenHash: `test-${Date.now()}`, userId, expiresAt: new Date(Date.now() + 86400000) } });
-  const res = await fetch(`${origin}${path}`, { ...options, credentials: "include", headers: { cookie: `session=${session.tokenHash}`, ...options?.headers } as Record<string, string> });
-  return res;
+  const fetchAsAuthor = await authenticatedAuthorFetch(db, userId, origin);
+  return fetchAsAuthor(`${origin}${path}`, options);
 }
 
 test("asset upload creates ImageAsset and writes file", { skip: !origin }, async () => {
   const res = await authorFetch(user.id, origin, "/api/assets", { method: "POST" });
-  if (res.status === 401) { console.log("SKIP: not authenticated"); return; }
   assert.equal(res.status, 400);
 });
 
 test("unknown requests return 405", { skip: !origin }, async () => {
   const res = await authorFetch(user.id, origin, "/api/assets", { method: "DELETE" });
-  if (res.status === 401) { console.log("SKIP: not authenticated"); return; }
   assert.equal(res.status, 405);
 });
 
-test("asset GET requires a worldId", { skip: !origin }, async () => {
+test("asset GET without an owned world is concealed as not found", { skip: !origin }, async () => {
   const res = await authorFetch(user.id, origin, "/api/assets");
-  if (res.status === 401) { console.log("SKIP: not authenticated"); return; }
-  assert.equal(res.status, 400);
+  assert.equal(res.status, 404);
   const body = await res.json();
   assert.ok(body.error);
 });
 
 test("asset source filter rejects unknown values and narrows before pagination", { skip: !origin }, async () => {
   const invalid = await authorFetch(user.id, origin, `/api/assets?worldId=${world.id}&source=elsewhere`);
-  if (invalid.status === 401) { console.log("SKIP: not authenticated"); return; }
   assert.equal(invalid.status, 400);
   const uploaded = await authorFetch(user.id, origin, `/api/assets?worldId=${world.id}&source=uploaded`);
   assert.equal(uploaded.status, 200);
@@ -74,7 +69,6 @@ test("asset source filter rejects unknown values and narrows before pagination",
 
 test("asset usage endpoint returns usage information", { skip: !origin }, async () => {
   const res = await authorFetch(user.id, origin, `/api/assets/${testAssetId}/usage`);
-  if (res.status === 401) { console.log("SKIP: not authenticated"); return; }
   assert.equal(res.status, 200);
   const usage = await res.json();
   assert.ok(typeof usage.worldCover === "boolean");
@@ -87,7 +81,6 @@ test("asset usage endpoint returns usage information", { skip: !origin }, async 
 test("asset usage detects world cover reference", { skip: !origin }, async () => {
   await db.world.update({ where: { id: world.id }, data: { coverImage: `/api/assets/${testAssetId}/file` } });
   const res = await authorFetch(user.id, origin, `/api/assets/${testAssetId}/usage`);
-  if (res.status === 401) { console.log("SKIP: not authenticated"); return; }
   assert.equal(res.status, 200);
   const usage = await res.json();
   assert.equal(usage.worldCover, true);
@@ -97,7 +90,6 @@ test("asset usage detects world cover reference", { skip: !origin }, async () =>
 test("asset usage detects article body reference", { skip: !origin }, async () => {
   await db.article.create({ data: { worldId: world.id, slug: `test-article-${stamp}`, title: "Test Article", contentHtml: `<img src="/api/assets/${testAssetId}/file" />` } });
   const res = await authorFetch(user.id, origin, `/api/assets/${testAssetId}/usage`);
-  if (res.status === 401) { console.log("SKIP: not authenticated"); return; }
   assert.equal(res.status, 200);
   const usage = await res.json();
   assert.ok(usage.articleCount >= 1);
@@ -108,7 +100,6 @@ test("asset usage detects article body reference", { skip: !origin }, async () =
 test("permanent delete fails for referenced assets", { skip: !origin }, async () => {
   await db.world.update({ where: { id: world.id }, data: { coverImage: `/api/assets/${testAssetId}/file` } });
   const res = await authorFetch(user.id, origin, `/api/assets/${testAssetId}/permanent`, { method: "DELETE" });
-  if (res.status === 401) { console.log("SKIP: not authenticated"); return; }
   assert.equal(res.status, 200);
   const result = await res.json();
   assert.equal(result.success, false);
@@ -122,15 +113,10 @@ test("permanent delete fails for referenced assets", { skip: !origin }, async ()
 test("archive asset does not require reference check", { skip: !origin }, async () => {
   await db.world.update({ where: { id: world.id }, data: { coverImage: `/api/assets/${testAssetId}/file` } });
   const res = await authorFetch(user.id, origin, `/api/assets/${testAssetId}`, { method: "DELETE" });
-  if (res.status === 401) { console.log("SKIP: not authenticated"); return; }
   assert.equal(res.status, 200);
   const result = await res.json();
   assert.equal(result.success, true);
   assert.equal(result.archived, true);
   await db.imageAsset.update({ where: { id: testAssetId }, data: { archived: false } });
   await db.world.update({ where: { id: world.id }, data: { coverImage: null } });
-});
-
-test("owner search finds body text, paginates, filters, and hides other campaigns", { skip: !origin }, async () => {
-  console.log("SKIP: covered by campaign-search.test.tsx");
 });

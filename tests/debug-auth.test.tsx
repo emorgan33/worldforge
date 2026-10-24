@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { randomBytes, createHash } from "node:crypto";
+import { assertIsolatedTestEnvironment } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
+if (origin) assertIsolatedTestEnvironment();
 
 test("debug: asset upload auth", { skip: !origin }, async (context) => {
   const db = new PrismaClient();

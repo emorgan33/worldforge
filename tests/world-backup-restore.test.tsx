@@ -1,7 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
 import { randomUUID } from "node:crypto";
 
 const db = new PrismaClient();
@@ -19,6 +19,8 @@ let articlePublicId: string;
 let sessionId: string;
 
 before(async () => {
+  if (!origin) return;
+  assertIsolatedTestEnvironment();
   stamp = Date.now();
   ownerId = (await db.user.create({
     data: { name: `Backup Fixture Owner ${stamp}`, email: `backup-owner-${stamp}@example.invalid` },
@@ -69,14 +71,19 @@ before(async () => {
   });
 });
 after(async () => {
+  if (!origin) { await db.$disconnect(); return; }
+  if (!ownerId) { await db.$disconnect(); return; }
   const worldsToDelete = await db.world.findMany({
-    where: { OR: [{ id: worldId }, { slug: { startsWith: `backup-${stamp}` } }] },
+    where: {
+      ownerId,
+      OR: [ ...(worldId ? [{ id: worldId }] : []), ...(stamp ? [{ slug: { startsWith: `backup-${stamp}` } }] : []) ],
+    },
     select: { id: true },
   });
   for (const w of worldsToDelete) {
     await db.world.delete({ where: { id: w.id } }).catch(() => {});
   }
-  const usersToDelete = [ownerId, playerId].filter(Boolean);
+  const usersToDelete = [ownerId, playerId].filter((id): id is string => Boolean(id));
   for (const uid of usersToDelete) {
     try {
       await db.authSession.deleteMany({ where: { userId: uid } });

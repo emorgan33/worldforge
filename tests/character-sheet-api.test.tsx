@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
 import { characterRowsKey } from "../src/lib/character-sheet";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
+if (origin) assertIsolatedTestEnvironment();
 
 test("character sheets persist through edits, revisions and world export/import without losing lore or profile data", { skip: !origin }, async context => {
   const db = new PrismaClient();

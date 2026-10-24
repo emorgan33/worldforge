@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
 import { writeAsset, removeAssetFile } from "../src/lib/asset-storage";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
+if (origin) assertIsolatedTestEnvironment();
 
 function descriptions(html: string, url: string) {
   return [...html.matchAll(/<img\b[^>]*>/g)].filter(([tag]) => tag.includes(`src="${url}"`)).map(([tag]) => /alt="([^"]*)"/.exec(tag)?.[1]);

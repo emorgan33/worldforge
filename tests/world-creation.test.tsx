@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
+import { assertIsolatedTestEnvironment } from "./auth-fixture";
 
 test("world creation validates, retries concurrent requests, and allocates collision-safe slugs", { skip: !process.env.WORLD_CREATION_TEST_DATABASE_URL }, async () => {
+  assertIsolatedTestEnvironment();
   process.env.DATABASE_URL = process.env.WORLD_CREATION_TEST_DATABASE_URL;
   const { normalizeWorldCreation, createWorld } = await import("../src/lib/world-creation");
   const { prisma } = await import("../src/lib/db");

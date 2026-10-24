@@ -3,9 +3,10 @@ import { randomBytes, createHash } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import sharp from "sharp";
-import { authorFetch } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
 import { removeAssetFile } from "../src/lib/asset-storage";
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
+if (origin) assertIsolatedTestEnvironment();
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 test("owner sessions and public readers enforce drafts, private worlds, GM blocks, related links and image grants", { skip: !origin }, async context => {
   const db = new PrismaClient(); const stamp = Date.now();

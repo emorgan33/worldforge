@@ -2,7 +2,7 @@ import { withAuthor } from "@/lib/auth";
 import { AccessError } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { imageAssetId } from "@/lib/assets";
+import { isAssetId } from "@/lib/assets";
 import { scanAssetReferences } from "@/lib/asset-references";
 
 export interface AssetUsage {
@@ -25,7 +25,7 @@ export const GET = withAuthor(async (_request: Request, { params }: { params: Pr
   try {
     const { id } = await params;
 
-    if (!imageAssetId(id)) {
+    if (!isAssetId(id)) {
       return NextResponse.json({ error: "Invalid image ID" }, { status: 400 });
     }
 

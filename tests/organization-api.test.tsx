@@ -1,9 +1,10 @@
-import { authorFetch } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
+if (origin) assertIsolatedTestEnvironment();
 test("organization API prevents cycles and cross-world moves, persists order, and preserves contents on deletion", { skip: !origin }, async context => {
   assert.match(origin!, /^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/);
   const db = new PrismaClient();

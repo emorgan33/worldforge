@@ -2,7 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
 
 const db = new PrismaClient();
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
@@ -14,6 +14,8 @@ let worldId: string;
 let stamp: number;
 
 before(async () => {
+  if (!origin) return;
+  assertIsolatedTestEnvironment();
   stamp = Date.now();
   ownerId = (await db.user.create({ data: { name: `Export Fixture ${stamp}`, email: `export-${stamp}@example.invalid` } })).id;
   if (origin) authenticatedFetch = await authorFetch(db, ownerId, origin);
@@ -21,8 +23,9 @@ before(async () => {
 });
 
 after(async () => {
-  await db.world.deleteMany({ where: { id: worldId } });
-  await db.user.deleteMany({ where: { id: ownerId } });
+  if (!origin) { await db.$disconnect(); return; }
+  if (worldId) await db.world.deleteMany({ where: { id: worldId } });
+  if (ownerId) await db.user.deleteMany({ where: { id: ownerId } });
   await db.$disconnect();
 });
 

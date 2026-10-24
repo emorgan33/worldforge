@@ -50,23 +50,29 @@ Open the printed `/setup#token=...` URL to set a password, then sign in at
 
 ## Testing
 
-Unit tests and server-backed integration tests share one command:
+Tests are grouped by their runtime boundary:
 
 ```bash
-pnpm test
+pnpm test:unit       # pure logic and component tests
+pnpm test:service    # isolated database and filesystem services
+pnpm test:http       # HTTP suites; requires the dev server below
+pnpm test            # all three groups
 ```
 
 Test files run serially. This matters because the integration suites share a
 SQLite database with the dev server; parallel processes can race on the
 rollback journal and produce spurious `disk I/O error` failures.
 
-Many suites are **integration tests** that require a running dev server (not a
-production build). Next.js 16.4.1 production builds do not reliably read Cookie
-headers via `cookies()`, so use the dev server:
+HTTP integration suites use a running dev server. The production build has a
+separate authentication smoke gate in CI, backed by its own temporary database
+and asset directory. To run that gate locally, start `pnpm start` against
+isolated storage and set `WORLDFORGE_PRODUCTION_TEST_ORIGIN` to that server's
+origin before running `pnpm test:production-auth`.
 
 ```bash
 # terminal 1 — create an isolated database and asset directory
-export TEST_ROOT="$(mktemp -d /tmp/worldforge-tests.XXXXXX)"
+export WORLD_TEST_TMP_ROOT="$(node -p 'require("node:os").tmpdir()')"
+export TEST_ROOT="$(mktemp -d "$WORLD_TEST_TMP_ROOT/worldforge-tests.XXXXXX")"
 echo "Test root: $TEST_ROOT"
 export DATABASE_URL="file:$TEST_ROOT/test.db?connection_limit=1"
 export WORLD_CREATION_TEST_DATABASE_URL="$DATABASE_URL"
@@ -76,7 +82,7 @@ pnpm db:deploy
 WORLDFORGE_ORIGIN=http://localhost:3131 pnpm exec next dev --port 3131
 
 # terminal 2 — paste the TEST_ROOT path printed in terminal 1
-export TEST_ROOT="/tmp/worldforge-tests.<unique-suffix>"
+export TEST_ROOT="<paste-the-printed-test-root>"
 export DATABASE_URL="file:$TEST_ROOT/test.db?connection_limit=1"
 export WORLD_CREATION_TEST_DATABASE_URL="$DATABASE_URL"
 export WORLDFORGE_ASSET_DIR="$TEST_ROOT/assets"
@@ -90,6 +96,11 @@ Never point tests at real data or run `pnpm db:seed` for the test workflow.
 Tests that need the origin skip when `WORLDFORGE_TEST_ORIGIN` is unset; the
 world-creation integration test also skips unless
 `WORLD_CREATION_TEST_DATABASE_URL` is set.
+HTTP integration fixtures refuse to write unless `DATABASE_URL` names an
+absolute SQLite file under the system temporary directory,
+`WORLDFORGE_ASSET_DIR` is also under that directory, and
+`WORLD_CREATION_TEST_DATABASE_URL` exactly matches `DATABASE_URL`. Keep the
+dev server and test process pointed at the same temporary paths as shown above.
 
 ## Before opening a pull request
 
@@ -98,7 +109,10 @@ Run all of these and make sure they pass:
 ```bash
 pnpm lint
 pnpm build
-pnpm test        # unit suites; start the dev server first for integration
+pnpm test:unit
+pnpm test:service
+pnpm test:http   # start the dev server first
+# CI also runs pnpm test:production-auth against next start and isolated storage
 ```
 
 ## Pull request expectations

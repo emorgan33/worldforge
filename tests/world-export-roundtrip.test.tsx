@@ -39,11 +39,16 @@ before(async () => {
 });
 after(async () => {
   if (!db) { if (tempDir) await rm(tempDir, { recursive: true, force: true }); return; }
-  const worlds = await db.world.findMany({ where: { OR: [{ id: sourceId }, { slug: { startsWith: `roundtrip-${stamp}-` } }] }, select: { id: true } });
+  const worlds = sourceId ? await db.world.findMany({
+    where: { OR: [ ...(sourceId ? [{ id: sourceId }] : []), ...(stamp ? [{ slug: { startsWith: `roundtrip-${stamp}-` } }] : []) ] },
+    select: { id: true },
+  }) : [];
   const worldIds = worlds.map(world => world.id);
-  await db.accessAuditEvent.deleteMany({ where: { worldId: { in: worldIds } } });
-  await db.world.deleteMany({ where: { id: { in: worldIds } } });
-  await db.user.deleteMany({ where: { id: ownerId } });
+  if (worldIds.length) {
+    await db.accessAuditEvent.deleteMany({ where: { worldId: { in: worldIds } } });
+    await db.world.deleteMany({ where: { id: { in: worldIds } } });
+  }
+  if (ownerId) await db.user.deleteMany({ where: { id: ownerId } });
   await db.$disconnect();
   await rm(tempDir, { recursive: true, force: true });
   if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL; else Object.assign(process.env, { DATABASE_URL: originalDatabaseUrl });
