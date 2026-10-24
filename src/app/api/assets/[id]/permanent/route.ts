@@ -3,8 +3,9 @@ import { AccessError } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { isAssetId } from "@/lib/assets";
-import { removeAssetFile } from "@/lib/asset-storage";
 import { isReferenced, scanAssetReferences } from "@/lib/asset-references";
+import { randomUUID } from "node:crypto";
+import { drainAssetCleanupJobs } from "@/lib/world-management";
 
 export interface DeletionResult {
   success: boolean;
@@ -46,9 +47,20 @@ export const DELETE = withAuthor(async (request: Request, { params }: { params: 
       throw new AccessError("You do not have access to this image", 403);
     }
 
-    const references = await scanAssetReferences(asset.worldId, id);
+    const deletion = await prisma.$transaction(async tx => {
+      const references = await scanAssetReferences(asset.worldId, id, tx);
+      if (isReferenced(references)) return { references, deleted: false };
+      await tx.assetCleanupJob.upsert({
+        where: { assetId: id },
+        create: { id: randomUUID(), assetId: id },
+        update: {},
+      });
+      await tx.imageAsset.delete({ where: { id } });
+      return { references, deleted: true };
+    });
 
-    if (isReferenced(references)) {
+    if (!deletion.deleted) {
+      const references = deletion.references;
       return NextResponse.json({
         success: false,
         deleted: false,
@@ -63,13 +75,9 @@ export const DELETE = withAuthor(async (request: Request, { params }: { params: 
       } satisfies DeletionResult);
     }
 
-    // Delete file from disk
-    await removeAssetFile(id);
-
-    // Delete database record
-    await prisma.imageAsset.delete({
-      where: { id },
-    });
+    // Attempt immediate unlink after the durable intent has committed. The
+    // drainer keeps failures queued and records their error for a later retry.
+    await drainAssetCleanupJobs();
 
     return NextResponse.json({
       success: true,

@@ -144,15 +144,17 @@ Done when owners can identify asset dependencies and recover or move a complete 
 **Implementation details:**
 
 ### Asset Usage Tracking
-- `GET /api/assets/[id]/usage` returns where an asset is referenced: world cover, banner, background, and article bodies
-- AssetLibrary UI shows "Show usage" button with expandable panel listing all references
-- Usage is checked before permanent deletion, blocking deletion of referenced assets
+- `GET /api/assets/[id]/usage` reports references in world appearance, categories, article covers/portraits/bodies, revision snapshots, maps, map layers and timelines
+- Reference scans parse article and revision documents and match local asset URLs consistently, including absolute URLs and whitespace-padded image sources
+- AssetLibrary UI shows "Show usage" with counts and expandable reference details; permanent deletion rescans references in its write transaction
+- Anonymous image access follows the public reader projection and checks every published public article, including archived images that remain placed; private, GM-only and otherwise unreadable content grants no access
 
 ### Safe Deletion Workflow
 - `DELETE /api/assets/[id]` archives the asset (soft delete) without reference checking
-- `DELETE /api/assets/[id]/permanent` checks for references before hard deletion
+- `DELETE /api/assets/[id]/permanent` refuses deletion when any persistent reference exists, then atomically removes metadata and queues durable file cleanup
 - Permanent deletion returns `{ referenced: true, references: {...} }` if asset is in use
-- UI shows confirmation dialog with warning when asset is still referenced
+- UI shows a confirmation dialog; if a reference is added after usage loads, the server refuses deletion and the panel refreshes
+- Archived assets stay available to existing valid placements; unplaced archived assets remain private
 
 ### Orphan Cleanup
 - `DELETE /api/worlds/[id]/cleanup` is retained for compatibility but performs no file deletion because shared-directory ownership is ambiguous; archived-world purge uses durable cleanup jobs

@@ -81,6 +81,12 @@ test("world archive preserves settings, settings duplicate is private and empty,
     assert.equal(await prisma.world.findUnique({ where: { id: world.id } }), null);
     assert.equal(await prisma.article.count({ where: { worldId: world.id } }), 0);
     assert.equal(await prisma.imageAsset.count({ where: { worldId: world.id } }), 0);
+    const failedCleanup = await drainAssetCleanupJobs(50, async () => { throw new Error("simulated unlink failure"); });
+    assert.equal(failedCleanup.pending, 1);
+    const retainedJob = await prisma.assetCleanupJob.findUniqueOrThrow({ where: { assetId } });
+    assert.equal(retainedJob.attempts, 1);
+    assert.match(retainedJob.lastError || "", /simulated unlink failure/);
+    assert.equal(await readFile(path.join(assetDir, `${assetId}.webp`), "utf8"), "asset bytes");
     const concurrentCleanup = await Promise.all([drainAssetCleanupJobs(), drainAssetCleanupJobs()]);
     assert.ok(concurrentCleanup.every(result => result.pending === 0));
     await assert.rejects(readFile(path.join(assetDir, `${assetId}.webp`)));

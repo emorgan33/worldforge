@@ -30,12 +30,35 @@ export function imageSourceLabel(asset: Pick<ImageAssetItem, "source" | "provena
   return "Uploaded image";
 }
 
-interface AssetUsage {
+export interface AssetUsage {
   worldCover: boolean | null;
   worldBanner: boolean | null;
   worldBackground: boolean | null;
+  categoryCount: number;
   articleCount: number;
   articles: { id: string; title: string; slug: string; categoryName: string | null }[];
+  revisionCount: number;
+  mapCount: number;
+  mapLayerCount: number;
+  timelineCount: number;
+}
+
+export function assetUsageHasReferences(usage: AssetUsage) {
+  return Boolean(usage.worldCover || usage.worldBanner || usage.worldBackground || usage.categoryCount || usage.articleCount || usage.revisionCount || usage.mapCount || usage.mapLayerCount || usage.timelineCount);
+}
+
+export function assetUsageLines(usage: AssetUsage) {
+  const lines: string[] = [];
+  if (usage.worldCover) lines.push("World cover image");
+  if (usage.worldBanner) lines.push("World banner image");
+  if (usage.worldBackground) lines.push("World background image");
+  if (usage.categoryCount) lines.push(`${usage.categoryCount} categor${usage.categoryCount === 1 ? "y illustration" : "y illustrations"}`);
+  if (usage.articleCount) lines.push(`${usage.articleCount} article${usage.articleCount === 1 ? "" : "s"}`);
+  if (usage.revisionCount) lines.push(`${usage.revisionCount} revision snapshot${usage.revisionCount === 1 ? "" : "s"}`);
+  if (usage.mapCount) lines.push(`${usage.mapCount} map${usage.mapCount === 1 ? "" : "s"}`);
+  if (usage.mapLayerCount) lines.push(`${usage.mapLayerCount} map layer${usage.mapLayerCount === 1 ? "" : "s"}`);
+  if (usage.timelineCount) lines.push(`${usage.timelineCount} timeline${usage.timelineCount === 1 ? "" : "s"}`);
+  return lines.length ? lines : ["Not referenced anywhere"];
 }
 
 export function AssetLibrary({ worldId, onSelect, onGuardChange }: { worldId: string; onSelect?: (asset: ImageAssetItem) => void; onGuardChange?: (registration: GuardRegistration) => void }) {
@@ -158,7 +181,7 @@ function AssetDetails({ asset, busy, onUpdate, onSelect, onMessage, onBack, onRe
     try {
       const result = await fetch(`/api/assets/${asset.id}/permanent`, { method: "DELETE" }).then(jsonResponse);
       if (result.deleted) { onMessage("Image permanently deleted."); onRefresh(); }
-      else if (result.referenced) { setShowDeleteConfirm(false); setShowUsage(true); onMessage(`Cannot delete: used as cover/banner and in ${result.references?.articleCount || 0} articles.`); }
+      else if (result.referenced) { setShowDeleteConfirm(false); setShowUsage(true); void loadUsage(); onMessage("Cannot delete: this image is still referenced. Review Image Usage for details, or hide it from the library."); }
     } catch (error) { onMessage(error instanceof Error ? error.message : "Failed to delete image."); }
     finally { setDeleting(false); setShowDeleteConfirm(false); }
   }
@@ -174,10 +197,7 @@ function AssetDetails({ asset, busy, onUpdate, onSelect, onMessage, onBack, onRe
       <h4 className="mb-2 font-semibold text-zinc-300">Image Usage</h4>
       {loadingUsage ? <p className="text-zinc-500">Loading...</p> : usage ? <div>
         <p className="text-zinc-400">Used as:</p><ul className="mt-1 space-y-1 text-zinc-300">
-          {usage.worldCover && <li>• World cover image</li>}
-          {usage.worldBanner && <li>• World banner image</li>}
-          {usage.worldBackground && <li>• World background image</li>}
-          {(usage.worldCover || usage.worldBanner || usage.worldBackground || usage.articleCount > 0) === false && <li className="text-zinc-500">Not referenced anywhere</li>}
+          {assetUsageLines(usage).map(line => <li key={line} className={line === "Not referenced anywhere" ? "text-zinc-500" : undefined}>• {line}</li>)}
         </ul>
         {usage.articleCount > 0 && <div><p className="mt-2 text-zinc-400">Used in {usage.articleCount} article{usage.articleCount !== 1 ? "s" : ""}:</p><ul className="mt-1 max-h-40 space-y-1 overflow-y-auto text-zinc-300">{usage.articles.slice(0, 10).map(a => <li key={a.id}>• {a.title}{a.categoryName ? ` (${a.categoryName})` : ""}</li>)}{usage.articleCount > 10 && <li className="text-zinc-500">...and {usage.articleCount - 10} more</li>}</ul></div>}
       </div> : null}
@@ -185,10 +205,10 @@ function AssetDetails({ asset, busy, onUpdate, onSelect, onMessage, onBack, onRe
     </div>}
     {showDeleteConfirm && <div className="rounded-lg border border-red-700/50 bg-red-950/30 p-3 text-xs">
       <p className="font-semibold text-red-300">Permanently delete this image?</p>
-      {usage && (usage.worldCover || usage.worldBanner || usage.worldBackground || usage.articleCount > 0) ? <p className="mt-1 text-zinc-400">This image is still in use. Remove it from all references first, or use &quot;Hide from library&quot; to archive it.</p>
+      {usage && assetUsageHasReferences(usage) ? <p className="mt-1 text-zinc-400">This image is still in use. Remove it from all references first, or use &quot;Hide from library&quot; to archive it.</p>
       : <p className="mt-1 text-zinc-400">This will delete the image file and cannot be undone. Articles using this image will show broken images.</p>}
       <div className="mt-2 flex gap-2">
-        <button type="button" disabled={deleting || !!(usage && (usage.worldCover || usage.worldBanner || usage.worldBackground || usage.articleCount > 0))} onClick={() => void confirmDelete()} className="min-h-10 rounded bg-red-600 px-3 py-1 text-zinc-100 disabled:opacity-50">Delete permanently</button>
+        <button type="button" disabled={deleting || !!(usage && assetUsageHasReferences(usage))} onClick={() => void confirmDelete()} className="min-h-10 rounded bg-red-600 px-3 py-1 text-zinc-100 disabled:opacity-50">Delete permanently</button>
         <button type="button" disabled={deleting} onClick={() => setShowDeleteConfirm(false)} className="min-h-10 rounded border border-zinc-600 px-3 py-1 text-zinc-300">Cancel</button>
       </div>
     </div>}

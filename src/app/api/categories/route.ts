@@ -2,7 +2,7 @@ import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { categoryMovePlan, sortOrdered } from "@/lib/category-tree";
-import { validateImageReference } from "@/lib/asset-validation";
+import { assertImageReference, validateImageReference } from "@/lib/asset-validation";
 import { imageAssetId } from "@/lib/assets";
 
 class OrganizationError extends Error { constructor(message: string, public status = 400) { super(message); } }
@@ -69,6 +69,7 @@ async function patchHandler(request: NextRequest) {
       await prisma.$transaction(async tx => {
         const category = await tx.category.findFirst({ where: { id, worldId }, select: { id: true } });
         if (!category) throw new OrganizationError("Category not found in this world", 404);
+        if (iconImage !== null) await assertImageReference(iconImage, worldId, tx);
         await tx.category.update({ where: { id }, data: { iconImage } });
       });
       return NextResponse.json({ success: true });

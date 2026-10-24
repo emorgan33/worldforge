@@ -3,7 +3,7 @@ import { withAuthor, sessionUser } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { syncArticleMentions } from "@/lib/article-mention-index";
-import { validateImageReference } from "@/lib/asset-validation";
+import { assertDocumentImageReferences, assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
 import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { prisma } from "@/lib/db";
 import { validateCharacterRows } from "@/lib/character-sheet";
@@ -77,19 +77,12 @@ async function postHandler(req: NextRequest) {
     if (!worldId || !title) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+    if (typeof contentJson === "string") return NextResponse.json({ error: "Article content must be a document object, not a serialized string." }, { status: 400 });
     const sheetError = validateCharacterRows(metadata);
     if (sheetError) return NextResponse.json({ error: sheetError }, { status: 400 });
 
     let publication;
     try { publication = publicationFields({ state, publicationStatus, visibility }); } catch { return NextResponse.json({ error: "Invalid publication status or visibility" }, { status: 400 }); }
-    if (coverImage !== undefined) {
-      const error = await validateImageReference(coverImage, worldId);
-      if (error) return NextResponse.json({ error }, { status: 400 });
-    }
-    if (portraitImage !== undefined) {
-      const error = await validateImageReference(portraitImage, worldId);
-      if (error) return NextResponse.json({ error }, { status: 400 });
-    }
     const altError = validatePlacementAlt(coverImageAlt) || validatePlacementAlt(portraitImageAlt);
     if (altError) return NextResponse.json({ error: altError }, { status: 400 });
     if (categoryId && !await prisma.category.findFirst({ where: { id: categoryId, worldId }, select: { id: true } })) {
@@ -105,6 +98,9 @@ async function postHandler(req: NextRequest) {
         .replace(/(^-|-$)/g, "");
 
     const article = await prisma.$transaction(async tx => {
+      if (coverImage !== undefined) await assertImageReference(coverImage, worldId, tx);
+      if (portraitImage !== undefined) await assertImageReference(portraitImage, worldId, tx);
+      await assertDocumentImageReferences(contentJson, contentHtml, worldId, tx);
       const created = await tx.article.create({
         data: {
           worldId,
@@ -158,6 +154,7 @@ async function postHandler(req: NextRequest) {
 
     return NextResponse.json(article, { status: 201 });
   } catch (error: unknown) {
+    if (error instanceof ImageReferenceError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error("Failed to create article:", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process article." }, { status: 500 });
   }

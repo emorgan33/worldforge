@@ -2,7 +2,7 @@ import { publicationFields } from "@/lib/publication";
 import { withAuthor, sessionUser } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { syncArticleMentions } from "@/lib/article-mention-index";
-import { validateImageReference } from "@/lib/asset-validation";
+import { assertDocumentImageReferences, assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
 import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { prisma } from "@/lib/db";
 import { validateCharacterRows } from "@/lib/character-sheet";
@@ -89,6 +89,8 @@ async function patchHandler(
       canonState,
     } = body;
 
+    if (typeof contentJson === "string") return NextResponse.json({ error: "Article content must be a document object, not a serialized string." }, { status: 400 });
+
     let previousMetadata: Record<string, unknown> = {};
     try { previousMetadata = JSON.parse(existing.metadata || "{}") || {}; } catch {}
     const sheetError = validateCharacterRows(metadata, previousMetadata);
@@ -96,14 +98,6 @@ async function patchHandler(
 
     let publication;
     try { publication = publicationFields({ state, publicationStatus, visibility }, existing); } catch { return NextResponse.json({ error: "Invalid publication status or visibility" }, { status: 400 }); }
-    if (coverImage !== undefined) {
-      const error = await validateImageReference(coverImage, existing.worldId);
-      if (error) return NextResponse.json({ error }, { status: 400 });
-    }
-    if (portraitImage !== undefined) {
-      const error = await validateImageReference(portraitImage, existing.worldId);
-      if (error) return NextResponse.json({ error }, { status: 400 });
-    }
     const altError = validatePlacementAlt(coverImageAlt) || validatePlacementAlt(portraitImageAlt);
     if (altError) return NextResponse.json({ error: altError }, { status: 400 });
     if (categoryId && !await prisma.category.findFirst({ where: { id: categoryId, worldId: existing.worldId }, select: { id: true } })) {
@@ -114,6 +108,13 @@ async function patchHandler(
     
     // Create a revision before updating (for history)
     await prisma.$transaction(async tx => {
+      if (coverImage !== undefined) await assertImageReference(coverImage, existing.worldId, tx);
+      if (portraitImage !== undefined) await assertImageReference(portraitImage, existing.worldId, tx);
+      if (contentHtml !== undefined || contentJson !== undefined) {
+        const nextContentJson = contentJson !== undefined ? contentJson : contentHtml !== undefined ? null : existing.contentJson;
+        const nextContentHtml = contentHtml !== undefined ? contentHtml : existing.contentHtml;
+        await assertDocumentImageReferences(nextContentJson, nextContentHtml, existing.worldId, tx);
+      }
       await tx.article.update({
         where: { id },
         data: {
@@ -202,6 +203,7 @@ async function patchHandler(
 
     return NextResponse.json(updated);
   } catch (error: unknown) {
+    if (error instanceof ImageReferenceError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error("Failed to update article:", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process article." }, { status: 500 });
   }

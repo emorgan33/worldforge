@@ -42,13 +42,13 @@ export async function purgeArchivedWorld(worldId: string, ownerId: string) {
   });
 }
 
-export async function drainAssetCleanupJobs(limit = 50) {
+export async function drainAssetCleanupJobs(limit = 50, removeFile: (assetId: string) => Promise<void> = removeAssetFile) {
   const jobs = await prisma.assetCleanupJob.findMany({ orderBy: { createdAt: "asc" }, take: limit });
   let removed = 0;
   let pending = 0;
   for (const job of jobs) {
     try {
-      await removeAssetFile(job.assetId);
+      await removeFile(job.assetId);
       await prisma.assetCleanupJob.deleteMany({ where: { id: job.id } });
       removed++;
     } catch (error) {

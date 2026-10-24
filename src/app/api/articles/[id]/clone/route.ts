@@ -3,6 +3,7 @@ import { AccessError } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { randomUUID } from "node:crypto";
+import { assertDocumentImageReferences, assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
 
 export const POST = withAuthor(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
   try {
@@ -29,7 +30,11 @@ export const POST = withAuthor(async (request: Request, { params }: { params: Pr
     }
 
     const newArticleId = randomUUID();
-    const newArticle = await prisma.article.create({
+    const newArticle = await prisma.$transaction(async tx => {
+      if (source.coverImage) await assertImageReference(source.coverImage, source.worldId, tx);
+      if (source.portraitImage) await assertImageReference(source.portraitImage, source.worldId, tx);
+      await assertDocumentImageReferences(source.contentJson, source.contentHtml, source.worldId, tx);
+      return tx.article.create({
       data: {
         id: newArticleId,
         worldId: source.worldId,
@@ -58,6 +63,7 @@ export const POST = withAuthor(async (request: Request, { params }: { params: Pr
         revealedInSessionId: null,
         supersededById: null,
       },
+      });
     });
 
     // Create a fresh GM_ONLY audience policy for the clone (does NOT copy source grants)
@@ -117,6 +123,7 @@ export const POST = withAuthor(async (request: Request, { params }: { params: Pr
 
     return NextResponse.json(serialized, { status: 201 });
   } catch (error) {
+    if (error instanceof ImageReferenceError) return NextResponse.json({ error: error.message }, { status: 400 });
     if (error instanceof AccessError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }

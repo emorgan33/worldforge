@@ -2,7 +2,7 @@
 
 Audit basis: repository revision `1be1903`.
 
-Status: audit complete; R01, R01a, and R02 implementation and validation are complete. R03 is next. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
+Status: audit complete; R01, R01a, R02, R03, R03a, R04 and R04a implementation and validation are complete. R05 is next. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
 
 ## 1. Executive summary
 
@@ -301,8 +301,10 @@ Effort is relative: **Small** is a bounded change; **Medium** spans several rela
 | R01 Trustworthy test baseline | P1 | Low | Medium | None | **Complete** |
 | R01a Verify isolation sentinel file contents | P2 | Low | Small | R01 | **Complete** |
 | R02 Contain unsafe cleanup | **P0** | Low | Small | Minimum fixture work from R01 | **Complete** |
-| R03 Establish asset lifetime operations | P1 | High | Large | R01, R01a, R02 | Not started |
-| R04 Repair asset parameter validation | P1 | Low | Small | R03 before enabling permanent deletion | Not started |
+| R03 Establish asset lifetime operations | P1 | High | Large | R01, R01a, R02 | **Complete** |
+| R03a Repair public image reference authorization | P2 | Medium | Small | R03; before R04 | **Complete** |
+| R04 Repair asset parameter validation | P1 | Low | Small | R03 before enabling permanent deletion | **Complete** |
+| R04a Correct R04 reporting and strengthen regressions | P3 | Low | Small | R04; before R05 | **Complete** |
 | R05 Make variable rendering and writes safe | P1 | Medium | Medium | R01 | Not started |
 | R06 Establish article save preconditions | P1 | Medium | Medium | R01 | Not started |
 | R07 Unify revision restore and clone lifecycles | P1 | High | Medium | R06 | Not started |
@@ -369,11 +371,40 @@ The asset API tests now codify the `404` response for a collection request witho
 
 **Problem/files/evidence:** F05 and the archive/public-byte mismatch; `asset-references.ts`, `asset-validation.ts`, `asset-storage.ts`, `world-management.ts`, cleanup and asset byte/deletion routes.
 
+**Reopened and resolved (2026-10-24):** Follow-up HTTP validation found whitespace-padded article body image URLs that were accepted but omitted from usage/deletion scans, serialized-string `contentJson` whose validation document differed from its stored reader representation, and an Image Usage panel that omitted revisions, maps, layers and timelines. The fixes and regression results below close these gaps.
+
 **Changes and benefit:** Establish one exhaustive reference model covering current articles, revisions, world appearance, categories, maps, layers and timelines. Keep archive visibility separate from continued valid placement access. Commit metadata deletion and cleanup-job creation together, then remove files through the durable job mechanism. Coordinate placement validation with deletion transactions.
+
+**Implementation (2026-10-23):** `asset-references.ts` now includes world covers/banners/backgrounds, category illustrations, article covers/portraits/parsed body images, revision snapshots and parsed body images, map canvases, map-layer images, and timeline covers. References are matched by parsed asset ID, including absolute HTTP URLs. Per-asset usage reports the additional revision/map/layer/timeline counts, while world-wide referenced-ID collection uses the same placement sources. Local image validation now accepts a transaction client. Article create/update (including body images), world appearance/cover updates, category illustrations, and map create/update validate inside the same transaction as the placement write. Permanent deletion rescans references inside its write transaction, then atomically deletes metadata and upserts a durable cleanup job. The route immediately attempts the queued unlink; failed attempts keep the job and error for retry. Archiving hides an image from the library but existing public placements continue to render; unplaced archived assets remain private. Focused race, archive visibility, complete reference, successful deletion, and failed-unlink retry coverage was added. `docs/image-library.md` records the user-visible guarantees.
+
+**Validation (2026-10-24 follow-up):** Review repros found three gaps after the initial R03 completion: HTML entity encoding bypassed the literal body prefilter; absolute local asset URLs bypassed world ownership validation; and cloning passed nullable cover/portrait values to the required-image validator. Body/revision JSON and HTML are now parsed without a raw-URL prefilter, local URL IDs are extracted consistently from relative and absolute URLs during validation, and clone validates only nonempty optional image placements. Regression coverage reproduces all three cases. The full suite passed against dedicated temporary SQLite/assets: **225 passed, 0 failed, 1 skipped** (production-auth smoke uses its separate production-server gate). Focused asset/placement API tests passed **14/14**; TypeScript, focused ESLint and `git diff --check` passed. `README.md` and `docs/image-library.md` now describe world-scoped asset reuse, complete deletion protection, and retryable cleanup.
 
 **Validation and acceptance:** Every persistent placement blocks deletion; prose-only matches do not. Archived but legitimately referenced images render. Failed unlink retains a retryable job. Concurrent attach/delete never produces an accepted dangling placement. Reader authorization still revokes immediately.
 
+**Additional validation (2026-10-24):** Added isolated HTTP coverage for the permanent-delete failure path: an unlink failure still returns the committed deletion outcome, leaves asset metadata removed and records an incremented retry job with its error; after the underlying filesystem issue is removed, the cleanup drainer removes the file path and clears the job. The whitespace-padded body URL regression verifies API creation, usage reporting and deletion refusal. Serialized-string `contentJson` is rejected on create and update, so reader fallback HTML cannot bypass ownership validation. UI reference summaries and delete blocking include every persisted reference type. The asset API suite passed **15/15**; the full isolated suite passed **232 tests, 0 failed, 1 skipped** (the separately gated production-auth smoke). TypeScript, focused ESLint and `git diff --check` passed. **R03 is complete.**
+
 **Rollback:** Preserve pending jobs and bytes. Prefer deferred deletion over attempting to reverse destructive filesystem work.
+
+### R03a — Repair public image reference authorization
+
+**Problem/files/evidence:** Follow-up review on 2026-10-24 confirmed a pre-existing reader defect in `src/lib/public-world.ts:55` (`assetIsPublic`). Its database candidate filter and body prefilter still require a literal asset URL, while R03 validation and deletion scans recognize parsed references. A published article containing `<img src="/api/ass&#101;ts/{id}/file">` returns 200 and renders the decoded image URL; the owner receives image bytes with 200, but an anonymous request receives 404 before and after archiving. Absolute local article cover/portrait URLs also need consistent matching. The ten-candidate limit can exclude a later legitimate image after prose-only or GM-note matches. The three previously reported R03 defects are fixed; this remaining reader-access gap is tracked separately.
+
+**Implementation (2026-10-24):** `assetIsPublic()` now matches world decorations, category illustrations and article covers/portraits through the reader's URL validation and parsed asset IDs. It examines every published public article and parses body content through the same allowlisted reader projection, removing both raw-string prefilters and the ten-candidate cap. Entity-encoded HTML, escaped JSON and absolute local URLs now authorize the bytes of publicly displayed images, including archived images. Publication, world lifecycle and display restrictions remain enforced; revision, private/draft, GM-only, stale HTML, map and timeline references do not grant anonymous access. Owner access and campaign audience/grant checks retain their existing policies. `docs/image-library.md` describes the resulting access contract.
+
+**Tasks:**
+
+1. Make public image authorization match parsed asset IDs for world decorations, category illustrations, article covers/portraits and reader-visible body images. Reuse the existing URL/document parsers. Remove raw-string prefilters that can exclude entity-encoded HTML, escaped JSON or absolute local URLs before parsing.
+2. Preserve public world and article publication/visibility filters, deleted-world checks, display restrictions and exclusion of GM-only content. Permanent references in revisions, private articles, maps or timelines must not grant anonymous byte access. Keep campaign audience/grant rules and owner access intact; the exhaustive deletion scan is not an authorization policy.
+3. Remove the ten-candidate correctness limit, or traverse candidates completely with pagination until a valid public placement is found or all candidates are exhausted. Prose mentions and GM-note matches must neither grant access nor hide a later reader-visible image.
+4. Add focused HTTP regressions in `tests/reader-placement-api.test.tsx` and/or `tests/auth-publication-api.test.tsx`, using `tests/auth-fixture.ts` and real local image bytes. Check article HTML and anonymous image responses together, with distinct assets for positive and denied cases so another public placement cannot mask a failure. Update `docs/image-library.md` and this implementation record when the fix ships.
+
+**Validation and acceptance:** Entity-encoded HTML and escaped JSON body references, plus relative and absolute local cover/portrait references, serve anonymous image bytes with 200 when publicly placed, including after archive. A legitimate visible reference beyond ten misleading matches also serves bytes. Prose-only, GM-only, revision-only, private/draft-only, unplaced archived and display-restricted assets return 404 anonymously. Removing the last public placement, unpublishing the article, making the world private or archiving the world revokes anonymous access on the next request. Owner access remains available where permitted, and existing campaign grant/revocation tests pass.
+
+**Regression coverage:** Three HTTP regressions in `tests/reader-placement-api.test.tsx` use hashed owner sessions and locally generated WebP bytes. They compare reader HTML with exact byte responses, use separate assets for each positive/denied placement, cover relative/absolute decorations and article images before/after archive, and reproduce a visible image after twelve misleading matches. They also check denied reference sources, display restrictions, placement removal, publication/visibility changes, private worlds, archived worlds and permitted owner access. The encoded-reference and candidate-cap regressions failed against the prior implementation and pass with the fix. Authorization now reads all published public article candidates; large-world query optimization remains R17 work and must preserve complete matching.
+
+**Validation (2026-10-24):** With the dev server and test process pointed at the same dedicated temporary SQLite database and asset directory, and `WORLD_CREATION_TEST_DATABASE_URL` matching `DATABASE_URL`, the focused asset, reader-placement, publication and reader-credit API suites passed **20/20**. The full isolated `pnpm test` passed **228 tests, 0 failed, 1 skipped**; the skip is the production-auth smoke's separate production-server origin gate. Existing campaign grant/revocation coverage and the dedicated world-creation integration test ran and passed. `pnpm exec tsc --noEmit --incremental false`, focused ESLint and `git diff --check` passed. **R03a is complete; R04 is next.**
+
+**Rollback:** Revert the authorization-query change independently while retaining R03's asset lifetime safeguards. Do not relax reader privacy or make every persistently referenced asset public to restore availability.
 
 ### R04 — Repair asset route parameter validation
 
@@ -383,7 +414,23 @@ The asset API tests now codify the `404` response for a collection request witho
 
 **Validation and acceptance:** Valid UUIDs reach the intended handler; malformed and foreign IDs fail; usage returns actual references; referenced permanent deletion is refused. Enable successful permanent deletion only after R03's safeguards pass.
 
+**Implementation and validation (2026-10-24):** The route handlers' bare-UUID validation with `isAssetId()` shipped in R01 commit `da530f8`; stored image URLs continue to use `imageAssetId()`. R04 added HTTP regression coverage and validated the acceptance criteria: owner checks remain in place, `withAuthor` conceals malformed and foreign resource IDs as `404`, and valid UUID usage, archive and permanent-delete behavior is exercised by the API suite. Against an isolated temporary SQLite database and asset directory with the dev server using the same paths, `tests/assets-api.test.tsx` passed **17/17**. R04 is complete; R04a is the reporting and regression follow-up.
+
 **Rollback:** Usage/archive fixes can revert independently. A permanent-delete rollback should disable deletion rather than restore unsafe checks.
+
+### R04a — Correct R04 reporting and strengthen regressions
+
+**Problem/files/evidence (review, 2026-10-24):** R04 satisfies its acceptance criteria, and its initial validation passed **17/17** asset API tests with no skips against fresh temporary SQLite/assets; `git diff --check` passed. Review found three minor issues in `refactor.md` and `tests/assets-api.test.tsx`: the implementation record implied the UUID repair shipped in R04 even though all three route fixes shipped in R01 commit `da530f8`; the malformed-ID test claimed rejection before a database lookup even though `withAuthor` performs resource lookup first; and the foreign-asset regression checked row existence without checking archive state or file bytes.
+
+**Completed scope:**
+
+1. Correct the R04 implementation record to credit R01 commit `da530f8` for replacing `imageAssetId()` with `isAssetId()` in the usage, archive and permanent-delete routes. Describe R04's contribution as regression coverage and acceptance validation. Check current roadmap summaries for consistent R04/R04a completion and next-step wording; retain dated historical validation records.
+2. Rename the malformed-ID test to describe the behavior it verifies: authenticated malformed asset detail requests return `404` across usage, archive and permanent deletion. Remove the unsupported claim about lookup order; preserve the existing authorization behavior.
+3. Strengthen the foreign-asset test after each of the three requests: assert `404`, confirm the database row still exists with `archived === false`, and compare `readAsset(otherAssetId)` with the original fixture bytes. Keep cleanup after these assertions so teardown cannot mask a mutation.
+
+**Implementation and validation (2026-10-24):** Credited the route UUID validation to R01 commit `da530f8` and clarified that R04 added regression coverage and acceptance validation. Renamed the malformed-ID test to describe the authenticated `404` behavior without asserting lookup order. After each denied usage, archive and permanent-delete request against a valid foreign UUID, the regression now confirms the database row still exists and is unarchived and that `readAsset()` returns the original fixture bytes. Using a dedicated temporary SQLite database and asset directory with the dev server and test process on matching paths, including matching `WORLD_CREATION_TEST_DATABASE_URL`, `tests/assets-api.test.tsx` passed **17/17 with no skips**. `git diff --check` passed. R04a is complete; R05 is next.
+
+**Rollback:** Revert the documentation/test changes independently; retain the existing route validation and ownership checks.
 
 ### R05 — Guarantee safe variable rendering and truthful write outcomes
 
@@ -507,9 +554,9 @@ The asset API tests now codify the `404` response for a collection request witho
 
 ### R17 — Bound search and reader work with measured changes
 
-**Problem/files/evidence:** F18, full article-list payloads and the ten-candidate asset authorization cap.
+**Problem/files/evidence:** F18 and full article-list payloads. R03a owns removal of the ten-candidate asset authorization correctness cap; this task measures and improves reader-query cost without restoring that cap.
 
-**Changes and benefit:** Establish representative-size benchmarks. Introduce lightweight author summaries through a compatible contract. Bound search work while preserving ranking and cursor semantics. Reuse verified mention data or another policy-filtered backlink strategy. Remove correctness caps from asset authorization.
+**Changes and benefit:** Establish representative-size benchmarks. Introduce lightweight author summaries through a compatible contract. Bound search work while preserving ranking and cursor semantics. Reuse verified mention data or another policy-filtered backlink strategy. Optimize asset authorization while preserving R03a's complete reference matching and reader filters.
 
 **Validation and acceptance:** Include worlds beyond 2,000 articles and more than ten misleading asset matches. Search, navigation and asset visibility remain complete. Record query count, response bytes and latency before/after. Add FTS or caching only when measurements justify it.
 
@@ -558,7 +605,7 @@ The asset API tests now codify the `404` response for a collection request witho
 ### Recommended implementation order
 
 1. **Safety foundation complete:** R01, R01a and R02 are implemented and validated.
-2. **Focused correctness/security:** R03 is next, followed by R04–R08 and R15.
+2. **Focused correctness/security:** R03, its R03a public image authorization follow-up, R04 and R04a are complete; continue with R05–R08 and R15.
 3. **Shared contracts and durable operations:** R09–R14.
 4. **Architectural extraction and measured optimization:** R16–R19.
 5. **Documentation throughout; optional cleanup last:** R20 and R21.
@@ -569,7 +616,9 @@ The major changes are asset lifetime coordination, durable import recovery, auth
 
 ## 7. Testing and refactoring safety strategy
 
-### Validation actually executed
+### Validation executed during the original audit
+
+Implementation validation is recorded separately in each roadmap task above.
 
 | Check | Result |
 |---|---|
@@ -736,4 +785,4 @@ WorldForge's core technology and several existing safeguards should remain. The 
 
 The recommended sequence is to establish reliable tests, contain destructive cleanup, repair data and rendering contracts, centralize complete operations, and then simplify UI coordination and measured performance bottlenecks.
 
-That approach improves correctness, recovery and maintainability while keeping the application recognizable and deployable throughout. **R01, R01a and R02 are complete; R03 is next.**
+That approach improves correctness, recovery and maintainability while keeping the application recognizable and deployable throughout. **R01, R01a, R02, R03, R03a, R04 and R04a are complete; R05 is next.**

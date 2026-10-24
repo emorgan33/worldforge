@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { withAuthor, sessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { validateAppearance } from "@/lib/world-appearance";
-import { validateImageReference } from "@/lib/asset-validation";
+import type { WorldAppearance } from "@/lib/world-appearance";
+import { assertImageReference, validateImageReference, ImageReferenceError } from "@/lib/asset-validation";
 import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { RPG_SYSTEMS } from "@/lib/rpg";
 import { createWorld, normalizeWorldCreation } from "@/lib/world-creation";
@@ -77,7 +78,7 @@ async function patchHandler(request: Request) {
   }
   const altError = validatePlacementAlt(body.coverImageAlt) || validatePlacementAlt(body.bannerImageAlt);
   if (altError) return NextResponse.json({ error: altError }, { status: 400 });
-  let appearance;
+  let appearance: WorldAppearance | undefined;
   if (body.appearance !== undefined) {
     try { appearance = validateAppearance(body.appearance); } catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 400 }); }
     const error = await validateImageReference(appearance.backgroundImage, body.id);
@@ -86,12 +87,19 @@ async function patchHandler(request: Request) {
   try {
     const existing = await prisma.world.findUnique({ where: { id: body.id }, select: { id: true } });
     if (!existing) return NextResponse.json({ error: "World not found" }, { status: 404 });
-    await prisma.world.update({
-      where: { id: body.id },
-      data: { ...(body.isPublic !== undefined ? { isPublic: body.isPublic } : {}), ...(body.system !== undefined ? { system: body.system } : {}), ...(appearance ? { appearance: JSON.stringify(appearance) } : {}), title: body.title.trim(), description: body.description.trim(), coverImage: body.coverImage.trim() || null, bannerImage: body.bannerImage.trim() || null, ...(body.coverImageAlt !== undefined ? { coverImageAlt: normalizePlacementAlt(body.coverImageAlt) } : {}), ...(body.bannerImageAlt !== undefined ? { bannerImageAlt: normalizePlacementAlt(body.bannerImageAlt) } : {}) },
-    });    const world = await prisma.world.findUnique({ where: { id: body.id }, select: WORLD_PROJECTION });
+    await prisma.$transaction(async tx => {
+      await assertImageReference(body.coverImage, body.id, tx);
+      await assertImageReference(body.bannerImage, body.id, tx);
+      if (appearance) await assertImageReference(appearance.backgroundImage, body.id, tx);
+      await tx.world.update({
+        where: { id: body.id },
+        data: { ...(body.isPublic !== undefined ? { isPublic: body.isPublic } : {}), ...(body.system !== undefined ? { system: body.system } : {}), ...(appearance ? { appearance: JSON.stringify(appearance) } : {}), title: body.title.trim(), description: body.description.trim(), coverImage: body.coverImage.trim() || null, bannerImage: body.bannerImage.trim() || null, ...(body.coverImageAlt !== undefined ? { coverImageAlt: normalizePlacementAlt(body.coverImageAlt) } : {}), ...(body.bannerImageAlt !== undefined ? { bannerImageAlt: normalizePlacementAlt(body.bannerImageAlt) } : {}) },
+      });
+    });
+    const world = await prisma.world.findUnique({ where: { id: body.id }, select: WORLD_PROJECTION });
     return NextResponse.json(world);
   } catch (error) {
+    if (error instanceof ImageReferenceError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error("Failed to update world:", error);
     return NextResponse.json({ error: "Failed to update world" }, { status: 500 });
   }

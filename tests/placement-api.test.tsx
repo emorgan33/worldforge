@@ -56,6 +56,44 @@ test("placement descriptions persist, clone, restore and validate", { skip: !ori
   assert.equal(restored.coverImageAlt, "A keep at dawn");
   assert.equal(restored.portraitImageAlt, "The castellan");
 
+  // A local URL remains world-scoped when represented as an absolute URL.
+  const otherWorld = await db.world.create({ data: { ownerId: user.id, title: "Other placement world", slug: `placement-other-${Date.now()}` } });
+  const foreignAssetId = randomUUID();
+  await db.imageAsset.create({ data: { id: foreignAssetId, worldId: otherWorld.id, title: "Foreign", originalName: "foreign.webp", byteSize: 1, width: 1, height: 1, sha256: `foreign-${foreignAssetId}` } });
+  const absoluteForeign = await authenticatedFetch(`${origin}/api/articles`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ worldId: world.id, title: "Foreign absolute image", coverImage: `https://assets.example/api/assets/${foreignAssetId}/file` }) });
+  assert.equal(absoluteForeign.status, 400);
+
+  // String contentJson is rejected so its later JSON.stringify cannot turn a
+  // validated document into a string and expose unvalidated fallback HTML.
+  const stringDocumentWithForeignFallback = await authenticatedFetch(`${origin}/api/articles`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      worldId: world.id,
+      title: "String document with foreign fallback",
+      contentJson: JSON.stringify({ type: "doc", content: [{ type: "image", attrs: { src: assetUrl } }] }),
+      contentHtml: `<img src="/api/assets/${foreignAssetId}/file">`,
+    }),
+  });
+  assert.equal(stringDocumentWithForeignFallback.status, 400);
+  const stringContentPatch = await authenticatedFetch(`${origin}/api/articles/${article.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contentJson: JSON.stringify({ type: "doc", content: [{ type: "image", attrs: { src: assetUrl } }] }),
+      contentHtml: `<img src="/api/assets/${foreignAssetId}/file">`,
+    }),
+  });
+  assert.equal(stringContentPatch.status, 400);
+
+  // Nullable placements stay optional when cloning a plain article.
+  const plainArticle = await db.article.create({ data: { worldId: world.id, title: "Plain article", slug: `plain-${Date.now()}` } });
+  const plainCloneResponse = await authenticatedFetch(`${origin}/api/articles/${plainArticle.id}/clone`, { method: "POST" });
+  assert.equal(plainCloneResponse.status, 201);
+  const plainClone = await plainCloneResponse.json();
+  assert.equal(plainClone.coverImage, null);
+  assert.equal(plainClone.portraitImage, null);
+
   // Category illustrations must be managed world images, and can be cleared.
   const category = await db.category.create({ data: { worldId: world.id, name: "Atlas", order: 0 } });
   const sendCategory = (body: object) => authenticatedFetch(`${origin}/api/categories`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ worldId: world.id, action: "setIconImage", id: category.id, ...body }) });

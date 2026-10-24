@@ -55,37 +55,22 @@ export async function publicArticle(worldSlug: string, articleSlug: string) {
 export async function assetIsPublic(id: string, worldId: string) {
   const world = await prisma.world.findFirst({ where: { id: worldId, isPublic: true, deletedAt: null }, select: { slug: true, coverImage: true, bannerImage: true, appearance: true } });
   if (!world) return false;
-  const assetUrlPattern = `/api/assets/${id}/file`;
-  if ([world.coverImage, world.bannerImage, parseAppearance(world.appearance).backgroundImage].some(value => value && localAssetId(value) === id)) return true;
+  const ids = new Set([id]);
+  const referencesAsset = (value: string | null) => localAssetId(publicImage(value, ids) || "") === id;
+  if ([world.coverImage, world.bannerImage, parseAppearance(world.appearance).backgroundImage].some(referencesAsset)) return true;
 
-  const iconCategory = await prisma.category.findFirst({ where: { worldId, iconImage: assetUrlPattern }, select: { id: true } });
-  if (iconCategory) return true;
+  const categories = await prisma.category.findMany({ where: { worldId, iconImage: { not: null } }, select: { iconImage: true } });
+  if (categories.some(category => referencesAsset(category.iconImage))) return true;
 
-  // First pass: efficient query-level filter using only cover/portrait (no contentHtml scan needed if not found)
+  // Stored encodings cannot safely prefilter parsed image references. Check
+  // every published article through the same projection used by the reader.
   const articles = await prisma.article.findMany({
-    where: {
-      worldId,
-      ...publicArticleFilter,
-      OR: [
-        { coverImage: assetUrlPattern },
-        { portraitImage: assetUrlPattern },
-        { contentHtml: { contains: assetUrlPattern } },
-        { contentJson: { contains: assetUrlPattern } },
-      ],
-    },
+    where: { worldId, ...publicArticleFilter },
     select: { contentJson: true, contentHtml: true, coverImage: true, portraitImage: true },
-    take: 10, // Enough to verify existence
   });
 
-  if (!articles.length) return false;
-
-  // Second pass: verify extracted local asset ID from parsed content
-  const ids = new Set([id]);
   return articles.some(article => {
-    if (article.coverImage && localAssetId(article.coverImage) === id) return true;
-    if (article.portraitImage && localAssetId(article.portraitImage) === id) return true;
-    // Only parse if a stored body field actually references the asset
-    if (!article.contentHtml?.includes(assetUrlPattern) && !article.contentJson?.includes(assetUrlPattern)) return false;
+    if (referencesAsset(article.coverImage) || referencesAsset(article.portraitImage)) return true;
     const doc = publicDocument(parseArticleDocument(article.contentJson, article.contentHtml), [], ids, new Set());
     return [...documentReferences(doc, "image", "src")].some(src => localAssetId(src) === id);
   });

@@ -3,11 +3,13 @@ import { withAuthor, AccessError } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { isImageReference } from "@/lib/assets";
+import { assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
 
 class MapError extends Error {
   constructor(message: string, public status = 400) { super(message); }
 }
 function failure(error: unknown) {
+  if (error instanceof ImageReferenceError) return NextResponse.json({ error: error.message }, { status: 400 });
   if (error instanceof MapError) return NextResponse.json({ error: error.message }, { status: error.status });
   if (error instanceof AccessError) return NextResponse.json({ error: error.message }, { status: error.status });
   console.error("Map request failed:", error);
@@ -122,16 +124,19 @@ async function createMap(body: Record<string, unknown>) {
   const description = optionalString(body.description, "Description", 2000);
   const imageUrl = requiredString(body.imageUrl, "Map image", 2048);
   if (imageUrl.startsWith("data:") || !isImageReference(imageUrl)) throw new MapError("Choose a valid map image.");
-  const map = await prisma.map.create({
-    data: {
-      worldId,
-      title,
-      description,
-      imageUrl,
-      width: positiveInt(body.width, "Map width", 3840),
-      height: positiveInt(body.height, "Map height", 2160),
-    },
-    include: mapInclude,
+  const map = await prisma.$transaction(async tx => {
+    await assertImageReference(imageUrl, worldId, tx);
+    return tx.map.create({
+      data: {
+        worldId,
+        title,
+        description,
+        imageUrl,
+        width: positiveInt(body.width, "Map width", 3840),
+        height: positiveInt(body.height, "Map height", 2160),
+      },
+      include: mapInclude,
+    });
   });
   return NextResponse.json(map, { status: 201 });
 }
@@ -207,7 +212,10 @@ async function updateMap(body: Record<string, unknown>) {
     if (imageUrl.startsWith("data:") || !isImageReference(imageUrl)) throw new MapError("Choose a valid map image.");
     data.imageUrl = imageUrl;
   }
-  const map = await prisma.map.update({ where: { id }, data, include: mapInclude });
+  const map = await prisma.$transaction(async tx => {
+    if (body.imageUrl !== undefined) await assertImageReference(data.imageUrl, worldId, tx);
+    return tx.map.update({ where: { id }, data, include: mapInclude });
+  });
   return NextResponse.json(map);
 }
 

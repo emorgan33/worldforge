@@ -58,16 +58,17 @@ Before: The POST handler queried the same article 3 times (once via `include` on
 
 After: The revision's eagerly-loaded article reference is reused, eliminating 2 redundant queries.
 
-### Optimized Asset Visibility Check
+### Complete Asset Visibility Authorization
 **File:** `src/lib/public-world.ts`
 
-Before: `assetIsPublic` loaded `contentHtml`/`contentJson` for ALL public articles to find asset references.
-
-After: 
-- Query-level filter first: only returns articles that contain the asset URL via `contentHtml: { contains }`
-- Limited to 10 results (enough to verify existence)
-- Early-exit short-circuits when no match found
-- Skips document parsing if `contentHtml` doesn't contain the URL pattern
+R03a removed the ten-candidate limit and raw-URL prefilters from public image
+authorization. It now examines all published public article candidates and
+parses the displayed reader projection before granting byte access. This keeps
+entity-encoded HTML, escaped JSON, absolute local URLs and visible references
+after misleading prose or GM-note matches correct. The larger query cost is a
+known tradeoff; any future optimization must retain complete matching and the
+same publication, visibility and reader-content filters. Representative-size
+measurement and optimization are tracked in R17 of `refactor.md`.
 
 ### Optimized Worlds List
 **File:** `src/app/api/worlds/route.ts`

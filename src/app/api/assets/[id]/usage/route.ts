@@ -13,6 +13,10 @@ export interface AssetUsage {
   categories: { id: string; name: string }[];
   articleCount: number;
   articles: { id: string; title: string; slug: string; categoryName: string | null }[];
+  revisionCount: number;
+  mapCount: number;
+  mapLayerCount: number;
+  timelineCount: number;
 }
 
 /**
@@ -53,6 +57,10 @@ export const GET = withAuthor(async (_request: Request, { params }: { params: Pr
       categories: references.categories,
       articleCount: references.articles.length,
       articles: references.articles,
+      revisionCount: references.revisions,
+      mapCount: references.maps,
+      mapLayerCount: references.mapLayers,
+      timelineCount: references.timelines,
     } satisfies AssetUsage);
   } catch (error) {
     if (error instanceof AccessError) {

@@ -36,8 +36,10 @@ Both views come from the optional Aethelgard demo seed and show the author works
   search across article bodies and metadata.
 - **World appearance** — preset themes, backgrounds, accent colors and reading
   widths, with live author preview.
-- **Image library** — upload, normalize to WebP, reuse across articles and
-  worlds, with archive and safe deletion.
+- **Image library** — upload and normalize to WebP, reuse images within their
+  owning world, hide images without breaking existing placements, and safely
+  delete only assets with no persistent references. See the
+  [image library guide](docs/image-library.md).
 - **Curated stock art** — browse a local fantasy-art catalog, inspect source and
   rights details, preview placements, preserve provenance through world
   backups, and show credits to readers. The installed candidates are still
