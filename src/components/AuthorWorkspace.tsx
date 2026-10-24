@@ -18,7 +18,8 @@ import { Sidebar } from "@/components/Sidebar";
 import { NewWorldForm } from "@/components/worlds/NewWorldForm";
 import { WorldGuardProvider } from "@/components/worlds/WorldGuard";
 import { ArticleViewer } from "@/components/article/ArticleViewer";
-import { ArticleEditorForm, ArticleSaveInput } from "@/components/article/ArticleEditorForm";
+import { ArticleEditorForm } from "@/components/article/ArticleEditorForm";
+import { ArticleSaveError, isArticleVersion, type ArticleSaveInput, type ArticleSaveOptions, type ArticleSaveResult } from "@/lib/article-save";
 import { InteractiveMap, type MapData, type MapMutation } from "@/components/map/InteractiveMap";
 import { TimelineViewer } from "@/components/timeline/TimelineViewer";
 import { VariableManager } from "@/components/variables/VariableManager";
@@ -601,7 +602,7 @@ export default function WorldForgeApp() {
     return true;
   };
 
-  const handleSaveArticle = async (articleData: ArticleSaveInput, options?: { autosave?: boolean; articleId?: string }) => {
+  const handleSaveArticle = async (articleData: ArticleSaveInput, options?: ArticleSaveOptions): Promise<ArticleSaveResult> => {
     if (!world) throw new Error("Choose a campaign first.");
     // No write starts (or resumes) while a world transition is in flight; the
     // editor keeps its dirty flag and local recovery draft.
@@ -610,31 +611,39 @@ export default function WorldForgeApp() {
     const epoch = loadEpoch.current;
     setArticleSaving(true);
     try {
-      const targetId = options?.articleId || currentArticle?.id;
+      const targetId = options?.articleId === null ? undefined : options?.articleId || currentArticle?.id;
+      if (targetId && !isArticleVersion(articleData.expectedVersion)) {
+        throw new ArticleSaveError("This draft has no saved article version. Save it as a new article, or copy your changes and reopen the saved article to apply them.", "ARTICLE_VERSION_REQUIRED");
+      }
       const response = await fetch(targetId ? `/api/articles/${targetId}` : "/api/articles", {
         method: targetId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(articleData),
       });
-      if (!response.ok) throw new Error("Unable to save article. Please try again.");
       const saved = await response.json();
+      if (!response.ok) {
+        if (saved.code === "ARTICLE_CONFLICT") throw new ArticleSaveError(saved.error, "ARTICLE_CONFLICT");
+        throw new Error(typeof saved.error === "string" ? saved.error : "Unable to save article. Please try again.");
+      }
+      if (typeof saved.id !== "string" || !isArticleVersion(saved.version)) throw new Error("The server did not confirm the saved article version. Your local draft has been retained.");
+      const result: ArticleSaveResult = { id: saved.id, version: saved.version };
       // A committed write stays successful even if a subsequent refresh fails.
       // Late refreshes after a world switch are dropped, never mixed in.
       const [listResult, detailResult] = await Promise.allSettled([
         fetch(`/api/articles?worldId=${writeWorldId}`).then(async result => { if (!result.ok) throw new Error(); return result.json(); }),
         fetch(`/api/articles/${saved.id}`).then(async result => { if (!result.ok) throw new Error(); return result.json(); }),
       ]);
-      if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return saved.id as string;
+      if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return result;
       setArticles(previous => listResult.status === "fulfilled" && Array.isArray(listResult.value) ? listResult.value : sortOrdered([...previous.filter(article => article.id !== saved.id), saved]));
       if (options?.autosave) {
         if (currentArticle?.id === saved.id) setCurrentArticle(detailResult.status === "fulfilled" ? detailResult.value : { ...currentArticle, ...saved });
-        return saved.id as string;
+        return result;
       }
       setCurrentArticle(detailResult.status === "fulfilled" ? detailResult.value : { children: [], inboundMentions: [], outboundMentions: [], secrets: [], ...currentArticle, ...saved });
       setEditorDirty(false);
       setSelectedArticleId(saved.id);
       setActiveView("article");
-      return saved.id as string;
+      return result;
     } finally { setArticleSaving(false); }
   };
 

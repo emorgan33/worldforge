@@ -1,3 +1,4 @@
+import { isArticleVersion, type ArticleConflictResponse } from "@/lib/article-save";
 import { publicationFields } from "@/lib/publication";
 import { withAuthor, sessionUser } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
@@ -6,6 +7,8 @@ import { assertDocumentImageReferences, assertImageReference, ImageReferenceErro
 import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { prisma } from "@/lib/db";
 import { validateCharacterRows } from "@/lib/character-sheet";
+
+class ArticleConflict extends Error {}
 
 async function getHandler(
   req: NextRequest,
@@ -66,9 +69,17 @@ async function patchHandler(
     
     const body = await req.json();
 
+    if (body.expectedVersion !== undefined && !isArticleVersion(body.expectedVersion)) {
+      return NextResponse.json({ error: "expectedVersion must be a positive safe integer." }, { status: 400 });
+    }
     const existing = await prisma.article.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ error: "Article not found" }, { status: 404 });
+    }
+
+    if (body.expectedVersion !== undefined && body.expectedVersion !== existing.version) {
+      const conflict: ArticleConflictResponse = { code: "ARTICLE_CONFLICT", error: "This article changed since you opened it. Your changes have not overwritten the saved article. Save a separate copy or reopen the article to reconcile them.", currentVersion: existing.version };
+      return NextResponse.json(conflict, { status: 409 });
     }
 
     const {
@@ -100,23 +111,20 @@ async function patchHandler(
     try { publication = publicationFields({ state, publicationStatus, visibility }, existing); } catch { return NextResponse.json({ error: "Invalid publication status or visibility" }, { status: 400 }); }
     const altError = validatePlacementAlt(coverImageAlt) || validatePlacementAlt(portraitImageAlt);
     if (altError) return NextResponse.json({ error: altError }, { status: 400 });
+    if ((coverImage !== undefined && typeof coverImage !== "string") ||
+      (portraitImage !== undefined && typeof portraitImage !== "string")) {
+      return NextResponse.json({ error: "Cover and portrait images must be strings." }, { status: 400 });
+    }
     if (categoryId && !await prisma.category.findFirst({ where: { id: categoryId, worldId: existing.worldId }, select: { id: true } })) {
       return NextResponse.json({ error: "Category not found in this world" }, { status: 400 });
     }
     const categoryChanged = categoryId !== undefined && categoryId !== existing.categoryId;
     const lastSibling = categoryChanged ? await prisma.article.findFirst({ where: { worldId: existing.worldId, categoryId }, orderBy: { order: "desc" }, select: { order: true } }) : null;
     
-    // Create a revision before updating (for history)
-    await prisma.$transaction(async tx => {
-      if (coverImage !== undefined) await assertImageReference(coverImage, existing.worldId, tx);
-      if (portraitImage !== undefined) await assertImageReference(portraitImage, existing.worldId, tx);
-      if (contentHtml !== undefined || contentJson !== undefined) {
-        const nextContentJson = contentJson !== undefined ? contentJson : contentHtml !== undefined ? null : existing.contentJson;
-        const nextContentHtml = contentHtml !== undefined ? contentHtml : existing.contentHtml;
-        await assertDocumentImageReferences(nextContentJson, nextContentHtml, existing.worldId, tx);
-      }
-      await tx.article.update({
-        where: { id },
+    // The version predicate also protects legacy callers against an overlapping write.
+    const updated = await prisma.$transaction(async tx => {
+      const write = await tx.article.updateMany({
+        where: { id, version: existing.version },
         data: {
           ...(categoryChanged ? { order: (lastSibling?.order ?? -1) + 1 } : {}),
           title: title !== undefined ? title : existing.title,
@@ -133,7 +141,7 @@ async function patchHandler(
           tags: tags !== undefined ? tags : existing.tags,
           ...publication,
           isPinned: isPinned !== undefined ? isPinned : existing.isPinned,
-          version: existing.version + 1,
+          version: { increment: 1 },
           canonState: canonState !== undefined ? canonState : existing.canonState,
           wordCount:
             contentHtml !== undefined
@@ -141,6 +149,15 @@ async function patchHandler(
               : existing.wordCount,
         },
       });
+
+      if (write.count !== 1) throw new ArticleConflict();
+      if (coverImage !== undefined) await assertImageReference(coverImage, existing.worldId, tx);
+      if (portraitImage !== undefined) await assertImageReference(portraitImage, existing.worldId, tx);
+      if (contentHtml !== undefined || contentJson !== undefined) {
+        const nextContentJson = contentJson !== undefined ? contentJson : contentHtml !== undefined ? null : existing.contentJson;
+        const nextContentHtml = contentHtml !== undefined ? contentHtml : existing.contentHtml;
+        await assertDocumentImageReferences(nextContentJson, nextContentHtml, existing.worldId, tx);
+      }
 
       // Create revision with snapshot of previous state
       await tx.articleRevision.create({
@@ -168,41 +185,47 @@ async function patchHandler(
       if (contentHtml !== undefined || contentJson !== undefined) {
         await syncArticleMentions(tx, existing.worldId, id, contentJson, contentHtml ?? existing.contentHtml ?? "");
       }
-    });
+      // Read within this transaction so the response carries this write's version.
+      return tx.article.findUniqueOrThrow({
+        where: { id },
+        include: {
+          category: true,
+          parent: {
+            select: { id: true, title: true, template: true },
+          },
+          children: {
+            select: { id: true, title: true, template: true },
+          },
+          outboundMentions: {
+            include: {
+              targetArticle: {
+                select: { id: true, title: true, template: true, excerpt: true },
+              },
+            },
+          },
+          inboundMentions: {
+            include: {
+              sourceArticle: {
+                select: { id: true, title: true, template: true, excerpt: true },
+              },
+            },
+          },
+          secrets: {
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      });
 
-    // Return updated article
-    const updated = await prisma.article.findUnique({
-      where: { id },
-      include: {
-        category: true,
-        parent: {
-          select: { id: true, title: true, template: true },
-        },
-        children: {
-          select: { id: true, title: true, template: true },
-        },
-        outboundMentions: {
-          include: {
-            targetArticle: {
-              select: { id: true, title: true, template: true, excerpt: true },
-            },
-          },
-        },
-        inboundMentions: {
-          include: {
-            sourceArticle: {
-              select: { id: true, title: true, template: true, excerpt: true },
-            },
-          },
-        },
-        secrets: {
-          orderBy: { createdAt: "desc" },
-        },
-      },
     });
 
     return NextResponse.json(updated);
   } catch (error: unknown) {
+    if (error instanceof ArticleConflict) {
+      const { id } = await params;
+      const current = await prisma.article.findUnique({ where: { id }, select: { version: true } });
+      const conflict: ArticleConflictResponse = { code: "ARTICLE_CONFLICT", error: "This article changed while saving. Your changes have not overwritten the saved article. Save a separate copy or reopen the article to reconcile them.", currentVersion: current?.version ?? null };
+      return NextResponse.json(conflict, { status: 409 });
+    }
     if (error instanceof ImageReferenceError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error("Failed to update article:", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process article." }, { status: 500 });

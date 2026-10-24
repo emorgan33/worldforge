@@ -8,7 +8,7 @@ import { Save, X } from "lucide-react";
 import { ArticleDetail, ArticleTemplateType, VariableCollectionItem, CategoryItem } from "@/types";
 import { RPG_SYSTEMS, RpgBlockItem } from "@/lib/rpg";
 import { publicationFields, type PublicationStatus, type ArticleVisibility } from "@/lib/publication";
-import { articleDraftKey, readArticleDraft, removeArticleDraft } from "@/lib/article-drafts";
+import { articleDraftSessionId, articleDraftKey, readArticleDraft, removeArticleDraft } from "@/lib/article-drafts";
 import { categoryOptions } from "@/lib/category-tree";
 import { ImageSourceField } from "@/components/assets/ImageSourceField";
 import { PlacementAltField } from "@/components/assets/PlacementAltField";
@@ -19,14 +19,7 @@ import { TemplateIcon } from "@/components/TemplateIcon";
 import { TipTapEditor } from "@/components/editor/TipTapEditor";
 import { CharacterSheet } from "./CharacterSheet";
 import { isCharacterSystem } from "@/lib/character-sheet";
-
-export interface ArticleSaveInput {
-  worldId: string; template: ArticleTemplateType; title: string; categoryId: string | null;
-  excerpt: string; tags: string; state: NonNullable<ArticleDetail["state"]>; contentHtml: string;
-  contentJson?: JSONContent; coverImage?: string; coverImageAlt?: string | null; publicationStatus?: PublicationStatus; visibility?: ArticleVisibility; metadata: Record<string, string>;
-  portraitImage?: string; portraitImageAlt?: string | null;
-  canonState?: string;
-}
+import { ArticleSaveError, type ArticleSaveInput, type ArticleSaveOptions, type ArticleSaveResult } from "@/lib/article-save";
 
 interface ArticleEditorFormProps {
   initialArticle?: Partial<ArticleDetail> | null;
@@ -42,7 +35,7 @@ interface ArticleEditorFormProps {
   isDirty: boolean;
   onDirtyChange: (dirty: boolean) => void;
   onGuardChange?: (registration: { dirty: boolean; busy: boolean } | null) => void;
-  onSave: (articleData: ArticleSaveInput, options?: { autosave?: boolean; articleId?: string }) => Promise<string>;
+  onSave: (articleData: ArticleSaveInput, options?: ArticleSaveOptions) => Promise<ArticleSaveResult>;
   onCancel: () => void;
 }
 
@@ -81,6 +74,7 @@ export function ArticleEditorForm({
 
   const [contentJson, setContentJson] = useState<JSONContent | undefined>(() => { try { return initialArticle?.contentJson ? JSON.parse(initialArticle.contentJson) : undefined; } catch { return undefined; } });
   const [saveError, setSaveError] = useState("");
+  const [saveConflict, setSaveConflict] = useState(false);
 
   // Metadata dynamic fields
   const [metadata, setMetadata] = useState<Record<string, string>>(() => {
@@ -107,7 +101,11 @@ export function ArticleEditorForm({
 
   const contentSnapshot = useRef<{ html: string; json: JSONContent } | null>(null);
   const articleId = useRef(initialArticle?.id);
-  const draftKey = articleDraftKey(actorId ?? "local", worldId, initialArticle?.id);
+  const expectedVersion = useRef(initialArticle?.version);
+  const recoveryArticleId = useRef(initialArticle?.id);
+  const [draftSessionId, setDraftSessionId] = useState("");
+  const draftActorId = actorId ?? "local";
+  const draftKey = draftSessionId ? articleDraftKey(draftActorId, worldId, initialArticle?.id, draftSessionId) : "";
   const legacyRecovery = useRef(false);
   const [recovery, setRecovery] = useState<ArticleSaveInput | null>(null);
   const [recoveryReady, setRecoveryReady] = useState(false);
@@ -141,20 +139,30 @@ export function ArticleEditorForm({
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
+      setDraftSessionId(articleDraftSessionId({ getName: () => window.name, setName: value => { window.name = value; } }));
+    } catch {
+      setLocalError("Unable to identify this tab for draft recovery. Keep this page open until saving succeeds.");
+      setDraftSessionId(crypto.randomUUID());
+    }
+  }, [actorId]);
+
+  useEffect(() => {
+    if (!draftActorId) return;
+    try {
       // Probe storage here so denied access surfaces a visible warning.
       localStorage.getItem(draftKey);
-      const { stored } = readArticleDraft(localStorage, actorId ?? "local", worldId, initialArticle?.id);
+      const { stored, legacyCopied } = readArticleDraft(localStorage, draftActorId, worldId, initialArticle?.id, draftSessionId);
       if (stored) {
         const draft = stored.draft;
-        legacyRecovery.current = stored.source === "legacy";
+        legacyRecovery.current = stored.source === "legacy" || legacyCopied;
         if (JSON.stringify(draft.data) !== baseline.current) {
           setRecovery(draft.data);
-          if (typeof draft.articleId === "string") articleId.current = draft.articleId;
-        } else removeArticleDraft(localStorage, actorId ?? "local", worldId, initialArticle?.id, { legacy: legacyRecovery.current });
+          recoveryArticleId.current = draft.articleId || initialArticle?.id;
+        } else removeArticleDraft(localStorage, draftActorId, worldId, initialArticle?.id, { legacy: legacyRecovery.current, sessionId: draftSessionId });
       }
     } catch { setLocalError("Local draft storage is unavailable. Keep this page open until saving succeeds."); }
     setRecoveryReady(true);
-  }, [draftKey, actorId, worldId, initialArticle?.id]);
+  }, [draftKey, draftActorId, worldId, initialArticle?.id]);
 
   useEffect(() => {
     if (!recoveryReady || recovery) return;
@@ -162,33 +170,37 @@ export function ArticleEditorForm({
     onDirtyChange(dirty);
     if (!dirty) return;
     try {
-      localStorage.setItem(draftKey, JSON.stringify({ version: 1, articleId: articleId.current, data: JSON.parse(serialized) }));
+      localStorage.setItem(draftKey, JSON.stringify({ version: 1, articleId: articleId.current, data: { ...JSON.parse(serialized), expectedVersion: expectedVersion.current } }));
       setLocalError("");
     } catch { setLocalError("Unable to keep a local recovery draft. Keep this page open until saving succeeds."); }
   }, [serialized, draftKey, onDirtyChange, recoveryReady, recovery]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const save = async (autosave: boolean) => {
+  const save = async (autosave: boolean, asNew = false) => {
     if (savesPaused || inFlight.current || recovery || !title.trim() || metadataError) return;
     const snapshot = latest.current;
     inFlight.current = true;
     setIsSubmitting(true);
     setManualSaving(!autosave);
     setSaveError("");
+    setSaveConflict(false);
     try {
       const data: ArticleSaveInput = JSON.parse(snapshot);
+      data.expectedVersion = asNew ? undefined : expectedVersion.current;
       if (contentSnapshot.current) { data.contentHtml = contentSnapshot.current.html; data.contentJson = contentSnapshot.current.json; }
-      const id = await onSave(data, { autosave, articleId: articleId.current });
+      const { id, version } = await onSave(data, { autosave, articleId: asNew ? null : articleId.current });
       articleId.current = id;
+      expectedVersion.current = version;
       baseline.current = snapshot;
       setLastSaved(true);
       onDirtyChange(latest.current !== snapshot);
       try {
-        if (latest.current === snapshot) removeArticleDraft(localStorage, actorId ?? "local", worldId, initialArticle?.id, { legacy: true });
-        else localStorage.setItem(draftKey, JSON.stringify({ version: 1, articleId: id, data: JSON.parse(latest.current) }));
+        if (latest.current === snapshot) removeArticleDraft(localStorage, draftActorId, worldId, initialArticle?.id, { legacy: true, sessionId: draftSessionId });
+        else localStorage.setItem(draftKey, JSON.stringify({ version: 1, articleId: id, data: { ...JSON.parse(latest.current), expectedVersion: version } }));
       } catch { setLocalError("Unable to update the local recovery draft."); }
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Unable to save article.");
+      setSaveConflict(error instanceof ArticleSaveError);
     } finally {
       inFlight.current = false;
       setIsSubmitting(false);
@@ -206,6 +218,9 @@ export function ArticleEditorForm({
 
   const recoverDraft = () => {
     if (!recovery) return;
+    articleId.current = recoveryArticleId.current;
+    expectedVersion.current = recovery.expectedVersion;
+    if (recovery.canonState !== undefined) setCanonState(recovery.canonState);
     setTemplate(recovery.template); setTitle(recovery.title); setCategoryId(recovery.categoryId || "");
     setCoverImage(recovery.coverImage || "");
     setCoverImageAlt(recovery.coverImageAlt ?? null);
@@ -214,6 +229,7 @@ export function ArticleEditorForm({
     setExcerpt(recovery.excerpt); setTags(recovery.tags); setState(recovery.publicationStatus || (recovery.state === "PRIVATE" ? "PUBLISHED" : recovery.state)); setVisibility(recovery.visibility || "PRIVATE");
     setContentHtml(recovery.contentHtml); setContentJson(recovery.contentJson);
     setMetadata(recovery.metadata); setArticleSystem(recovery.metadata.rulesSystem || system);
+    contentSnapshot.current = null;
     setEditorVersion(value => value + 1); setRecovery(null); onDirtyChange(true);
   };
 
@@ -224,10 +240,10 @@ export function ArticleEditorForm({
       {recovery && <div role="alert" className="rounded-lg border border-amber-600 p-4 text-sm text-amber-200">
         A local draft is available: {recovery.title || "Untitled article"}. Restore it before continuing, or discard it to use the saved article.
         <button type="button" onClick={recoverDraft} className="ml-3 underline">Restore draft</button>
-        <button type="button" onClick={() => { try { removeArticleDraft(localStorage, actorId ?? "local", worldId, initialArticle?.id, { legacy: true }); } catch {} articleId.current = initialArticle?.id; setRecovery(null); }} className="ml-3 underline">Discard draft</button>
+        <button type="button" onClick={() => { try { removeArticleDraft(localStorage, draftActorId, worldId, initialArticle?.id, { legacy: true, sessionId: draftSessionId }); } catch {} articleId.current = initialArticle?.id; setRecovery(null); }} className="ml-3 underline">Discard draft</button>
       </div>}
       {localError && <p role="alert" className="text-amber-400">{localError}</p>}
-      {saveError && <p role="alert" className="text-red-400">{saveError} Changes remain in this editor. <button type="button" onClick={() => void save(true)} className="underline">Retry save</button></p>}
+      {saveError && <p role="alert" className="text-red-400">{saveError} Changes remain in this editor. <button type="button" onClick={() => void save(true)} className="underline">Retry save</button>{saveConflict && <button type="button" onClick={() => void save(false, true)} className="ml-3 underline">Save as new article</button>}</p>}
       <p role="status" className={`text-xs ${isDirty ? "text-amber-400" : "text-zinc-500"}`}>{metadataError ? "Autosave paused: check template fields" : isSubmitting ? "Saving article…" : saveError ? "Save failed" : isDirty ? title.trim() ? "Changes pending autosave" : "Add a title to enable autosave" : lastSaved ? "All changes saved" : "Autosave on"}</p>
       <fieldset inert={savesPaused || manualSaving || !!recovery || !recoveryReady} disabled={savesPaused || manualSaving || !!recovery || !recoveryReady} className="space-y-6">
       {/* Action Header */}

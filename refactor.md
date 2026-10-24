@@ -2,7 +2,7 @@
 
 Audit basis: repository revision `1be1903`.
 
-Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a and R05 implementation and validation are complete. R06 is next. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
+Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a, R05, R06 and R07 are complete. R08 is next. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
 
 ## 1. Executive summary
 
@@ -306,8 +306,8 @@ Effort is relative: **Small** is a bounded change; **Medium** spans several rela
 | R04 Repair asset parameter validation | P1 | Low | Small | R03 before enabling permanent deletion | **Complete** |
 | R04a Correct R04 reporting and strengthen regressions | P3 | Low | Small | R04; before R05 | **Complete** |
 | R05 Make variable rendering and writes safe | P1 | Medium | Medium | R01 | **Complete** |
-| R06 Establish article save preconditions | P1 | Medium | Medium | R01 | Not started |
-| R07 Unify revision restore and clone lifecycles | P1 | High | Medium | R06 | Not started |
+| R06 Establish article save preconditions | P1 | Medium | Medium | R01 | **Complete** |
+| R07 Unify revision restore and clone lifecycles | P1 | High | Medium | R06 | **Complete** |
 | R08 Repair imported publication compatibility | P1 | Low | Small | R01 | Not started |
 | R09 Define metadata reference contracts | P1 | High | Medium | R08 | Not started |
 | R10 Extract transfer format adapters | P2 | Medium | Medium | R08, R09 | Not started |
@@ -458,6 +458,10 @@ Validation used dedicated temporary SQLite databases/assets, matching server/tes
 
 **Validation and acceptance:** Two editors starting from one version cannot silently overwrite each other. Successful versions increase monotonically. A conflict preserves the local draft. No first-party save bypasses the precondition.
 
+**Implementation and validation (2026-10-24):** Moved the save input, response, options and conflict types to the neutral `src/lib/article-save.ts` contract. First-party article saves now send their loaded or last-committed `expectedVersion`; the article route compares and increments it atomically, returning a typed `409 ARTICLE_CONFLICT` on stale writes. The transaction keeps the revision snapshot, update and mention-index replacement together, and returns the version committed by that save. Versionless API requests remain accepted for compatibility; they still use an atomic compare-and-increment but do not protect a long-lived external editor from stale writes. The browser editor preserves its local draft on conflicts and offers to save it as a new article. Versionless old local drafts receive the same safe-copy option instead of adopting the current version. Draft recovery now restores `canonState` and the saved concurrency token. Revision restore increments the current version, preventing a stale token from becoming valid again; R07 completes its transactional lifecycle repair.
+
+Added focused HTTP, draft and browser regressions. The isolated API and draft checks passed **13/13**. `pnpm test:browser` passed **13/13**, including the four article-save checks for two-editor conflict and copy, reload-after-conflict recovery, stale and versionless drafts, canon restoration, and monotonic autosave tokens. Draft keys use a stable per-window identity from `window.name`, including when a new window inherits copied `sessionStorage`; valid drafts from the previous account-scoped and world-only key formats migrate into that window's key. Invalid cover and portrait values return `400`. The full isolated `pnpm test` passed **247/248**, with only the production-auth smoke skipped against the dev server. TypeScript and the production build passed. Focused ESLint reported **zero errors and one React hooks dependency warning** in the recovery effect (`draftSessionId` is represented in its `draftKey` dependency). `git diff --check` passed. R06 is complete; R07 is next.
+
 **Rollback:** Stage server acceptance, client adoption and enforcement. Do not roll back to an older client while leaving incompatible mandatory preconditions unexplained.
 
 ### R07 — Make restore and clone complete article operations
@@ -467,6 +471,12 @@ Validation used dedicated temporary SQLite databases/assets, matching server/tes
 **Changes and benefit:** Place current-state snapshot, restored content, version increment, mention replacement and derived values in one operation. Make clone creation, its initial policy and graph edges atomic. Define exactly which fields a revision promises to restore; preserve compatibility with older snapshots.
 
 **Validation and acceptance:** Failure leaves the original state intact. Restored links/backlinks and word count match restored content. Restore never rewinds the concurrency token. Clones remain private and do not inherit grants.
+
+**Implementation and validation (2026-10-24):** Restore now rereads the current article and target revision inside one transaction, writes the pre-restore snapshot, validates placements, updates stored revision fields behind a version predicate, increments the current version, recalculates word count and rebuilds outbound mentions. Any failed step rolls the transaction back; a failed version predicate returns `409`. The documented revision contract restores only fields present in `ArticleRevision`, preserves current values for unsnapshotted fields, and keeps old nullable placement snapshots readable. Clone creation now atomically writes the new private article, its initial revision, a fresh `GM_ONLY` policy and outbound mention edges rebuilt from its content. Clones remain Draft/private at version 1 with `GM_DRAFT`, without source grants, revision history, reveal state or supersession links.
+
+Added **eight HTTP regressions** in `tests/article-revisions-api.test.ts` covering exact restored and preserved fields, the current-state recovery snapshot, monotonic versions, word count, rebuilt links/backlinks, legacy null placements and malformed-JSON HTML fallback, empty content, fresh private clone policies without inherited grants, world-scoped image validation, ownership and unrelated-revision rejection. Database triggers inject failures at each restore write and each dependent clone write, verifying unchanged article/history/graph state and no partial clone. A separate injected version change exercises `409` rollback deterministically because SQLite serializes writers; real overlapping restore/save requests verify coherent content, history, graph and version increments. Review found no R07 blockers and required no implementation changes.
+
+Validation used dedicated temporary SQLite databases and asset directories, matching server/test origins and `WORLD_CREATION_TEST_DATABASE_URL`; no configured user data or seed was used. The full isolated `pnpm test` passed **255/256**, with **zero failures** and only the production-auth smoke skipped against the dev server. All eight R07 regressions passed. `pnpm test:browser` passed **13/13**. The separate production-server authentication smoke passed **1/1** against its own isolated storage. TypeScript, the production build and `git diff --check` passed. Full ESLint reported **zero errors and seven existing warnings**; focused ESLint on both R07 routes and the new tests reported **zero errors and zero warnings**. R07 is complete; R08 is next.
 
 **Rollback:** Keep any new snapshot fields additive and optional during rollout. Reverting code must retain readable historical revisions.
 
@@ -793,4 +803,4 @@ WorldForge's core technology and several existing safeguards should remain. The 
 
 The recommended sequence is to establish reliable tests, contain destructive cleanup, repair data and rendering contracts, centralize complete operations, and then simplify UI coordination and measured performance bottlenecks.
 
-That approach improves correctness, recovery and maintainability while keeping the application recognizable and deployable throughout. **R01, R01a, R02, R03, R03a, R04, R04a and R05 are complete; R06 is next.**
+That approach improves correctness, recovery and maintainability while keeping the application recognizable and deployable throughout. **R01, R01a, R02, R03, R03a, R04, R04a, R05, R06 and R07 are complete; R08 is next.**

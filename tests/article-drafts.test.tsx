@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   articleDraftKey,
+  articleDraftSessionId,
   legacyArticleDraftKey,
   parseArticleDraft,
   readArticleDraft,
@@ -12,6 +13,15 @@ import {
 const draft: ArticleDraft = { version: 1, articleId: "saved-id", data: { worldId: "world", title: "Recovery", template: "GENERIC", categoryId: null, excerpt: "", tags: "", state: "DRAFT", contentHtml: "<p>Lore</p>", contentJson: { type: "doc", content: [{ type: "paragraph" }] }, metadata: { rulesSystem: "PF_2E" } } };
 test("recovery retains structured content and the created article identity", () => {
   assert.deepEqual(parseArticleDraft(JSON.stringify(draft), "world"), draft);
+});
+test("recovery retains the original concurrency token and canon state while accepting older drafts", () => {
+  const versioned = { ...draft, data: { ...draft.data, expectedVersion: 7, canonState: "RUMOR" } };
+  assert.deepEqual(parseArticleDraft(JSON.stringify(versioned), "world"), versioned);
+  assert.deepEqual(parseArticleDraft(JSON.stringify(draft), "world"), draft);
+  for (const expectedVersion of [null, 0, -1, 1.5, "7", Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(parseArticleDraft(JSON.stringify({ ...versioned, data: { ...versioned.data, expectedVersion } }), "world"), null);
+  }
+  assert.equal(parseArticleDraft(JSON.stringify({ ...versioned, data: { ...versioned.data, canonState: 42 } }), "world"), null);
 });
 test("recovery rejects cross-world, incompatible and malformed drafts", () => {
   assert.equal(parseArticleDraft(JSON.stringify(draft), "other-world"), null);
@@ -45,6 +55,21 @@ test("account+world draft keys isolate actors while legacy keys stay readable", 
   assert.notEqual(articleDraftKey("actor-a", "world", "art"), articleDraftKey("actor-b", "world", "art"));
   assert.equal(legacyArticleDraftKey("world", "art"), "worldforge:draft:world:art");
   assert.equal(legacyArticleDraftKey("world", null), "worldforge:draft:world:new");
+});
+
+test("each top-level window keeps a stable isolated recovery key, even with copied session storage", () => {
+  const firstWindow = { name: "" };
+  const secondWindow = { name: "" };
+  const firstId = articleDraftSessionId({ getName: () => firstWindow.name, setName: value => { firstWindow.name = value; } });
+  const secondId = articleDraftSessionId({ getName: () => secondWindow.name, setName: value => { secondWindow.name = value; } });
+  assert.equal(articleDraftSessionId({ getName: () => firstWindow.name, setName: value => { firstWindow.name = value; } }), firstId, "reload keeps the window identity");
+  assert.notEqual(firstId, secondId, "new top-level windows get distinct identities");
+  const firstKey = articleDraftKey("actor", "world", "art", firstId);
+  const secondKey = articleDraftKey("actor", "world", "art", secondId);
+  const storage = memoryStorage({ [firstKey]: JSON.stringify(draft), [secondKey]: JSON.stringify(draft) });
+  removeArticleDraft(storage, "actor", "world", "art", { sessionId: firstId });
+  assert.equal(storage.values.has(firstKey), false);
+  assert.deepEqual(JSON.parse(storage.values.get(secondKey)!), draft);
 });
 
 test("a valid legacy draft is migrated to the account key and retained until resolved", () => {

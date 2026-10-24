@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { randomUUID } from "node:crypto";
 import { assertDocumentImageReferences, assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
+import { syncArticleMentions } from "@/lib/article-mention-index";
 
 export const POST = withAuthor(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
   try {
@@ -29,14 +30,12 @@ export const POST = withAuthor(async (request: Request, { params }: { params: Pr
       newSlug = `${source.slug}-copy-${slugSuffix}`;
     }
 
-    const newArticleId = randomUUID();
     const newArticle = await prisma.$transaction(async tx => {
       if (source.coverImage) await assertImageReference(source.coverImage, source.worldId, tx);
       if (source.portraitImage) await assertImageReference(source.portraitImage, source.worldId, tx);
       await assertDocumentImageReferences(source.contentJson, source.contentHtml, source.worldId, tx);
-      return tx.article.create({
+      const created = await tx.article.create({
       data: {
-        id: newArticleId,
         worldId: source.worldId,
         categoryId: source.categoryId,
         template: source.template,
@@ -64,33 +63,45 @@ export const POST = withAuthor(async (request: Request, { params }: { params: Pr
         supersededById: null,
       },
       });
-    });
 
-    // Create a fresh GM_ONLY audience policy for the clone (does NOT copy source grants)
-    await prisma.audiencePolicy.create({
-      data: {
-        id: randomUUID(),
-        worldId: source.worldId,
-        resourceKind: "articles",
-        resourceId: newArticleId,
-        mode: "GM_ONLY",
-        createdById: user.id,
-      },
-    });
-
-    // Clone outbound mentions
-    const mentions = await prisma.articleMention.findMany({
-      where: { sourceArticleId: id },
-    });
-    for (const mention of mentions) {
-      await prisma.articleMention.create({
+      // A clone is a new private article lifecycle: never copy the source's
+      // audience grants, revision history, publication state, or provenance.
+      await tx.audiencePolicy.create({
         data: {
-          sourceArticleId: newArticleId,
-          targetArticleId: mention.targetArticleId,
-          mentionText: mention.mentionText,
+          id: randomUUID(),
+          worldId: source.worldId,
+          resourceKind: "articles",
+          resourceId: created.id,
+          mode: "GM_ONLY",
+          createdById: user.id,
         },
       });
-    }
+      await tx.articleRevision.create({
+        data: {
+          articleId: created.id,
+          userId: user.id,
+          title: created.title,
+          slug: created.slug,
+          excerpt: created.excerpt,
+          contentHtml: created.contentHtml,
+          contentJson: created.contentJson,
+          metadata: created.metadata,
+          tags: created.tags,
+          coverImage: created.coverImage,
+          coverImageAlt: created.coverImageAlt,
+          portraitImage: created.portraitImage,
+          portraitImageAlt: created.portraitImageAlt,
+          publicationStatus: created.publicationStatus,
+          visibility: created.visibility,
+          state: created.state,
+          articleVersionAtSave: created.version,
+        },
+      });
+      let contentDocument: unknown = null;
+      try { contentDocument = created.contentJson ? JSON.parse(created.contentJson) : null; } catch { /* Keep legacy HTML references available. */ }
+      await syncArticleMentions(tx, source.worldId, created.id, contentDocument, created.contentHtml ?? "");
+      return created;
+    });
 
     // Return serialized article
     const serialized = {
@@ -107,6 +118,7 @@ export const POST = withAuthor(async (request: Request, { params }: { params: Pr
       tags: newArticle.tags,
       publicationStatus: newArticle.publicationStatus,
       visibility: newArticle.visibility,
+      state: newArticle.state,
       coverImage: newArticle.coverImage,
       coverImageAlt: newArticle.coverImageAlt,
       portraitImage: newArticle.portraitImage,
