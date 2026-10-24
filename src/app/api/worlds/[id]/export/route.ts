@@ -3,7 +3,7 @@ import { AccessError } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { readAsset } from "@/lib/asset-storage";
-import { exportWorldV2 } from "@/lib/world-export";
+import { exportWorldV2, exportWorldV3, worldNeedsV3 } from "@/lib/world-export";
 
 export interface WorldExport {
   version: 1;
@@ -29,11 +29,45 @@ export const GET = withAuthor(async (request: Request, { params }: { params: Pro
   try {
     const { id } = await params;
     const url = new URL(request.url);
+    const format = url.searchParams.get("format") ?? "v3";
+
+    if (format !== "v1" && format !== "v2" && format !== "v3") {
+      return NextResponse.json({ error: "Unsupported export format" }, { status: 400 });
+    }
+
+    // Format 3 (default) is the complete owner backup, including assets and
+    // private data. Filtering flags are rejected rather than silently ignored,
+    // so a partial export is never mistaken for a complete backup.
+    if (format === "v3") {
+      if (url.searchParams.has("includeAssets") || url.searchParams.has("includePrivate")) {
+        return NextResponse.json(
+          { error: "Format 3 is a complete backup and does not support includeAssets/includePrivate filters. Request format=v1 for a filtered export when the world supports legacy export." },
+          { status: 400 }
+        );
+      }
+      const exportData = await exportWorldV3(id);
+      return NextResponse.json(exportData, {
+        headers: {
+          "Content-Disposition": `attachment; filename="${exportData.world.slug}-export.json"`,
+          "Accept-Version": "3",
+        },
+      });
+    }
+
     const includeAssets = url.searchParams.get("includeAssets") !== "false";
     const includePrivate = url.searchParams.get("includePrivate") !== "false";
-    const format = url.searchParams.get("format");
 
-    // When format=v2, use the new v2 export function
+    if (format === "v2" && (url.searchParams.has("includeAssets") || url.searchParams.has("includePrivate"))) {
+      return NextResponse.json({ error: "Format 2 is a complete backup and does not support includeAssets/includePrivate filters. Request format=v1 for a filtered export when the world supports legacy export." }, { status: 400 });
+    }
+
+    if (await worldNeedsV3(id)) {
+      return NextResponse.json(
+        { error: "This world uses image provenance or placement data that legacy exports would silently drop. Export with format=v3 instead." },
+        { status: 400 }
+      );
+    }
+
     if (format === "v2") {
       const exportData = await exportWorldV2(id);
       return NextResponse.json(exportData, {

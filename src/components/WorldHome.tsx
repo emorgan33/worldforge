@@ -4,6 +4,8 @@ import { useWorldGuard } from "@/components/worlds/WorldGuard";
 import { WorldPresentation } from "@/components/public/WorldPresentation";
 import { DEFAULT_APPEARANCE, parseAppearance, rulesTheme, WORLD_THEMES, READING_WIDTHS, type WorldAppearance } from "@/lib/world-appearance";
 import { ImageSourceField } from "@/components/assets/ImageSourceField";
+import { PlacementAltField } from "@/components/assets/PlacementAltField";
+import { PLACEMENT_GEOMETRY, resolvePlacementAlt } from "@/lib/image-placement";
 import { useEffect, useRef, useState } from "react";
 import { RPG_SYSTEMS, systemProfile } from "@/lib/rpg";
 import { sortOrdered } from "@/lib/category-tree";
@@ -19,7 +21,9 @@ export interface WorldSummary {
   system: string;
   description: string | null;
   coverImage: string | null;
+  coverImageAlt?: string | null;
   bannerImage: string | null;
+  bannerImageAlt?: string | null;
   appearance?: string | null;
   categories: CategoryItem[];
 }
@@ -38,7 +42,9 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
   const [campaignSystem, setCampaignSystem] = useState(world.system);
   const [appearance, setAppearance] = useState(() => parseAppearance(world.appearance));
   const [coverImage, setCoverImage] = useState(world.coverImage || "");
+  const [coverImageAlt, setCoverImageAlt] = useState<string | null>(world.coverImageAlt ?? null);
   const [bannerImage, setBannerImage] = useState(world.bannerImage || "");
+  const [bannerImageAlt, setBannerImageAlt] = useState<string | null>(world.bannerImageAlt ?? null);
   const [editing, setEditing] = useState(false);
   const settingsSection = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
@@ -73,7 +79,7 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
       const response = await fetch("/api/worlds", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: world.id, ...Object.fromEntries(data), isPublic: data.get("isPublic") === "on", appearance }),
+        body: JSON.stringify({ id: world.id, ...Object.fromEntries(data), isPublic: data.get("isPublic") === "on", appearance, coverImageAlt, bannerImageAlt }),
       });
       if (!response.ok) { const error = await response.json(); throw new Error(error.error || "Could not save your world. Please try again."); }
       onSave(await response.json());
@@ -106,7 +112,7 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
   return <section ref={settingsSection} id="world-home-settings" className="space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><p className="text-xs uppercase tracking-widest text-violet-300">Articles & World Manager</p><h2 className="text-2xl font-bold">World homepage</h2></div>
-      <button className="min-h-11 rounded-lg border border-zinc-700 px-4 text-sm font-semibold text-zinc-200 hover:border-violet-500/60 hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300" onClick={() => { setEditing(!editing); setCampaignSystem(world.system); setAppearance(parseAppearance(world.appearance)); setCoverImage(world.coverImage || ""); setBannerImage(world.bannerImage || ""); setMessage(""); }} disabled={busy}>{editing ? "Cancel" : "Edit world & styling"}</button>
+      <button className="min-h-11 rounded-lg border border-zinc-700 px-4 text-sm font-semibold text-zinc-200 hover:border-violet-500/60 hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300" onClick={() => { setEditing(!editing); setCampaignSystem(world.system); setAppearance(parseAppearance(world.appearance)); setCoverImage(world.coverImage || ""); setBannerImage(world.bannerImage || ""); setCoverImageAlt(world.coverImageAlt ?? null); setBannerImageAlt(world.bannerImageAlt ?? null); setMessage(""); }} disabled={busy}>{editing ? "Cancel" : "Edit world & styling"}</button>
     </div>
     {world.isPublic && <a href={`/w/${world.slug}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center text-sm text-violet-300 hover:text-violet-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">Open public world →</a>}
     {message && <p role="status" className="text-sm text-amber-300">{message}</p>}
@@ -116,10 +122,12 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
       <label className="block">Campaign rules<select aria-label="Campaign rules" name="system" value={campaignSystem} onChange={event => setCampaignSystem(event.target.value)} className="mt-2 block w-full rounded border border-zinc-700 bg-zinc-950 p-3">{RPG_SYSTEMS.map(profile => <option key={profile.id} value={profile.id}>{profile.short}{profile.id === "PF_2E" ? " · Remaster" : ""}</option>)}</select></label>
       <label className="block">World title<input name="title" required maxLength={200} defaultValue={world.title} className="mt-2 block w-full rounded border border-zinc-700 bg-zinc-950 p-3" /></label>
       <label className="block">Description<textarea name="description" maxLength={10000} rows={4} defaultValue={world.description ?? ""} placeholder="Introduce your setting, its magic or technology, and what is happening now." className="mt-2 block w-full rounded border border-zinc-700 bg-zinc-950 p-3" /></label>
-      <ImageSourceField worldId={world.id} label="World cover URL" name="coverImage" value={coverImage} onChange={setCoverImage} />
+      <ImageSourceField worldId={world.id} purpose="world-cover" label="World cover URL" name="coverImage" value={coverImage} onChange={setCoverImage} onAssetSelected={asset => { if (coverImageAlt === null && asset.alt) setCoverImageAlt(asset.alt); }} />
       <p className="text-xs text-zinc-400">Appears on your world homepage. Clear to remove.</p>
-      <ImageSourceField worldId={world.id} label="Global article cover URL" name="bannerImage" value={bannerImage} onChange={setBannerImage} />
+      <PlacementAltField id="world-cover-alt" label="World cover description" value={coverImageAlt} onChange={setCoverImageAlt} fallback={world.title} />
+      <ImageSourceField worldId={world.id} purpose="article-cover" label="Global article cover URL" name="bannerImage" value={bannerImage} onChange={setBannerImage} onAssetSelected={asset => { if (bannerImageAlt === null && asset.alt) setBannerImageAlt(asset.alt); }} />
       <p className="text-xs text-zinc-400">Used when an article has no cover of its own.</p>
+      <PlacementAltField id="world-banner-alt" label="Global article cover description" value={bannerImageAlt} onChange={setBannerImageAlt} fallback={world.title} />
       <section className="space-y-3 rounded-lg border border-zinc-700 p-4"><h2 className="font-semibold">Integrations</h2><p className="text-sm text-zinc-400">Preview and selectively import Foundry VTT Item exports into this world&apos;s compendium.</p><FoundryImport worldId={world.id} onComplete={onRefreshBlocks} onOpenBlock={onOpenBlock} /></section>
       <fieldset disabled={busy} className="space-y-4 rounded-xl border border-zinc-700 p-4">
         <legend className="px-2 font-semibold">Reader appearance</legend>
@@ -132,7 +140,7 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
           <label className="block text-sm">Page background color<input aria-label="Page background color" type="color" value={appearance.backgroundColor || WORLD_THEMES[appearance.theme].background} onChange={event => setAppearance({ ...appearance, backgroundColor: event.target.value })} className="mt-2 h-10 w-full rounded border border-zinc-700" /></label>
           <label className="block text-sm">Accent color<input aria-label="Accent color" type="color" value={appearance.accentColor || WORLD_THEMES[appearance.theme].accent} onChange={event => setAppearance({ ...appearance, accentColor: event.target.value })} className="mt-2 h-10 w-full rounded border border-zinc-700" /></label>
         </div>
-        <ImageSourceField worldId={world.id} label="Page background image URL" value={appearance.backgroundImage} onChange={backgroundImage => setAppearance({ ...appearance, backgroundImage })} />
+        <ImageSourceField worldId={world.id} purpose="background" label="Page background image URL" value={appearance.backgroundImage} onChange={backgroundImage => setAppearance({ ...appearance, backgroundImage })} />
         <p className="text-xs text-zinc-400">The background sits behind the reading surface and is separate from covers. Accent text is adjusted for readability. Library backgrounds become reader-accessible when the world is public.</p>
         
         {/* Custom CSS Section */}
@@ -169,7 +177,7 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
       <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
         {/* Remote cover URLs are supplied by the world author. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {(editing ? coverImage : world.coverImage) && <img src={(editing ? coverImage : world.coverImage)!} alt="" className="h-64 w-full object-cover" />}
+        {(editing ? coverImage : world.coverImage) && <img src={(editing ? coverImage : world.coverImage)!} alt={resolvePlacementAlt(editing ? coverImageAlt : world.coverImageAlt, world.title)} className={PLACEMENT_GEOMETRY["world-cover"].imageClassName} />}
         <div className="p-8"><p className="mb-3 text-xs uppercase tracking-wider text-amber-500">{systemProfile(world.system).short}{world.system === "PF_2E" ? " · Remaster" : ""}</p><h2 className="font-serif text-4xl font-bold">{world.title}</h2><p className="mt-4 whitespace-pre-wrap text-zinc-300">{world.description || "Give readers a first glimpse of your world. Add a description in world styling."}</p></div>
       </div>
       <div className="rounded-xl border border-zinc-800 p-6">

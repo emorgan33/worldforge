@@ -98,11 +98,9 @@ For backing up individual worlds without stopping the server, use the built-in e
 2. Navigate to your world
 3. Go to World Settings
 4. Click "Export World"
-5. Choose options:
-   - **Include Assets**: Download image files (increases file size)
-   - **Include Private Content**: Export unpublished articles and GM secrets
 
 The export creates a JSON file containing all world data with embedded images.
+It uses format 3, the complete owner backup (see below).
 
 ### Importing a World
 
@@ -149,7 +147,7 @@ After any restore, verify:
 
 - **Asset cleanup**: Purging an archived world queues its image files for removal. If the filesystem is temporarily unavailable, the durable cleanup jobs are retried on a later trash visit.
 - **Concurrent Access**: During restore, ensure no users are accessing the system to prevent data inconsistency.
-- **Large Worlds**: Worlds with many articles or large images may produce large export files. Consider exporting without assets and manually copying the assets directory instead.
+- **Large Worlds**: Worlds with many articles or large images may produce large export files. For a legacy-compatible world, `?format=v1&includeAssets=false` permits a partial export plus a separate asset copy. Formats 2 and 3 reject filtering flags; for complete portable backups, include the image bytes or use the SQLite-plus-assets workflow.
 
 ## Table-access system data
 
@@ -163,6 +161,44 @@ The world export format has been extended with versioned manifests to support th
 - Article quick facts, revision snapshots and remapped rich-text links
 - Maps, layers, pins, groups and archived images
 - Audit history as imported historical records
+
+### World Export/Import v3
+
+`GET /api/worlds/[id]/export` defaults to **format 3**, the complete owner
+backup, and the Manage worlds export button uses it. Format 3 adds to format 2:
+
+- Image provenance snapshots and acquisition source (`UPLOADED` / `STOCK` /
+  `IMPORTED`), preserving exact credits across a restore.
+- Operator restriction state (`displayRestricted`, `restrictionReason`,
+  `restrictionDate`), so a restricted copy stays restricted after import.
+- Per-placement descriptions: `World.coverImageAlt` / `bannerImageAlt`,
+  `Article.coverImageAlt` / `portraitImageAlt`, and their revision snapshots.
+- Category illustrations (`Category.iconImage`).
+
+Because format 3 is defined as a complete backup, it rejects the `includeAssets`
+and `includePrivate` query flags with `400` rather than silently returning a
+partial file. The legacy formats remain available for worlds that can be captured
+losslessly: `?format=v1` supports filtering; `?format=v2` is a complete backup
+and rejects `includeAssets`/`includePrivate` flags explicitly. The
+server refuses a legacy export of a world that has provenance, restrictions or
+placement data the legacy shape would drop (including retained revision fields), with guidance to use format 3.
+
+On import, provenance is validated before any write and any catalog id is marked
+`IMPORTED_DECLARATION` — an imported entry is never treated as a rights review.
+Malformed provenance fails that asset with a warning instead of importing its
+artwork as an ordinary uncredited upload. Images are normalized again; if the
+bytes change, the provenance chain is retained, both the source and stored
+digests are recorded, and a re-encode warning is added. Placements that referenced
+an unavailable image are cleared with a warning.
+
+### Withdrawing or restricting stock art
+
+Operator advisories are applied with `pnpm stock-art:advisories` (see
+[`stock-art.md`](stock-art.md)). An advisory matches installed copies by
+provenance identity, sets `displayRestricted` (or clears it), and keeps the bytes
+and provenance for owner review. Restricted art stops being served to readers and
+is excluded from public and campaign pages; a re-export still carries the
+restriction state.
 
 ### Excluded from export
 

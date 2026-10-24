@@ -11,6 +11,7 @@ import { publicationFields, type PublicationStatus, type ArticleVisibility } fro
 import { articleDraftKey, readArticleDraft, removeArticleDraft } from "@/lib/article-drafts";
 import { categoryOptions } from "@/lib/category-tree";
 import { ImageSourceField } from "@/components/assets/ImageSourceField";
+import { PlacementAltField } from "@/components/assets/PlacementAltField";
 import { ArticleTemplateFields } from "./ArticleTemplateFields";
 import { isEmptyArticle, starterOutline } from "@/lib/article-template-content";
 import { ARTICLE_TEMPLATES, getArticleTemplate, validateTemplateMetadata } from "@/lib/templates";
@@ -22,7 +23,8 @@ import { isCharacterSystem } from "@/lib/character-sheet";
 export interface ArticleSaveInput {
   worldId: string; template: ArticleTemplateType; title: string; categoryId: string | null;
   excerpt: string; tags: string; state: NonNullable<ArticleDetail["state"]>; contentHtml: string;
-  contentJson?: JSONContent; coverImage?: string; publicationStatus?: PublicationStatus; visibility?: ArticleVisibility; metadata: Record<string, string>;
+  contentJson?: JSONContent; coverImage?: string; coverImageAlt?: string | null; publicationStatus?: PublicationStatus; visibility?: ArticleVisibility; metadata: Record<string, string>;
+  portraitImage?: string; portraitImageAlt?: string | null;
   canonState?: string;
 }
 
@@ -67,6 +69,9 @@ export function ArticleEditorForm({
   const [title, setTitle] = useState(initialArticle?.title || "");
   const [categoryId, setCategoryId] = useState(initialArticle?.categoryId || "");
   const [coverImage, setCoverImage] = useState(initialArticle?.coverImage || "");
+  const [coverImageAlt, setCoverImageAlt] = useState<string | null>(initialArticle?.coverImageAlt ?? null);
+  const [portraitImage, setPortraitImage] = useState(initialArticle?.portraitImage || "");
+  const [portraitImageAlt, setPortraitImageAlt] = useState<string | null>(initialArticle?.portraitImageAlt ?? null);
   const [excerpt, setExcerpt] = useState(initialArticle?.excerpt || "");
   const [tags, setTags] = useState(initialArticle?.tags || "");
   const [state, setState] = useState<PublicationStatus>(initialArticle?.publicationStatus || (initialArticle?.state === "PRIVATE" ? "PUBLISHED" : initialArticle?.state) || "DRAFT");
@@ -123,7 +128,8 @@ export function ArticleEditorForm({
   const latest = useRef("");
   const baseline = useRef("");
   const payload: ArticleSaveInput = { worldId, template, title, categoryId: categoryId || null,
-    excerpt, tags, ...publicationFields({ publicationStatus: state, visibility }), contentHtml, coverImage, ...(contentJson ? { contentJson } : {}),
+    excerpt, tags, ...publicationFields({ publicationStatus: state, visibility }), contentHtml, coverImage, coverImageAlt, ...(contentJson ? { contentJson } : {}),
+    portraitImage, portraitImageAlt,
     metadata: { ...metadata, rulesSystem: articleSystem }, canonState };
   const serialized = JSON.stringify(payload);
   useEffect(() => {
@@ -202,6 +208,9 @@ export function ArticleEditorForm({
     if (!recovery) return;
     setTemplate(recovery.template); setTitle(recovery.title); setCategoryId(recovery.categoryId || "");
     setCoverImage(recovery.coverImage || "");
+    setCoverImageAlt(recovery.coverImageAlt ?? null);
+    setPortraitImage(recovery.portraitImage || "");
+    setPortraitImageAlt(recovery.portraitImageAlt ?? null);
     setExcerpt(recovery.excerpt); setTags(recovery.tags); setState(recovery.publicationStatus || (recovery.state === "PRIVATE" ? "PUBLISHED" : recovery.state)); setVisibility(recovery.visibility || "PRIVATE");
     setContentHtml(recovery.contentHtml); setContentJson(recovery.contentJson);
     setMetadata(recovery.metadata); setArticleSystem(recovery.metadata.rulesSystem || system);
@@ -332,8 +341,13 @@ export function ArticleEditorForm({
       {template === "CHARACTER" && isCharacterSystem(articleSystem) && <CharacterSheet key={articleSystem} system={articleSystem} metadata={metadata} title={title} onChange={handleMetadataChange} onTitleChange={setTitle} />}
       <ArticleTemplateFields template={activeTemplateDef} system={articleSystem} metadata={metadata} blocks={availableBlocks} onChange={handleMetadataChange} />
 
-      <ImageSourceField worldId={worldId} label="Article cover URL" value={coverImage} onChange={setCoverImage} />
+      <ImageSourceField worldId={worldId} purpose="article-cover" label="Article cover URL" value={coverImage} onChange={setCoverImage} onAssetSelected={asset => { if (coverImageAlt === null && asset.alt) setCoverImageAlt(asset.alt); }} />
       <p className="text-xs text-zinc-500">An article cover overrides the global article cover. Clear it to use the global cover.</p>
+      <PlacementAltField id="article-cover-alt" label="Article cover description" value={coverImageAlt} onChange={setCoverImageAlt} fallback={initialArticle?.title || title || undefined} />
+
+      <ImageSourceField worldId={worldId} purpose="portrait" label="Article portrait URL" value={portraitImage} onChange={setPortraitImage} onAssetSelected={asset => { if (portraitImageAlt === null && asset.alt) setPortraitImageAlt(asset.alt); }} />
+      <p className="text-xs text-zinc-500">Shown beside the article in the reader sidebar. Clear it to show no portrait.</p>
+      <PlacementAltField id="article-portrait-alt" label="Portrait description" value={portraitImageAlt} onChange={setPortraitImageAlt} fallback={initialArticle?.title || title || undefined} />
 
       {/* Rich Text Editor */}
       <div>

@@ -11,6 +11,31 @@ interface CategoryMeta {
   parentId: string | null;
   order: number;
   icon?: string;
+  iconImage?: string | null;
+}
+
+/**
+ * Category illustration with an accessible folder fallback. Readers without a
+ * readable image (private, missing, or failed load) still see a labelled folder
+ * rather than a broken-image glyph or a private URL.
+ */
+function CategoryBranchIcon({ category, collapsed }: { category: CategoryMeta; collapsed: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const src = category.iconImage;
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt=""
+        aria-hidden="true"
+        onError={() => setFailed(true)}
+        className="h-4 w-4 shrink-0 rounded-sm object-cover"
+      />
+    );
+  }
+  return collapsed
+    ? <Folder className="h-4 w-4 text-amber-400/80 shrink-0" />
+    : <FolderOpen className="h-4 w-4 text-amber-400 shrink-0" />;
 }
 
 export function ReaderCategoryTree({
@@ -68,7 +93,7 @@ export function ReaderCategoryTree({
                   <span className="h-9 w-9 shrink-0" aria-hidden="true" />
                 )}
                 <span className="flex items-center gap-2 font-medium text-zinc-200">
-                  {isCollapsed ? <Folder className="h-4 w-4 text-amber-400/80 shrink-0" /> : <FolderOpen className="h-4 w-4 text-amber-400 shrink-0" />}
+                  <CategoryBranchIcon category={category} collapsed={isCollapsed} />
                   <span>{category.name}</span>
                 </span>
               </div>

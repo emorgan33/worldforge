@@ -18,6 +18,19 @@ test("recovery rejects cross-world, incompatible and malformed drafts", () => {
   for (const raw of ["{", "null", JSON.stringify({ ...draft, version: 2 }), JSON.stringify({ ...draft, data: { ...draft.data, metadata: null } }), JSON.stringify({ ...draft, data: { ...draft.data, contentJson: { type: "paragraph" } } })]) assert.equal(parseArticleDraft(raw, "world"), null);
 });
 
+test("recovery retains placement images and their descriptions", () => {
+  const withPlacement: ArticleDraft = { version: 1, articleId: "saved-id", data: { ...draft.data, coverImage: "/api/assets/11111111-1111-1111-1111-111111111111/file", coverImageAlt: "A cover", portraitImage: "/api/assets/22222222-2222-2222-2222-222222222222/file", portraitImageAlt: "" } };
+  assert.deepEqual(parseArticleDraft(JSON.stringify(withPlacement), "world"), withPlacement);
+  // null descriptions are valid (keep the renderer default) and so is decorative "".
+  const nullAlt = { ...withPlacement, data: { ...withPlacement.data, coverImageAlt: null, portraitImageAlt: null } };
+  assert.deepEqual(parseArticleDraft(JSON.stringify(nullAlt), "world"), nullAlt);
+  // Non-string descriptions are rejected rather than silently coerced.
+  const bad = { ...withPlacement, data: { ...withPlacement.data, coverImageAlt: 42 } };
+  assert.equal(parseArticleDraft(JSON.stringify(bad), "world"), null);
+  const badPortrait = { ...withPlacement, data: { ...withPlacement.data, portraitImage: 42 } };
+  assert.equal(parseArticleDraft(JSON.stringify(badPortrait), "world"), null);
+});
+
 function memoryStorage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
   return {

@@ -3,6 +3,7 @@ import { withAuthor, sessionUser } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { syncArticleMentions } from "@/lib/article-mention-index";
 import { validateImageReference } from "@/lib/asset-validation";
+import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { prisma } from "@/lib/db";
 import { validateCharacterRows } from "@/lib/character-sheet";
 
@@ -77,6 +78,9 @@ async function patchHandler(
       excerpt,
       contentHtml,
       coverImage,
+      coverImageAlt,
+      portraitImage,
+      portraitImageAlt,
       contentJson,
       metadata,
       tags,
@@ -96,6 +100,12 @@ async function patchHandler(
       const error = await validateImageReference(coverImage, existing.worldId);
       if (error) return NextResponse.json({ error }, { status: 400 });
     }
+    if (portraitImage !== undefined) {
+      const error = await validateImageReference(portraitImage, existing.worldId);
+      if (error) return NextResponse.json({ error }, { status: 400 });
+    }
+    const altError = validatePlacementAlt(coverImageAlt) || validatePlacementAlt(portraitImageAlt);
+    if (altError) return NextResponse.json({ error: altError }, { status: 400 });
     if (categoryId && !await prisma.category.findFirst({ where: { id: categoryId, worldId: existing.worldId }, select: { id: true } })) {
       return NextResponse.json({ error: "Category not found in this world" }, { status: 400 });
     }
@@ -114,6 +124,9 @@ async function patchHandler(
           excerpt: excerpt !== undefined ? excerpt : existing.excerpt,
           contentHtml: contentHtml !== undefined ? contentHtml : existing.contentHtml,
           ...(coverImage !== undefined ? { coverImage: coverImage.trim() || null } : {}),
+          ...(coverImageAlt !== undefined ? { coverImageAlt: normalizePlacementAlt(coverImageAlt) } : {}),
+          ...(portraitImage !== undefined ? { portraitImage: portraitImage.trim() || null } : {}),
+          ...(portraitImageAlt !== undefined ? { portraitImageAlt: normalizePlacementAlt(portraitImageAlt) } : {}),
           contentJson: contentJson !== undefined ? (contentJson ? JSON.stringify(contentJson) : null) : contentHtml !== undefined ? null : existing.contentJson,
           metadata: metadata !== undefined ? JSON.stringify(metadata) : existing.metadata,
           tags: tags !== undefined ? tags : existing.tags,
@@ -140,6 +153,10 @@ async function patchHandler(
           contentJson: existing.contentJson,
           metadata: existing.metadata,
           tags: existing.tags,
+          coverImage: existing.coverImage,
+          coverImageAlt: existing.coverImageAlt,
+          portraitImage: existing.portraitImage,
+          portraitImageAlt: existing.portraitImageAlt,
           publicationStatus: existing.publicationStatus,
           visibility: existing.visibility,
           state: existing.state,

@@ -3,14 +3,17 @@ import React from "react";
 import type { JSONContent } from "@tiptap/core";
 import type { RpgBlockItem } from "@/lib/rpg";
 import { StatblockCard } from "@/components/blocks/StatblockCard";
-export function PublicRichText({ doc, links, blocks }: { doc: JSONContent; links: { id: string; title: string; href: string }[]; blocks: RpgBlockItem[] }) {
+import { ReaderAdjacentCredit } from "./ReaderImageCredits";
+import { imageAssetId } from "@/lib/assets";
+import type { ReaderCredit } from "@/lib/stock-credits";
+export function PublicRichText({ doc, links, blocks, credits = [] }: { doc: JSONContent; links: { id: string; title: string; href: string }[]; blocks: RpgBlockItem[]; credits?: ReaderCredit[] }) {
   function node(item: JSONContent, index: number): React.ReactNode {
     const children = item.content?.map(node);
     switch (item.type) {
       case "text": return <React.Fragment key={index}>{(item.marks || []).reduce<React.ReactNode>((text, mark) => mark.type === "bold" ? <strong>{text}</strong> : mark.type === "italic" ? <em>{text}</em> : mark.type === "strike" ? <s>{text}</s> : mark.type === "code" ? <code>{text}</code> : mark.type === "link" ? <a href={mark.attrs!.href} rel="noopener noreferrer">{text}</a> : text, item.text)}</React.Fragment>;
       case "articleLink": { const target = links.find(link => link.id === item.attrs?.articleId); return target ? <a key={index} href={target.href} className="article-link">{target.title}</a> : <span key={index}>Unpublished article</span>; }
       case "campaignStatblock": { const block = blocks.find(block => block.id === item.attrs?.blockId); return block ? <StatblockCard key={index} block={block} /> : null; }
-      case "image": return <img key={index} src={item.attrs!.src} alt={item.attrs!.alt || ""} loading="lazy" className="my-5 max-w-full rounded-lg" />;
+      case "image": return <figure key={index} className="my-5"><img src={item.attrs!.src} alt={item.attrs!.alt || ""} loading="lazy" className="max-w-full rounded-lg" /><ReaderAdjacentCredit credits={credits} assetId={imageAssetId(item.attrs!.src)} /></figure>;
       case "paragraph": return <p key={index} className="my-3">{children}</p>;
       case "heading": return item.attrs?.level === 1 ? <h1 key={index} className="mt-6 text-3xl font-bold">{children}</h1> : item.attrs?.level === 3 ? <h3 key={index} className="mt-5 text-xl font-bold">{children}</h3> : <h2 key={index} className="mt-6 text-2xl font-bold">{children}</h2>;
       case "bulletList": return <ul key={index} className="list-disc pl-6">{children}</ul>;

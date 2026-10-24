@@ -173,3 +173,116 @@ test("older v2 bundles without maps still import", async () => {
   assert.equal(restored.success, true);
   assert.equal(await db.map.count({ where: { worldId: restored.worldId } }), 0);
 });
+
+test("v3 roundtrip preserves provenance, placement alt text, category illustrations and restrictions", async () => {
+  const world = await db.world.create({ data: { ownerId, title: `V3 source ${stamp}`, slug: `v3-source-${stamp}` } });
+  const assetId = randomUUID();
+  const image = await normalizeImage(await sharp({ create: { width: 2, height: 2, channels: 3, background: "teal" } }).png().toBuffer());
+  await writeAsset(assetId, image.data);
+  await db.imageAsset.create({ data: {
+    id: assetId, worldId: world.id, title: "Heraldic crest", originalName: "crest.webp",
+    alt: "A painted crest", mimeType: "image/webp", byteSize: image.data.length,
+    width: image.width, height: image.height, sha256: image.sha256, archived: false,
+    source: "STOCK", displayRestricted: true, restrictionReason: "Rights review pending",
+    restrictionDate: new Date("2026-10-23T00:00:00.000Z"),
+  } });
+  await db.imageAssetProvenance.create({ data: {
+    assetId, catalogEntryId: "heraldic-crests", catalogVersion: 1,
+    manifestDigest: "a".repeat(64), snapshotJson: JSON.stringify({ id: "heraldic-crests", version: 1, title: "Heraldic crests", rights: { reviewStatus: "approved", evidence: { reviewer: "Fixture Reviewer", reviewedAt: "2026-10-23" } }, attribution: { creditText: "Heraldic crests, CC0", required: false, placement: "credits-section", licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/" } }),
+    verificationOrigin: "BUNDLED_REVIEW",
+  } });
+  const category = await db.category.create({ data: { worldId: world.id, name: "Banners", iconImage: `/api/assets/${assetId}/file` } });
+  await db.article.create({ data: {
+    worldId: world.id, title: "Crest article", slug: `crest-${stamp}`,
+    coverImage: `/api/assets/${assetId}/file`, coverImageAlt: "Crest banner",
+    portraitImage: `/api/assets/${assetId}/file`, portraitImageAlt: "",
+  } });
+  await db.world.update({ where: { id: world.id }, data: { coverImageAlt: "World banner", bannerImageAlt: "" } });
+
+  assert.equal(await exportService.worldNeedsV3(world.id), true);
+
+  const bundle = await exportService.exportWorldV3(world.id);
+  assert.equal(bundle.formatVersion, 3);
+  const exportedAsset = bundle.assets.find(item => item.id === assetId);
+  assert.equal(exportedAsset?.source, "STOCK");
+  assert.equal(exportedAsset?.displayRestricted, true);
+  assert.equal(exportedAsset?.restrictionReason, "Rights review pending");
+  assert.equal(exportedAsset?.provenance?.[0].verificationOrigin, "BUNDLED_REVIEW");
+  assert.equal(bundle.world.coverImageAlt, "World banner");
+  assert.equal(bundle.world.bannerImageAlt, "");
+
+  const restored = await exportService.importWorldV2(bundle, ownerId, async (slug) => !!(await db.world.findUnique({ where: { slug }, select: { id: true } })));
+  assert.equal(restored.success, true);
+  const newWorld = await db.world.findUniqueOrThrow({ where: { id: restored.worldId } });
+  assert.equal(newWorld.coverImageAlt, "World banner");
+  assert.equal(newWorld.bannerImageAlt, "");
+  const restoredAsset = await db.imageAsset.findFirstOrThrow({ where: { worldId: restored.worldId, originalName: "crest.webp" }, include: { provenance: true } });
+  assert.equal(restoredAsset.source, "STOCK");
+  assert.equal(restoredAsset.displayRestricted, true);
+  assert.equal(restoredAsset.restrictionReason, "Rights review pending");
+  assert.equal(restoredAsset.restrictionDate?.toISOString(), "2026-10-23T00:00:00.000Z");
+  assert.equal(restoredAsset.provenance.length, 1);
+  assert.equal(restoredAsset.provenance[0].verificationOrigin, "IMPORTED_DECLARATION");
+  assert.equal(restoredAsset.provenance[0].catalogEntryId, "heraldic-crests");
+  const restoredCategory = await db.category.findFirstOrThrow({ where: { worldId: restored.worldId, name: "Banners" } });
+  assert.equal(restoredCategory.iconImage, `/api/assets/${restoredAsset.id}/file`);
+  const restoredArticle = await db.article.findFirstOrThrow({ where: { worldId: restored.worldId, slug: `crest-${stamp}` } });
+  assert.equal(restoredArticle.coverImage, `/api/assets/${restoredAsset.id}/file`);
+  assert.equal(restoredArticle.coverImageAlt, "Crest banner");
+  assert.equal(restoredArticle.portraitImage, `/api/assets/${restoredAsset.id}/file`);
+  assert.equal(restoredArticle.portraitImageAlt, "");
+  assert.ok(category.id);
+
+  await db.accessAuditEvent.deleteMany({ where: { worldId: world.id } });
+  await db.world.deleteMany({ where: { id: world.id } });
+});
+
+test("v3 import refuses malformed provenance as an uncredited upload", async () => {
+  const world = await db.world.create({ data: { ownerId, title: `V3 malformed ${stamp}`, slug: `v3-malformed-${stamp}` } });
+  const assetId = randomUUID();
+  const image = await normalizeImage(await sharp({ create: { width: 2, height: 2, channels: 3, background: "maroon" } }).png().toBuffer());
+  await writeAsset(assetId, image.data);
+  await db.imageAsset.create({ data: { id: assetId, worldId: world.id, title: "Bad provenance", originalName: "bad.webp", mimeType: "image/webp", byteSize: image.data.length, width: image.width, height: image.height, sha256: image.sha256, source: "STOCK" } });
+  await db.imageAssetProvenance.create({ data: { assetId, catalogEntryId: "heraldic-crests", catalogVersion: 1, manifestDigest: "b".repeat(64), snapshotJson: "{}", verificationOrigin: "BUNDLED_REVIEW" } });
+  const bundle = await exportService.exportWorldV3(world.id);
+  const exported = bundle.assets.find(item => item.id === assetId)!;
+  exported.provenance![0].catalogEntryId = "NOT VALID";
+  const restored = await exportService.importWorldV2(bundle, ownerId, async (slug) => !!(await db.world.findUnique({ where: { slug }, select: { id: true } })));
+  assert.equal(restored.success, true);
+  assert.ok(restored.warnings?.some(warning => warning.includes("uncredited")));
+  assert.equal(await db.imageAsset.count({ where: { worldId: restored.worldId } }), 0);
+
+  await db.accessAuditEvent.deleteMany({ where: { worldId: world.id } });
+  await db.world.deleteMany({ where: { id: world.id } });
+});
+
+test("legacy guard includes revision-only descriptions, including decorative empty text", async () => {
+  const world = await db.world.create({ data: { ownerId, title: "Revision only", slug: `revision-only-${stamp}` } });
+  const article = await db.article.create({ data: { worldId: world.id, title: "Revision source", slug: "revision-source" } });
+  try {
+    assert.equal(await exportService.worldNeedsV3(world.id), false);
+    const revision = await db.articleRevision.create({ data: { articleId: article.id, userId: ownerId, title: article.title, slug: article.slug, articleVersionAtSave: 1, coverImageAlt: "Retained description", publicationStatus: "DRAFT", visibility: "PRIVATE", state: "DRAFT" } });
+    assert.equal(await exportService.worldNeedsV3(world.id), true);
+    await db.articleRevision.update({ where: { id: revision.id }, data: { coverImageAlt: null, portraitImageAlt: "" } });
+    assert.equal(await exportService.worldNeedsV3(world.id), true);
+  } finally { await db.world.delete({ where: { id: world.id } }); }
+});
+
+test("malformed snapshot contents and failed provenance writes leave no usable image row", async () => {
+  const image = await normalizeImage(await sharp({ create: { width: 3, height: 3, channels: 3, background: "blue" } }).png().toBuffer());
+  const snapshot = { id: "test-art", version: 1, title: "Test art", attribution: { creditText: "Fixture credit", required: true, placement: "adjacent", licenseUrl: "https://example.com/license" } };
+  const source = await exportService.exportWorldV3(sourceId);
+  const entry = { catalogEntryId: "test-art", catalogVersion: 1, manifestDigest: "c".repeat(64), snapshotJson: JSON.stringify(snapshot), verificationOrigin: "BUNDLED_REVIEW" };
+  const invalid = ["not JSON", "{}", JSON.stringify({ ...snapshot, id: "different-art" }), JSON.stringify({ ...snapshot, attribution: { ...snapshot.attribution, creditText: "" } })];
+  for (const raw of invalid) {
+    const bundle = { ...source, articles: [], articleRevisions: [], assets: [{ id: randomUUID(), title: "Test art", originalName: "test.webp", alt: "", mimeType: "image/webp", byteSize: image.data.length, width: image.width, height: image.height, sha256: image.sha256, data: image.data.toString("base64"), provenance: [{ ...entry, snapshotJson: raw }] }] };
+    const result = await exportService.importWorldV2(bundle, ownerId, async slug => !!await db.world.findUnique({ where: { slug } }));
+    assert.equal(result.success, true);
+    assert.match(result.warnings!.join("\n"), /Malformed provenance snapshot/);
+    assert.equal(await db.imageAsset.count({ where: { worldId: result.worldId } }), 0);
+  }
+  const duplicateRecords = { ...source, articles: [], articleRevisions: [], assets: [{ id: randomUUID(), title: "Test art", originalName: "test.webp", alt: "", mimeType: "image/webp", byteSize: image.data.length, width: image.width, height: image.height, sha256: image.sha256, data: image.data.toString("base64"), provenance: [entry, entry] }] };
+  const result = await exportService.importWorldV2(duplicateRecords, ownerId, async slug => !!await db.world.findUnique({ where: { slug } }));
+  assert.equal(result.success, true);
+  assert.equal(await db.imageAsset.count({ where: { worldId: result.worldId } }), 0, "the image transaction rolls back when its provenance cannot be stored");
+});

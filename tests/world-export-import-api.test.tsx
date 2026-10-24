@@ -1,5 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert";
+import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { authorFetch } from "./auth-fixture";
 
@@ -30,11 +31,12 @@ function ownerFetch(path: string, options?: RequestInit) {
   return authenticatedFetch(`${origin}${path}`, { ...options, headers: { "Content-Type": "application/json", ...options?.headers } });
 }
 
-test("world export returns valid JSON structure", { skip: !origin }, async () => {
+test("world export defaults to format 3 with a complete structure", { skip: !origin }, async () => {
   const res = await ownerFetch(`/api/worlds/${worldId}/export`);
   assert.equal(res.status, 200);
+  assert.equal(res.headers.get("Accept-Version"), "3");
   const data = await res.json();
-  assert.equal(data.version, 1);
+  assert.equal(data.formatVersion, 3);
   assert.ok(data.exportedAt);
   assert.ok(data.world);
   assert.ok(Array.isArray(data.categories));
@@ -42,6 +44,64 @@ test("world export returns valid JSON structure", { skip: !origin }, async () =>
   assert.ok(Array.isArray(data.assets));
   assert.equal(data.world.id, worldId);
   assert.equal(data.world.title, `Export World ${stamp}`);
+});
+
+test("format 3 rejects filtering flags instead of silently returning a partial backup", { skip: !origin }, async () => {
+  for (const flag of ["includeAssets=false", "includePrivate=false"]) {
+    const res = await ownerFetch(`/api/worlds/${worldId}/export?${flag}`);
+    assert.equal(res.status, 400);
+    const data = await res.json();
+    assert.match(data.error, /complete backup/i);
+  }
+  const bad = await ownerFetch(`/api/worlds/${worldId}/export?format=v9`);
+  assert.equal(bad.status, 400);
+});
+
+test("legacy v1 and v2 exports remain available for lossless worlds", { skip: !origin }, async () => {
+  const v1 = await ownerFetch(`/api/worlds/${worldId}/export?format=v1&includeAssets=false`);
+  assert.equal(v1.status, 200);
+  const v1Data = await v1.json();
+  assert.equal(v1Data.version, 1);
+  const v2 = await ownerFetch(`/api/worlds/${worldId}/export?format=v2`);
+  assert.equal(v2.status, 200);
+  assert.equal((await v2.json()).formatVersion, 2);
+});
+
+test("legacy export is refused when it would drop provenance or placement data", { skip: !origin }, async () => {
+  const assetId = randomUUID();
+  await db.imageAsset.create({ data: { id: assetId, worldId, title: "Provenance art", originalName: "art.webp", mimeType: "image/webp", byteSize: 1, width: 1, height: 1, sha256: "e".repeat(64), source: "STOCK" } });
+  await db.imageAssetProvenance.create({ data: { assetId, catalogEntryId: "moonlit-keep", catalogVersion: 1, manifestDigest: "f".repeat(64), snapshotJson: "{}", verificationOrigin: "BUNDLED_REVIEW" } });
+  const res = await ownerFetch(`/api/worlds/${worldId}/export?format=v2`);
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /format=v3/i);
+  await db.imageAssetProvenance.deleteMany({ where: { assetId } });
+  await db.imageAsset.deleteMany({ where: { id: assetId } });
+});
+
+test("v2 refuses filtering flags instead of including omitted private data", { skip: !origin }, async () => {
+  for (const flag of ["includeAssets=false", "includePrivate=false", "includePrivate=true"]) {
+    const response = await ownerFetch(`/api/worlds/${worldId}/export?format=v2&${flag}`);
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /format=v1/);
+  }
+});
+
+test("legacy v1 import does not silently discard attached provenance", { skip: !origin }, async () => {
+  const bundle = await (await ownerFetch(`/api/worlds/${worldId}/export?format=v1`)).json();
+  bundle.assets = [{ data: "", provenance: [{ snapshotJson: "not JSON" }] }];
+  const response = await ownerFetch("/api/worlds/import", { method: "POST", body: JSON.stringify(bundle) });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /cannot preserve image provenance/);
+});
+
+test("legacy API refuses a world whose new placement data exists only in history", { skip: !origin }, async () => {
+  const article = await db.article.create({ data: { worldId, title: "Historical placement", slug: `historical-${stamp}` } });
+  try {
+    await db.articleRevision.create({ data: { articleId: article.id, userId: ownerId, title: article.title, slug: article.slug, articleVersionAtSave: 1, coverImageAlt: "Earlier cover", publicationStatus: "DRAFT", visibility: "PRIVATE", state: "DRAFT" } });
+    for (const format of ["v1", "v2"]) {
+      assert.equal((await ownerFetch(`/api/worlds/${worldId}/export?format=${format}`)).status, 400);
+    }
+  } finally { await db.article.delete({ where: { id: article.id } }); }
 });
 
 test("world export is private by default regardless of original setting", { skip: !origin }, async () => {
@@ -58,7 +118,7 @@ test("world export excludes private content when requested", { skip: !origin }, 
   // Create public article
   await db.article.create({ data: { worldId, slug: `public-${stamp}`, title: "Public", publicationStatus: "PUBLISHED", visibility: "PUBLIC", contentHtml: "visible" } });
   
-  const res = await ownerFetch(`/api/worlds/${worldId}/export?includePrivate=false`);
+  const res = await ownerFetch(`/api/worlds/${worldId}/export?format=v1&includePrivate=false`);
   assert.equal(res.status, 200);
   const data = await res.json();
   const articleTitles = data.articles.map((a: { title: string }) => a.title);
@@ -69,7 +129,7 @@ test("world export excludes private content when requested", { skip: !origin }, 
 
 test("world import creates new world with remapped IDs", { skip: !origin }, async () => {
   // First export
-  const exportRes = await ownerFetch(`/api/worlds/${worldId}/export?includeAssets=false&includePrivate=true`);
+  const exportRes = await ownerFetch(`/api/worlds/${worldId}/export?format=v1&includeAssets=false&includePrivate=true`);
   assert.equal(exportRes.status, 200);
   const exportData = await exportRes.json();
   
@@ -105,7 +165,7 @@ test("world import creates new world with remapped IDs", { skip: !origin }, asyn
 });
 
 test("world import generates unique slug on conflict", { skip: !origin }, async () => {
-  const exportRes = await ownerFetch(`/api/worlds/${worldId}/export?includeAssets=false`);
+  const exportRes = await ownerFetch(`/api/worlds/${worldId}/export?format=v1&includeAssets=false`);
   const exportData = await exportRes.json();
   
   // Import twice

@@ -119,16 +119,23 @@ async function authorize(request: NextRequest, userId: string, role: string) {
     return;
   }
 
-  const body = await request.clone().json().catch(() => { throw new AccessError("Invalid JSON.", 400); });
-  if (!body || typeof body !== "object") throw new AccessError("Invalid request.", 400);
-  let worldId: unknown = body.worldId;
-  if (id) worldId = await resourceWorld(resource, id);
-  else if (resource === "maps") {
-    const mapId = typeof body.mapId === "string" ? body.mapId : typeof body.id === "string" ? body.id : "";
-    if (!worldId) worldId = await resourceWorld("maps", mapId);
+  let worldId: unknown = null;
+  if (id) {
+    // The target is in the URL, so resolve its world from the database and do
+    // not require a JSON body. Bodyless resource actions (for example
+    // POST /api/articles/[id]/clone) must still authorize.
+    worldId = await resourceWorld(resource, id);
+  } else {
+    const body = await request.clone().json().catch(() => { throw new AccessError("Invalid JSON.", 400); });
+    if (!body || typeof body !== "object") throw new AccessError("Invalid request.", 400);
+    const fields = body as Record<string, unknown>;
+    worldId = fields.worldId;
+    if (resource === "maps") {
+      const mapId = typeof fields.mapId === "string" ? fields.mapId : typeof fields.id === "string" ? fields.id : "";
+      if (!worldId) worldId = await resourceWorld("maps", mapId);
+    } else if (resource === "variables") worldId = await resourceWorld(request.method === "POST" ? "collection" : "variable", (fields.collectionId as string) || (fields.id as string) || "");
+    else if (resource === "secrets" && request.method === "PATCH") worldId = await resourceWorld("secrets", (fields.id as string) || "");
   }
-  else if (resource === "variables") worldId = await resourceWorld(request.method === "POST" ? "collection" : "variable", body.collectionId || body.id || "");
-  else if (resource === "secrets" && request.method === "PATCH") worldId = await resourceWorld("secrets", body.id || "");
   await ownedWorld(worldId, userId);
 }
 

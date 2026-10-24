@@ -57,7 +57,7 @@ test("character sheets persist through edits, revisions and world export/import 
     assert.match(campaignHtml, /Moonblade/);
     assert.doesNotMatch(campaignHtml, /retain-unshared-note|retain-private-extension/);
 
-    const exported = await owned(`${origin}/api/worlds/${world.id}/export?includePrivate=true&includeAssets=false`);
+    const exported = await owned(`${origin}/api/worlds/${world.id}/export?format=v3`);
     assert.equal(exported.status, 200);
     const bundle = await exported.json();
     assert.deepEqual(JSON.parse(bundle.articles.find((article: { id: string }) => article.id === created.id).metadata), metadata);

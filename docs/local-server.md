@@ -1,5 +1,30 @@
 # Local server lifecycle
 
+## Current workspace preview (port 3034)
+
+The updated workspace runs at **http://localhost:3034** as the transient user
+service `worldforge-preview3034.service`. It binds `0.0.0.0`, sets
+`WORLDFORGE_ORIGIN=http://localhost:3034`, and uses `prisma/dev.db` plus
+`data/assets`. Use the localhost URL so write requests match the configured
+origin. The service survives terminal sessions and restarts on failure.
+
+```bash
+systemctl --user status worldforge-preview3034.service
+journalctl --user -u worldforge-preview3034.service -n 50
+systemctl --user restart worldforge-preview3034.service
+```
+
+On October 23, 2026, `20261023200000_pending_stock_review` was applied, Prisma
+regenerated, and the production build rebuilt before restarting this preview.
+SQLite integrity and record counts were verified after migration. Pre-change
+database snapshots and the previous production build are retained under
+`/tmp/user/1000/worldforge-before-stock-fixes-olc1jlcp/`.
+
+Pending catalog artwork is available for review through `next dev`; the
+production catalog does not offer it for new selection until explicitly approved.
+
+## Earlier local helper (port 3033)
+
 The local production site runs at http://localhost:3033 under the systemd user manager. Use `pnpm serve:local` after building with `pnpm build`. This starts the existing production build as `worldforge.service`; running it again while active leaves the existing service alone.
 
 The service owns the server independently of Codex tool/terminal sessions and uses Restart=on-failure with a three-second delay. Logs are retained by the journal rather than tied to a temporary tool session.

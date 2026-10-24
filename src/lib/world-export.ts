@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { readAsset, writeAsset } from "@/lib/asset-storage";
 import { randomUUID } from "node:crypto";
 import { normalizeImage, removeAssetFile } from "@/lib/asset-storage";
+import { provenanceVerificationOrigin, validateImportedStockSnapshot } from "./stock-provenance";
 import { collectHtmlReferences } from "@/lib/article-mention-index";
 import { collectJsonReferences } from "@/lib/article-links";
 import type { JSONContent } from "@tiptap/core";
@@ -60,14 +61,16 @@ export interface WorldExportV2 {
     id: string; slug: string; title: string; description: string | null;
     genre: string; system: string; isPublic: boolean;
     coverImage: string | null; bannerImage: string | null; appearance: string | null;
+    coverImageAlt?: string | null; bannerImageAlt?: string | null;
   };
-  categories: { id: string; parentId: string | null; name: string; icon: string; order: number }[];
+  categories: { id: string; parentId: string | null; name: string; icon: string; order: number; iconImage?: string | null }[];
   articles: {
     id: string; categoryId: string | null; template: string; title: string;
     slug: string; excerpt: string | null; contentHtml: string | null;
     contentJson: string | null; metadata: string | null; tags: string | null;
     publicationStatus: string; visibility: string; coverImage: string | null;
     portraitImage: string | null; parentId: string | null; order: number;
+    coverImageAlt?: string | null; portraitImageAlt?: string | null;
     sidebarJson?: string | null; version?: number; state?: string;
     isPinned: boolean; wordCount: number; canonState: string;
     revealedInSessionId: string | null; supersededById: string | null;
@@ -77,11 +80,19 @@ export interface WorldExportV2 {
     contentHtml: string | null; contentJson: string | null; metadata: string | null;
     tags: string | null; publicationStatus: string; visibility: string; state: string;
     userId: string; savedAt: string; articleVersionAtSave: number; createdAt: string;
+    coverImage?: string | null; coverImageAlt?: string | null;
+    portraitImage?: string | null; portraitImageAlt?: string | null;
   }[];
   assets: {
     id: string; title: string; originalName: string; alt: string;
     mimeType: string; byteSize: number; width: number; height: number;
     sha256: string; data: string; archived?: boolean;
+    source?: string; displayRestricted?: boolean;
+    restrictionReason?: string | null; restrictionDate?: string | null;
+    provenance?: {
+      catalogEntryId: string; catalogVersion: number; manifestDigest: string;
+      snapshotJson: string; verificationOrigin: string;
+    }[];
   }[];
   statblocks: { id: string; category: string; name: string; system: string; statsJson: string }[];
   secrets: { id: string; articleId: string | null; title: string; content: string; isRevealed: boolean }[];
@@ -126,16 +137,51 @@ export interface WorldExportV2 {
   }[];
   maps?: WorldExportMap[];
 }
+/**
+ * Portable world bundle format 3. Adds stock-art provenance, per-placement alt
+ * text, category illustrations, revision image fields and operator restrictions
+ * to the v2 bundle. v1/v2 imports remain supported.
+ */
+export interface WorldExportV3 extends Omit<WorldExportV2, "formatVersion"> {
+  formatVersion: 3;
+}
 // ---------------------------------------------------------------------------
 // Export function (v2)
 // ---------------------------------------------------------------------------
 export async function exportWorldV2(worldId: string): Promise<WorldExportV2> {
+  return buildWorldExport(worldId, 2) as Promise<WorldExportV2>;
+}
+
+/** Complete owner backup including provenance, placement fields and restrictions. */
+export async function exportWorldV3(worldId: string): Promise<WorldExportV3> {
+  return buildWorldExport(worldId, 3) as Promise<WorldExportV3>;
+}
+
+/**
+ * True when a world can only be represented losslessly by format 3 (it has
+ * provenance/restrictions or placement alt/illustration data). Legacy v1/v2
+ * exports of such a world are refused instead of silently dropping it.
+ */
+export async function worldNeedsV3(worldId: string): Promise<boolean> {
+  const [world, article, revision, category, provenance, restricted] = await Promise.all([
+    prisma.world.findUnique({ where: { id: worldId }, select: { coverImageAlt: true, bannerImageAlt: true } }),
+    prisma.article.findFirst({ where: { worldId, OR: [{ coverImageAlt: { not: null } }, { portraitImageAlt: { not: null } }] }, select: { id: true } }),
+    prisma.articleRevision.findFirst({ where: { article: { worldId }, OR: [{ coverImage: { not: null } }, { portraitImage: { not: null } }, { coverImageAlt: { not: null } }, { portraitImageAlt: { not: null } }] }, select: { id: true } }),
+    prisma.category.findFirst({ where: { worldId, iconImage: { not: null } }, select: { id: true } }),
+    prisma.imageAssetProvenance.findFirst({ where: { asset: { worldId } }, select: { id: true } }),
+    prisma.imageAsset.findFirst({ where: { worldId, displayRestricted: true }, select: { id: true } }),
+  ]);
+  return Boolean((world && (world.coverImageAlt !== null || world.bannerImageAlt !== null)) || article || revision || category || provenance || restricted);
+}
+
+async function buildWorldExport(worldId: string, formatVersion: 2 | 3): Promise<WorldExportV2 | WorldExportV3> {
   const world = await prisma.world.findUnique({
     where: { id: worldId },
     select: {
       id: true, slug: true, title: true, description: true,
       genre: true, system: true, isPublic: true,
       coverImage: true, bannerImage: true, appearance: true,
+      coverImageAlt: true, bannerImageAlt: true,
     },
   });
   if (!world) throw new Error("World not found");
@@ -160,7 +206,7 @@ export async function exportWorldV2(worldId: string): Promise<WorldExportV2> {
     prisma.category.findMany({ where: { worldId }, orderBy: { order: "asc" } }),
     prisma.article.findMany({ where: { worldId }, orderBy: { createdAt: "asc" } }),
     prisma.articleRevision.findMany({ where: { article: { worldId } }, orderBy: { savedAt: "asc" } }),
-    prisma.imageAsset.findMany({ where: { worldId } }),
+    prisma.imageAsset.findMany({ where: { worldId }, include: { provenance: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } } }),
     prisma.rpgBlock.findMany({ where: { worldId } }),
     prisma.secret.findMany({ where: { worldId } }),
     prisma.timeline.findMany({ where: { worldId }, include: { events: true } }),
@@ -186,6 +232,15 @@ export async function exportWorldV2(worldId: string): Promise<WorldExportV2> {
             id: asset.id, title: asset.title, originalName: asset.originalName,
             alt: asset.alt, mimeType: asset.mimeType, byteSize: asset.byteSize,
             width: asset.width, height: asset.height, sha256: asset.sha256, archived: asset.archived,
+            source: asset.source,
+            displayRestricted: asset.displayRestricted,
+            restrictionReason: asset.restrictionReason,
+            restrictionDate: asset.restrictionDate?.toISOString() ?? null,
+            provenance: asset.provenance.map(entry => ({
+              catalogEntryId: entry.catalogEntryId, catalogVersion: entry.catalogVersion,
+              manifestDigest: entry.manifestDigest, snapshotJson: entry.snapshotJson,
+              verificationOrigin: provenanceVerificationOrigin(entry.verificationOrigin, entry.snapshotJson),
+            })),
             data: Buffer.from(data).toString("base64"),
           };
         } catch (error) {
@@ -197,12 +252,12 @@ export async function exportWorldV2(worldId: string): Promise<WorldExportV2> {
   }
 
   return {
-    formatVersion: 2,
+    formatVersion,
     exportedAt: new Date().toISOString(),
     sourceWorldId: worldId,
     world: { ...world, isPublic: false },
     categories: categories.map((c) => ({
-      id: c.id, parentId: c.parentId, name: c.name, icon: c.icon, order: c.order,
+      id: c.id, parentId: c.parentId, name: c.name, icon: c.icon, order: c.order, iconImage: c.iconImage,
     })),
     articles: articles.map((a) => ({
       id: a.id, categoryId: a.categoryId, template: a.template,
@@ -212,6 +267,7 @@ export async function exportWorldV2(worldId: string): Promise<WorldExportV2> {
       metadata: a.metadata, tags: a.tags,
       publicationStatus: a.publicationStatus, visibility: a.visibility,
       coverImage: a.coverImage, portraitImage: a.portraitImage,
+      coverImageAlt: a.coverImageAlt, portraitImageAlt: a.portraitImageAlt,
       parentId: a.parentId, order: a.order, isPinned: a.isPinned,
       wordCount: a.wordCount, canonState: a.canonState,
       revealedInSessionId: a.revealedInSessionId,
@@ -225,6 +281,8 @@ export async function exportWorldV2(worldId: string): Promise<WorldExportV2> {
       state: revision.state, userId: revision.userId,
       savedAt: revision.savedAt.toISOString(), articleVersionAtSave: revision.articleVersionAtSave,
       createdAt: revision.createdAt.toISOString(),
+      coverImage: revision.coverImage, coverImageAlt: revision.coverImageAlt,
+      portraitImage: revision.portraitImage, portraitImageAlt: revision.portraitImageAlt,
     })),
     assets: exportAssets.filter(Boolean) as WorldExportV2["assets"],
     statblocks: statblocks.map((s) => ({
@@ -301,6 +359,40 @@ export async function exportWorldV2(worldId: string): Promise<WorldExportV2> {
 // ---------------------------------------------------------------------------
 // Import result types
 // ---------------------------------------------------------------------------
+const MAX_IMPORTED_SNAPSHOT_BYTES = 64 * 1024;
+const IMPORTED_ASSET_SOURCES = new Set(["UPLOADED", "STOCK", "IMPORTED"]);
+
+function normalizeImportedSource(value: unknown): string {
+  return typeof value === "string" && IMPORTED_ASSET_SOURCES.has(value) ? value : "IMPORTED";
+}
+
+/**
+ * Validate imported provenance before writing it, and mark it as an imported
+ * declaration: an imported catalog id is never treated as proof of review.
+ * Malformed required provenance aborts that asset rather than importing it as
+ * an ordinary uncredited upload.
+ */
+function normalizeImportedProvenance(asset: WorldExportV2["assets"][number]) {
+  if (asset.provenance === undefined) return [];
+  if (!Array.isArray(asset.provenance) || asset.provenance.length > 25) throw new Error("Invalid provenance record");
+  return asset.provenance.map((entry) => {
+    const valid = entry && typeof entry === "object"
+      && typeof entry.catalogEntryId === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.catalogEntryId)
+      && Number.isSafeInteger(entry.catalogVersion) && entry.catalogVersion >= 1
+      && typeof entry.manifestDigest === "string" && entry.manifestDigest.length > 0 && entry.manifestDigest.length <= 128
+      && typeof entry.snapshotJson === "string" && Buffer.byteLength(entry.snapshotJson) <= MAX_IMPORTED_SNAPSHOT_BYTES;
+    if (!valid) throw new Error("Malformed provenance record; refusing to import the artwork as an uncredited upload");
+    validateImportedStockSnapshot(entry.snapshotJson, entry.catalogEntryId, entry.catalogVersion);
+    return {
+      catalogEntryId: entry.catalogEntryId,
+      catalogVersion: entry.catalogVersion,
+      manifestDigest: entry.manifestDigest,
+      snapshotJson: entry.snapshotJson,
+      verificationOrigin: "IMPORTED_DECLARATION",
+    };
+  });
+}
+
 export interface ImportV2Result {
   success: boolean;
   worldId?: string;
@@ -318,7 +410,7 @@ export interface ImportV2Result {
 // Import function (v2)
 // ---------------------------------------------------------------------------
 export async function importWorldV2(
-  data: WorldExportV2,
+  data: WorldExportV2 | WorldExportV3,
   ownerUserId: string,
   existingSlugCheck: (slug: string) => Promise<boolean>
 ): Promise<ImportV2Result> {
@@ -345,6 +437,7 @@ export async function importWorldV2(
       genre: data.world.genre || "Fantasy",
       system: data.world.system || "DND_5E",
       isPublic: false, coverImage: null, bannerImage: null,
+      coverImageAlt: data.world.coverImageAlt ?? null, bannerImageAlt: data.world.bannerImageAlt ?? null,
       appearance: data.world.appearance,
       ownerId: ownerUserId,
     },
@@ -382,16 +475,27 @@ export async function importWorldV2(
       const normalized = await normalizeImage(decoded);
       const newId = randomUUID();
       writingAssetId = newId;
+      const provenanceRows = normalizeImportedProvenance(asset);
       await writeAsset(newId, normalized.data);
       assetFileWritten = true;
       createdAssetFiles.push(newId);
-      await prisma.imageAsset.create({
-        data: {
-          id: newId, worldId: newWorldId, title: asset.title,
-          originalName: asset.originalName, alt: asset.alt,
-          mimeType: "image/webp", byteSize: normalized.data.length,
-          width: normalized.width, height: normalized.height, sha256: normalized.sha256, archived: asset.archived === true,
-        },
+      if (typeof asset.sha256 === "string" && asset.sha256 && asset.sha256 !== normalized.sha256) {
+        warnings.push(`Image "${asset.title}" was re-encoded on import (source digest ${asset.sha256.slice(0, 12)}… stored as ${normalized.sha256.slice(0, 12)}…); the provenance chain is retained.`);
+      }
+      await prisma.$transaction(async transaction => {
+        await transaction.imageAsset.create({
+          data: {
+            id: newId, worldId: newWorldId, title: asset.title,
+            originalName: asset.originalName, alt: asset.alt,
+            mimeType: "image/webp", byteSize: normalized.data.length,
+            width: normalized.width, height: normalized.height, sha256: normalized.sha256, archived: asset.archived === true,
+            source: normalizeImportedSource(asset.source),
+            displayRestricted: asset.displayRestricted === true,
+            restrictionReason: asset.displayRestricted === true ? (asset.restrictionReason ?? null) : null,
+            restrictionDate: asset.displayRestricted === true && asset.restrictionDate ? new Date(asset.restrictionDate) : null,
+          },
+        });
+        if (provenanceRows.length) await transaction.imageAssetProvenance.createMany({ data: provenanceRows.map(row => ({ ...row, assetId: newId })) });
       });
       assetIdMap.set(asset.id, newId);
       assetUrlMap.set(`/api/assets/${asset.id}/file`, `/api/assets/${newId}/file`);
@@ -405,6 +509,16 @@ export async function importWorldV2(
       }
       warnings.push(`Failed to import asset "${asset.title}": ${e instanceof Error ? e.message : "Unknown error"}`);
     }
+  }
+
+  // Restore category illustrations only after asset remapping is known.
+  for (const cat of data.categories || []) {
+    if (!cat.iconImage) continue;
+    const id = categoryIdMap.get(cat.id);
+    if (!id) continue;
+    const remapped = assetUrlMap.get(cat.iconImage) ?? null;
+    if (remapped) await prisma.category.update({ where: { id }, data: { iconImage: remapped } });
+    else warnings.push(`Category "${cat.name}" illustration referenced an unavailable image and was cleared`);
   }
 
   function remapUrls(c: string | null): string | null {
@@ -482,6 +596,8 @@ export async function importWorldV2(
         publicationStatus: "DRAFT", visibility: "INHERITED", state: "DRAFT",
         coverImage: article.coverImage ? assetUrlMap.get(article.coverImage) ?? null : null,
         portraitImage: article.portraitImage ? assetUrlMap.get(article.portraitImage) ?? null : null,
+        coverImageAlt: article.coverImageAlt ?? null,
+        portraitImageAlt: article.portraitImageAlt ?? null,
         parentId: null,
         order: article.order || 0, isPinned: article.isPinned || false,
         wordCount: article.wordCount || 0, canonState: article.canonState || "GM_DRAFT", version: Math.max(1, article.version || 1),
@@ -540,6 +656,10 @@ export async function importWorldV2(
       visibility: revision.visibility, state: revision.state, userId: ownerUserId,
       savedAt: new Date(revision.savedAt), articleVersionAtSave: revision.articleVersionAtSave,
       createdAt: new Date(revision.createdAt),
+      coverImage: revision.coverImage ? assetUrlMap.get(revision.coverImage) ?? null : null,
+      coverImageAlt: revision.coverImageAlt ?? null,
+      portraitImage: revision.portraitImage ? assetUrlMap.get(revision.portraitImage) ?? null : null,
+      portraitImageAlt: revision.portraitImageAlt ?? null,
     } });
   }
 

@@ -2,6 +2,8 @@ import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { categoryMovePlan, sortOrdered } from "@/lib/category-tree";
+import { validateImageReference } from "@/lib/asset-validation";
+import { imageAssetId } from "@/lib/assets";
 
 class OrganizationError extends Error { constructor(message: string, public status = 400) { super(message); } }
 function failure(error: unknown) {
@@ -55,7 +57,22 @@ async function patchHandler(request: NextRequest) {
     const body = await readBody(request);
     const worldId = body.worldId as string;
     const id = requiredString(body.id, "Item ID");
-    if (!["rename", "moveCategory", "moveArticle"].includes(String(body.action))) throw new OrganizationError("Choose a supported organization action");
+    if (!["rename", "moveCategory", "moveArticle", "setIconImage"].includes(String(body.action))) throw new OrganizationError("Choose a supported organization action");
+    if (body.action === "setIconImage") {
+      const iconImage = body.iconImage === null || body.iconImage === "" ? null : body.iconImage;
+      if (iconImage !== null && typeof iconImage !== "string") throw new OrganizationError("Choose a library image or clear the category illustration");
+      if (iconImage !== null && !imageAssetId(iconImage)) throw new OrganizationError("Category illustrations must be library images from this world");
+      if (iconImage !== null) {
+        const error = await validateImageReference(iconImage, worldId);
+        if (error) throw new OrganizationError(error);
+      }
+      await prisma.$transaction(async tx => {
+        const category = await tx.category.findFirst({ where: { id, worldId }, select: { id: true } });
+        if (!category) throw new OrganizationError("Category not found in this world", 404);
+        await tx.category.update({ where: { id }, data: { iconImage } });
+      });
+      return NextResponse.json({ success: true });
+    }
     await prisma.$transaction(async tx => {
       if (body.action === "moveArticle") {
         const article = await tx.article.findFirst({ where: { id, worldId }, select: { id: true } });

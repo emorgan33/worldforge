@@ -50,8 +50,10 @@ model World {
   system              String               @default("DND_5E") // DND_5E, PF_2E, COC, FATE, CUSTOM
   isPublic            Boolean              @default(false)
   coverImage          String?
+  coverImageAlt       String? // Placement description; null keeps legacy, "" is decorative
   appearance          String? // Serialized world presentation settings
   bannerImage         String?
+  bannerImageAlt      String? // Placement description; null keeps legacy, "" is decorative
   ownerId             String
   creationRequestId   String?
   creationPayloadHash String?
@@ -94,6 +96,7 @@ model Category {
   children  Category[] @relation("CategoryHierarchy")
   name      String
   icon      String     @default("folder")
+  iconImage String? // Optional same-world asset URL shown beside the category name
   order     Int        @default(0)
   articles  Article[]
   createdAt DateTime   @default(now())
@@ -131,7 +134,9 @@ model Article {
   isPinned          Boolean @default(false)
   wordCount         Int     @default(0)
   coverImage        String?
+  coverImageAlt     String? // Placement description; null keeps legacy, "" is decorative
   portraitImage     String?
+  portraitImageAlt  String? // Placement description; null keeps legacy, "" is decorative
 
   // For concurrent edit detection
   version Int @default(1)
@@ -521,12 +526,38 @@ model ImageAsset {
   width        Int
   height       Int
   sha256       String
+  source       String   @default("UPLOADED") // UPLOADED, STOCK, IMPORTED
   archived     Boolean  @default(false)
+  // Operator-applied advisory separate from ordinary library hiding
+  // (`archived`). Blocks reader display while retaining bytes and provenance.
+  displayRestricted  Boolean   @default(false)
+  restrictionReason  String?
+  restrictionDate    DateTime?
+  provenance   ImageAssetProvenance[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@unique([worldId, sha256])
   @@index([worldId, createdAt])
+  @@index([worldId, source])
+}
+
+// Reviewed or imported acquisition evidence attached to an image asset.
+// Ordinary asset edits must not overwrite or erase these records.
+model ImageAssetProvenance {
+  id                 String     @id @default(uuid())
+  assetId            String
+  asset              ImageAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  catalogEntryId     String
+  catalogVersion     Int
+  manifestDigest     String
+  snapshotJson       String
+  verificationOrigin String     @default("PENDING_REVIEW") // PENDING_REVIEW, BUNDLED_REVIEW, IMPORTED_DECLARATION
+  createdAt          DateTime   @default(now())
+
+  @@unique([assetId, catalogEntryId, catalogVersion, manifestDigest])
+  @@index([catalogEntryId, catalogVersion])
+  @@index([manifestDigest])
 }
 
 // Durable, retryable removal records for files whose owning rows were cascaded.
@@ -741,6 +772,12 @@ model ArticleRevision {
   contentJson String?
   metadata    String?
   tags        String?
+
+  // Placement image snapshot (null keeps legacy presentation when restored)
+  coverImage       String?
+  coverImageAlt    String?
+  portraitImage    String?
+  portraitImageAlt String?
 
   // Publication state at time of save
   publicationStatus String

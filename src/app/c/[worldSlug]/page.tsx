@@ -14,6 +14,10 @@ import { systemProfile } from "@/lib/rpg";
 import { BookOpen, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import type { LinkableReaderArticle } from "@/lib/category-tree";
+import { resolvePlacementAlt } from "@/lib/image-placement";
+import { readerCreditsForAssets } from "@/lib/stock-credits";
+import { imageAssetId } from "@/lib/assets";
+import { ReaderImageCredits, ReaderAdjacentCredit } from "@/components/public/ReaderImageCredits";
 
 async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
   // Resolve the actor (supports PREVIEW mode via wf_preview cookie)
@@ -21,7 +25,7 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
   // Find the world by slug
   const world = await prisma.world.findFirst({
     where: { slug: worldSlug, deletedAt: null },
-    select: { id: true, slug: true, title: true, system: true, description: true, coverImage: true, bannerImage: true, appearance: true, ownerId: true },
+    select: { id: true, slug: true, title: true, system: true, description: true, coverImage: true, coverImageAlt: true, bannerImage: true, appearance: true, ownerId: true },
   });
   if (!world) notFound();
   if (actor.kind === "PREVIEW" && actor.previewWorldId !== world.id) notFound();
@@ -50,7 +54,7 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
   // Category names are campaign metadata: only retain paths to readable items.
   const allCategories = await prisma.category.findMany({
     where: { worldId: world.id },
-    select: { id: true, name: true, parentId: true, order: true, icon: true },
+    select: { id: true, name: true, parentId: true, order: true, icon: true, iconImage: true },
     orderBy: [{ order: "asc" }, { id: "asc" }],
   });
   const categoryById = new Map(allCategories.map(category => [category.id, category]));
@@ -66,13 +70,16 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
   // Get assets for image filtering
   const { where: readableAssetWhere } = await readableWhere(world.id, "assets", actor);
   const assets = await prisma.imageAsset.findMany({
-    where: readableAssetWhere,
+    where: { ...readableAssetWhere, displayRestricted: false },
     select: { id: true },
   });
   const assetIds = new Set(assets.map(asset => asset.id));
+  const projectedCategories = categories.map(category => ({ ...category, iconImage: publicImage(category.iconImage, assetIds) }));
   const appearance = parseAppearance(world.appearance);
   appearance.backgroundImage = publicImage(appearance.backgroundImage, assetIds) || "";
   const coverImage = publicImage(world.coverImage, assetIds);
+  const decorations = [coverImage, appearance.backgroundImage, ...projectedCategories.map(category => category.iconImage)];
+  const credits = await readerCreditsForAssets(world.id, decorations.flatMap(url => { const id = url && imageAssetId(url); return id ? [id] : []; }));
   const isPreview = actor.kind === "PREVIEW";
   const actorName = actor.userId
     ? (await prisma.user.findUnique({ where: { id: actor.userId }, select: { name: true } }))?.name
@@ -95,7 +102,7 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
       )}
       <main className="space-y-8">
         {!isPreview && <nav aria-label="Player navigation"><Link href="/player" className="text-sm text-indigo-300 hover:underline">← Your worlds</Link></nav>}
-        {coverImage && <img src={coverImage} alt="" className="h-72 w-full rounded-2xl object-cover" />}
+        {coverImage && <figure><img src={coverImage} alt={resolvePlacementAlt(world.coverImageAlt, world.title)} className="h-72 w-full rounded-2xl object-cover" /><ReaderAdjacentCredit credits={credits} assetId={imageAssetId(coverImage)} /></figure>}
         <header>
           <p className="text-xs uppercase tracking-widest text-amber-400">{systemProfile(world.system).short}{world.system === "PF_2E" ? " · Remaster" : ""}</p>
           <h1 className="mt-3 font-serif text-5xl">{world.title}</h1>
@@ -105,12 +112,12 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
           <h2 id="player-search-heading" className="sr-only">Search articles</h2>
           <ReaderSearch worldSlug={world.slug} articles={linkableArticles} readerType="campaign" />
         </section>
-        <ReaderMobileBrowse categories={categories} articles={linkableArticles} worldSlug={world.slug} readerType="campaign" currentPage="home" />
+        <ReaderMobileBrowse categories={projectedCategories} articles={linkableArticles} worldSlug={world.slug} readerType="campaign" currentPage="home" />
         <div className="grid gap-10 lg:grid-cols-[280px_1fr] pt-4 border-t border-zinc-800">
           <aside aria-label="World contents" className="hidden space-y-4 lg:block">
             <h2 className="text-sm font-bold uppercase tracking-wider text-amber-400/90">Contents</h2>
             <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3">
-              <ReaderCategoryTree categories={categories} articles={linkableArticles} worldSlug={world.slug} readerType="campaign" currentPage="home" />
+              <ReaderCategoryTree categories={projectedCategories} articles={linkableArticles} worldSlug={world.slug} readerType="campaign" currentPage="home" />
             </div>
           </aside>
           <section aria-labelledby="readable-articles-heading" className="space-y-4">
@@ -131,6 +138,7 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
             )}
           </section>
         </div>
+        <ReaderImageCredits credits={credits} />
       </main>
     </WorldPresentation>
   );

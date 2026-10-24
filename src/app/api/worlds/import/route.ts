@@ -56,8 +56,10 @@ export const POST = withAuthor(async (request: Request) => {
     try { body = await readBoundedJson(request); } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid JSON file" }, { status: 400 }); }
     if (!validateBundleShape(body)) return NextResponse.json({ error: "Import file is malformed or exceeds supported section limits" }, { status: 400 });
 
-    // Detect format version
-    const isV2 = body && typeof body === "object" && "formatVersion" in body && (body as Record<string, unknown>).formatVersion === 2;
+    // Detect format version. Formats 2 and 3 share the rich v2 importer; v3
+    // additionally carries image provenance and placement/restriction fields.
+    const formatVersion = body && typeof body === "object" && "formatVersion" in body ? (body as Record<string, unknown>).formatVersion : undefined;
+    const isV2 = formatVersion === 2 || formatVersion === 3;
 
     if (isV2) {
       const v2Result = await importWorldV2(
@@ -76,6 +78,9 @@ export const POST = withAuthor(async (request: Request) => {
 
     const v1Body = body as unknown as WorldExport;
     if (!v1Body.version || v1Body.version !== 1) return NextResponse.json({ error: "Unsupported export format version" }, { status: 400 });
+    if (v1Body.assets?.some(asset => "provenance" in asset)) {
+      return NextResponse.json({ error: "Format 1 cannot preserve image provenance. Import a format 3 bundle instead." }, { status: 400 });
+    }
     if (!v1Body.world?.title || !v1Body.world?.slug) return NextResponse.json({ error: "Export file is missing world information" }, { status: 400 });
 
     let slug = v1Body.world.slug;

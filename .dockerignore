@@ -31,6 +31,11 @@ docs
 tests
 test
 *.md
+
+# The reviewed stock-art bundle is a runtime artifact, including any
+# redistributable Markdown evidence it references.
+!resources/stock-art/**
+!resources/stock-art/**/*.md
 *.tsbuildinfo
 next-env.d.ts
 coverage

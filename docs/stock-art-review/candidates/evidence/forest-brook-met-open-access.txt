@@ -1,0 +1,18 @@
+MET OPEN ACCESS — RIGHTS AND PROVENANCE EXCERPT
+Object ID: 436010
+Title: A Brook in the Forest
+Artist: Gustave Courbet
+Date: ca. 1868–77
+Medium: Oil on canvas
+Dimensions: 19 7/8 x 24 1/8 in. (50.5 x 61.3 cm)
+Department: European Paintings
+Classification: Paintings
+Credit line: Gift of Ralph Weiler, 1967
+Museum object page: https://www.metmuseum.org/art/collection/search/436010
+Metadata API: https://collectionapi.metmuseum.org/public/collection/v1/objects/436010
+isPublicDomain (API): true
+Rights basis: The Metropolitan Museum of Art Open Access. Images of public-domain works are made available under the Creative Commons Zero (CC0 1.0) dedication.
+License: CC0 1.0 Universal — https://creativecommons.org/publicdomain/zero/1.0/
+Open Access policy: https://www.metmuseum.org/about-the-met/policies-and-documents/open-access
+Retrieved: 2026-10-23
+Note: This file records authoritative museum metadata and the license basis. It is not a substitute for the recorded human rights/design review required before release.

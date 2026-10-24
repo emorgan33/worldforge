@@ -58,6 +58,20 @@ test("asset GET requires a worldId", { skip: !origin }, async () => {
   assert.ok(body.error);
 });
 
+test("asset source filter rejects unknown values and narrows before pagination", { skip: !origin }, async () => {
+  const invalid = await authorFetch(user.id, origin, `/api/assets?worldId=${world.id}&source=elsewhere`);
+  if (invalid.status === 401) { console.log("SKIP: not authenticated"); return; }
+  assert.equal(invalid.status, 400);
+  const uploaded = await authorFetch(user.id, origin, `/api/assets?worldId=${world.id}&source=uploaded`);
+  assert.equal(uploaded.status, 200);
+  const uploadedBody = await uploaded.json();
+  assert.ok(uploadedBody.assets.every((asset: { source?: string }) => asset.source === "UPLOADED"));
+  const stock = await authorFetch(user.id, origin, `/api/assets?worldId=${world.id}&source=stock`);
+  assert.equal(stock.status, 200);
+  const stockBody = await stock.json();
+  assert.ok(!stockBody.assets.some((asset: { id: string }) => asset.id === testAssetId));
+});
+
 test("asset usage endpoint returns usage information", { skip: !origin }, async () => {
   const res = await authorFetch(user.id, origin, `/api/assets/${testAssetId}/usage`);
   if (res.status === 401) { console.log("SKIP: not authenticated"); return; }

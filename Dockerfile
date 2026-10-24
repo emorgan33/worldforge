@@ -18,7 +18,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 
 FROM deps AS build
 COPY . .
-RUN pnpm db:generate && pnpm build
+RUN pnpm db:generate && pnpm stock-art:validate && pnpm build
 
 FROM base AS runner
 ENV NODE_ENV="production" \
@@ -28,6 +28,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
 COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/resources ./resources
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/next.config.ts ./next.config.ts
 COPY --from=build /app/tsconfig.json ./tsconfig.json

@@ -920,7 +920,7 @@ export default function WorldForgeApp() {
               system={world?.system}
               publicUrl={world?.isPublic && currentArticle.publicationStatus === "PUBLISHED" && currentArticle.visibility === "PUBLIC" ? `/w/${world.slug}/a/${currentArticle.slug}` : undefined}
               availableArticles={articles}
-              article={{ ...currentArticle, coverImage: currentArticle.coverImage || world?.bannerImage }}
+              article={{ ...currentArticle, coverImage: currentArticle.coverImage || world?.bannerImage, coverImageAlt: currentArticle.coverImage ? currentArticle.coverImageAlt : world?.bannerImageAlt }}
               rpgBlocks={rpgBlocks}
               collections={collections}
               onEdit={() => { if (canNavigate()) { clearConfirmedLeave(); setActiveView("editor"); } }}

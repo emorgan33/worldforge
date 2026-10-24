@@ -74,6 +74,7 @@ export interface CategoryItem {
   parentId: string | null;
   order: number;
   icon?: string;
+  iconImage?: string | null;
 }
 
 export interface ArticleListItem {
@@ -91,7 +92,9 @@ export interface ArticleListItem {
   order: number;
   wordCount: number;
   coverImage?: string | null;
+  coverImageAlt?: string | null;
   portraitImage?: string | null;
+  portraitImageAlt?: string | null;
   category?: { id: string; name: string } | null;
   createdAt: string;
   updatedAt: string;

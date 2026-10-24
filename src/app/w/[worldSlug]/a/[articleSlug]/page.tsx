@@ -14,6 +14,9 @@ import { ReaderBreadcrumbs } from "@/components/public/ReaderBreadcrumbs";
 import { ReaderSearch } from "@/components/public/ReaderSearch";
 import { ReaderCategoryTree } from "@/components/public/ReaderCategoryTree";
 import { ReaderMobileBrowse } from "@/components/public/ReaderMobileBrowse";
+import { ReaderImageCredits, ReaderAdjacentCredit } from "@/components/public/ReaderImageCredits";
+import { imageAssetId } from "@/lib/assets";
+import { resolvePlacementAlt } from "@/lib/image-placement";
 
 async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; articleSlug: string }> }) {
   const { worldSlug, articleSlug } = await params; const data = await publicArticle(worldSlug, articleSlug); if (!data) notFound();
@@ -21,6 +24,8 @@ async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; 
   const links = world.articles.map(article => ({ id: article.id, title: article.title, href: `/w/${world.slug}/a/${article.slug}` }));
   const references = documentReferences(data.doc, "articleLink", "articleId");
   const backlinkIds = await publicBacklinks(world.id, world.articles, summary.id);
+  const coverAssetId = imageAssetId(data.coverImage || "");
+  const portraitAssetId = imageAssetId(data.portraitImage || "");
 
   const ancestors = categoryAncestors(world.categories, summary.categoryId);
   const breadcrumbs = [
@@ -38,13 +43,16 @@ async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; 
     </div>
     <ReaderMobileBrowse categories={world.categories} articles={world.articles} worldSlug={world.slug} currentArticleId={summary.id} readerType="public" />
 
-    {data.coverImage && <img src={data.coverImage} alt="" className="h-72 w-full rounded-2xl object-cover" />}
+    {data.coverImage && <figure className="space-y-1.5">
+      <img src={data.coverImage} alt={resolvePlacementAlt(data.coverImageAlt, summary.title)} className="h-72 w-full rounded-2xl object-cover" />
+      <ReaderAdjacentCredit credits={data.credits} assetId={coverAssetId} className="px-1" />
+    </figure>}
     <header><p className="text-xs uppercase tracking-wider text-amber-400">{summary.template}</p><h1 className="mt-2 font-serif text-4xl">{summary.title}</h1>{summary.excerpt && <p className="mt-3 text-zinc-400">{summary.excerpt}</p>}</header>
 
     {summary.template === "CHARACTER" && isCharacterSystem(data.system) && <CharacterSheet system={data.system} metadata={data.metadata} title={summary.title} />}
     <div className="world-article-layout grid gap-8">
       <article className="min-w-0">
-        <PublicRichText doc={data.doc} links={links} blocks={data.blocks} />
+        <PublicRichText doc={data.doc} links={links} blocks={data.blocks} credits={data.credits} />
         <div className="mt-10 grid gap-5 border-t border-zinc-800 pt-6 sm:grid-cols-2">
           {[{ title: "References", ids: references }, { title: "Backlinks", ids: backlinkIds }].map(group => (
             <section key={group.title}>
@@ -60,11 +68,16 @@ async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; 
       </article>
 
       <aside className="space-y-6">
+        {data.portraitImage && <figure className="space-y-1.5">
+          <img src={data.portraitImage} alt={resolvePlacementAlt(data.portraitImageAlt, summary.title)} className="w-full rounded-xl border border-zinc-800 object-cover" />
+          <ReaderAdjacentCredit credits={data.credits} assetId={portraitAssetId} />
+        </figure>}
         <ArticleQuickFacts template={summary.template as ArticleTemplateType} system={data.system} metadata={data.metadata} blocks={data.blocks} />
         <div className="hidden rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3 lg:block">
           <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-400/90">World Contents</h2>
           <ReaderCategoryTree categories={world.categories} articles={world.articles} worldSlug={world.slug} currentArticleId={summary.id} readerType="public" />
         </div>
+        <ReaderImageCredits credits={data.credits} className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-4" />
       </aside>
     </div>
   </main></WorldPresentation>;

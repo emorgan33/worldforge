@@ -7,11 +7,14 @@ import { systemProfile } from "@/lib/rpg";
 import { ReaderSearch } from "@/components/public/ReaderSearch";
 import { ReaderCategoryTree } from "@/components/public/ReaderCategoryTree";
 import { ReaderMobileBrowse } from "@/components/public/ReaderMobileBrowse";
+import { ReaderImageCredits, ReaderAdjacentCredit } from "@/components/public/ReaderImageCredits";
+import { imageAssetId } from "@/lib/assets";
+import { resolvePlacementAlt } from "@/lib/image-placement";
 
 async function WorldReader({ params }: { params: Promise<{ worldSlug: string }> }) {
   const { worldSlug } = await params; const world = await publicWorld(worldSlug); if (!world) notFound();
   return <WorldPresentation appearance={world.appearance}><main className="space-y-8">
-    {world.coverImage && <img src={world.coverImage} alt="" className="h-72 w-full rounded-2xl object-cover" />}
+    {world.coverImage && <figure><img src={world.coverImage} alt={resolvePlacementAlt(world.coverImageAlt, world.title)} className="h-72 w-full rounded-2xl object-cover" /><ReaderAdjacentCredit credits={world.credits} assetId={imageAssetId(world.coverImage)} /></figure>}
     <header>
       <p className="text-xs uppercase tracking-widest text-amber-400">{systemProfile(world.system).short}{world.system === "PF_2E" ? " · Remaster" : ""}</p>
       <h1 className="mt-3 font-serif text-5xl">{world.title}</h1>
@@ -50,6 +53,7 @@ async function WorldReader({ params }: { params: Promise<{ worldSlug: string }> 
         )}
       </section>
     </div>
+    <ReaderImageCredits credits={world.credits} />
   </main></WorldPresentation>;
 }
 export default function PublicWorldPage(props: { params: Promise<{ worldSlug: string }> }) { return <Suspense fallback={<p className="p-8 text-zinc-400">Opening world…</p>}><WorldReader {...props} /></Suspense>; }

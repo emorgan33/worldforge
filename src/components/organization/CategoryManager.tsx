@@ -1,13 +1,16 @@
 "use client";
+/* Category illustration previews use managed local images. */
+/* eslint-disable @next/next/no-img-element */
 import { useWorldGuard } from "@/components/worlds/WorldGuard";
 
 import { useState } from "react";
 import { ArrowDown, ArrowUp, FolderPlus, FolderTree, Plus, Search } from "lucide-react";
 import { ArticleTree, TreeMove } from "@/components/ArticleTree";
+import { AssetPicker } from "@/components/assets/AssetPicker";
 import { ArticleListItem, ArticleTemplateType, CategoryItem } from "@/types";
 import { categoryOptions, descendantIds, sortOrdered } from "@/lib/category-tree";
 
-export type CategoryAction = { action: "create"; name: string; parentId: string | null } | { action: "rename"; id: string; name: string } | { action: "delete"; id: string };
+export type CategoryAction = { action: "create"; name: string; parentId: string | null } | { action: "rename"; id: string; name: string } | { action: "delete"; id: string } | { action: "setIconImage"; id: string; iconImage: string | null };
 const inputClass = "rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 focus:border-amber-500 focus:outline-none";
 
 export function CategoryManager({ categories, articles, selectedId, onSelectCategory, onSelectArticle, onMove, onAction, onNewArticle, busy, error }: {
@@ -24,6 +27,7 @@ export function CategoryManager({ categories, articles, selectedId, onSelectCate
   const [rename, setRename] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [allArticles, setAllArticles] = useState(false);
+  const [iconPicker, setIconPicker] = useState(false);
   useWorldGuard({ dirty: (creating && !!newName) || rename !== null, busy }, "category");
   const selected = categories.find(category => category.id === selectedId);
   const options = categoryOptions(categories);
@@ -55,6 +59,7 @@ export function CategoryManager({ categories, articles, selectedId, onSelectCate
           <p className="text-[10px] uppercase tracking-widest text-zinc-500">{allArticles ? "Across your world" : selected ? options.find(option => option.id === selected.id)?.label : "World root"}</p>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-3"><h2 className="font-serif text-2xl text-amber-100">{allArticles ? "All articles" : selected?.name ?? "Uncategorized"}</h2>{selected && !allArticles && <div className="flex gap-2 text-xs"><button disabled={busy} onClick={() => { setRename(selected.name); setDeleting(false); }} className="rounded border border-zinc-700 px-3 py-1.5">Rename</button><button disabled={busy} onClick={() => { setDeleting(!deleting); setRename(null); }} className="px-2 py-1.5 text-red-400">Delete category</button></div>}</div>
           {selected && !allArticles && <div className="mt-4 flex flex-wrap items-end gap-3"><label className="grid min-w-0 flex-1 gap-1 text-xs text-zinc-400">Parent category<select aria-label="Move category to" disabled={busy} value={selected.parentId ?? ""} onChange={event => { void onMove({ kind: "category", id: selected.id, parentId: event.target.value || null }).catch(() => {}); }} className={inputClass}><option value="">Top level</option>{options.filter(option => !descendants.has(option.id)).map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label><button aria-label="Move category up" disabled={busy || siblingIndex <= 0} onClick={() => { void onMove({ kind: "category", id: selected.id, parentId: selected.parentId, beforeId: siblings[siblingIndex - 1].id }).catch(() => {}); }} className="rounded border border-zinc-700 p-2 disabled:opacity-25"><ArrowUp size={16} /></button><button aria-label="Move category down" disabled={busy || siblingIndex < 0 || siblingIndex === siblings.length - 1} onClick={() => { void onMove({ kind: "category", id: selected.id, parentId: selected.parentId, beforeId: siblings[siblingIndex + 2]?.id ?? null }).catch(() => {}); }} className="rounded border border-zinc-700 p-2 disabled:opacity-25"><ArrowDown size={16} /></button></div>}
+          {selected && !allArticles && <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3"><p className="text-xs font-semibold text-zinc-300">Category illustration</p><p className="mt-1 text-[11px] text-zinc-500">An optional image shown beside the category name in author and reader trees. It never replaces the folder icon or the disclosure control.</p>{selected.iconImage ? <div className="mt-2 flex items-center gap-3"><img src={selected.iconImage} alt="" width={32} height={32} className="h-8 w-8 rounded border border-zinc-700 object-cover" /><button type="button" disabled={busy} onClick={() => { void onAction({ action: "setIconImage", id: selected.id, iconImage: null }).catch(() => {}); }} className="text-xs text-red-400 disabled:opacity-40">Clear illustration</button></div> : <p className="mt-2 text-[11px] text-zinc-500">No illustration set.</p>}<button type="button" disabled={busy} onClick={() => setIconPicker(true)} className="mt-2 min-h-11 rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-200 disabled:opacity-40">{selected.iconImage ? "Replace illustration" : "Choose illustration"}</button>{iconPicker && <AssetPicker worldId={selected.worldId} purpose="category-icon" onClose={() => setIconPicker(false)} onSelect={asset => { setIconPicker(false); void onAction({ action: "setIconImage", id: selected.id, iconImage: asset.url }).catch(() => {}); }} />}</div>}
           {rename !== null && <form onSubmit={renameCategory} className="mt-4 flex gap-2"><input aria-label="Category name to save" required maxLength={200} value={rename} onChange={event => setRename(event.target.value)} className={`${inputClass} min-w-0 flex-1`} /><button disabled={busy || !rename.trim()} className="rounded-lg bg-amber-500 px-3 text-sm font-semibold text-zinc-950">Save name</button><button type="button" onClick={() => setRename(null)} className="text-xs text-zinc-500">Cancel</button></form>}
           {deleting && selected && <div className="mt-4 rounded-lg border border-red-900/50 p-3 text-sm text-zinc-400"><p>Delete “{selected.name}”? Its articles and subcategories will move to {selected.parentId ? "its parent category" : "the world root"}.</p><div className="mt-3 flex gap-3"><button disabled={busy} onClick={() => { void onAction({ action: "delete", id: selected.id }).then(() => { select(selected.parentId); setDeleting(false); }).catch(() => {}); }} className="rounded border border-red-800 px-3 py-1.5 text-xs text-red-300">Confirm delete category</button><button disabled={busy} onClick={() => setDeleting(false)} className="text-xs">Cancel</button></div></div>}
         </div>

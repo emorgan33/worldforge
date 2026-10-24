@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { imageAssetId } from "@/lib/assets";
 import { removeAssetFile } from "@/lib/asset-storage";
+import { isReferenced, scanAssetReferences } from "@/lib/asset-references";
 
 export interface DeletionResult {
   success: boolean;
@@ -13,6 +14,7 @@ export interface DeletionResult {
     worldCover: boolean;
     worldBanner: boolean;
     worldBackground: boolean;
+    categoryCount: number;
     articleCount: number;
   };
 }
@@ -25,7 +27,7 @@ export interface DeletionResult {
 export const DELETE = withAuthor(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
   try {
     const { id } = await params;
-    
+
     if (!imageAssetId(id)) {
       return NextResponse.json({ error: "Invalid image ID" }, { status: 400 });
     }
@@ -44,60 +46,26 @@ export const DELETE = withAuthor(async (request: Request, { params }: { params: 
       throw new AccessError("You do not have access to this image", 403);
     }
 
-    // Check if asset is referenced
-    const assetUrlPattern = `/api/assets/${id}/file`;
-    
-    const world = await prisma.world.findUnique({
-      where: { id: asset.worldId },
-      select: {
-        coverImage: true,
-        bannerImage: true,
-        appearance: true,
-      },
-    });
+    const references = await scanAssetReferences(asset.worldId, id);
 
-    let worldBackground = false;
-    if (world?.appearance) {
-      try {
-        const appearance = JSON.parse(world.appearance);
-        worldBackground = appearance.backgroundImage === assetUrlPattern;
-      } catch {
-        // Invalid appearance JSON, ignore
-      }
-    }
-
-    const referenced = 
-      world?.coverImage === assetUrlPattern ||
-      world?.bannerImage === assetUrlPattern ||
-      worldBackground;
-
-    const articleCount = await prisma.article.count({
-      where: {
-        worldId: asset.worldId,
-        OR: [
-          { contentHtml: { contains: assetUrlPattern } },
-          { coverImage: assetUrlPattern },
-        ],
-      },
-    });
-
-    if (referenced || articleCount > 0) {
+    if (isReferenced(references)) {
       return NextResponse.json({
         success: false,
         deleted: false,
         referenced: true,
         references: {
-          worldCover: world?.coverImage === assetUrlPattern,
-          worldBanner: world?.bannerImage === assetUrlPattern,
-          worldBackground,
-          articleCount,
+          worldCover: references.worldCover,
+          worldBanner: references.worldBanner,
+          worldBackground: references.worldBackground,
+          categoryCount: references.categories.length,
+          articleCount: references.articles.length,
         },
       } satisfies DeletionResult);
     }
 
     // Delete file from disk
     await removeAssetFile(id);
-    
+
     // Delete database record
     await prisma.imageAsset.delete({
       where: { id },

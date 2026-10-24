@@ -13,6 +13,8 @@
     "db:generate": "prisma generate",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
+    "stock-art:validate": "tsx scripts/validate-stock-art.ts",
+    "stock-art:advisories": "tsx scripts/apply-stock-advisories.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {

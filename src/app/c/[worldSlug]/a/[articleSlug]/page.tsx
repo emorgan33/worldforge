@@ -13,6 +13,11 @@ import { PublicRichText } from "@/components/public/PublicRichText";
 import { ReaderBreadcrumbs } from "@/components/public/ReaderBreadcrumbs";
 import { ReaderCategoryTree } from "@/components/public/ReaderCategoryTree";
 import { ReaderMobileBrowse } from "@/components/public/ReaderMobileBrowse";
+import { ReaderImageCredits, ReaderAdjacentCredit } from "@/components/public/ReaderImageCredits";
+import { articleImageAssetIds } from "@/lib/asset-references";
+import { readerCreditsForAssets } from "@/lib/stock-credits";
+import { resolvePlacementAlt } from "@/lib/image-placement";
+import { imageAssetId } from "@/lib/assets";
 import { ArticleQuickFacts } from "@/components/article/ArticleQuickFacts";
 import { CharacterSheet } from "@/components/article/CharacterSheet";
 import { isCharacterSystem, readerCharacterRows } from "@/lib/character-sheet";
@@ -28,7 +33,7 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
   // Find world by slug
   const world = await prisma.world.findFirst({
     where: { slug: worldSlug, deletedAt: null },
-    select: { id: true, slug: true, title: true, system: true, appearance: true, ownerId: true },
+    select: { id: true, slug: true, title: true, system: true, appearance: true, ownerId: true, bannerImage: true, bannerImageAlt: true },
   });
   if (!world) notFound();
   if (actor.kind === "PREVIEW" && actor.previewWorldId !== world.id) notFound();
@@ -39,7 +44,7 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
   // Find article by slug
   const article = await prisma.article.findFirst({
     where: { worldId: world.id, slug: articleSlug },
-    select: { id: true, title: true, template: true, contentJson: true, contentHtml: true, metadata: true, coverImage: true, excerpt: true, categoryId: true, slug: true },
+    select: { id: true, title: true, template: true, contentJson: true, contentHtml: true, metadata: true, coverImage: true, coverImageAlt: true, portraitImage: true, portraitImageAlt: true, excerpt: true, categoryId: true, slug: true },
   });
   if (!article) notFound();
 
@@ -57,7 +62,7 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
   const { where: readableAssetWhere } = await readableWhere(world.id, "assets", actor);
   const allCategories = await prisma.category.findMany({
     where: { worldId: world.id },
-    select: { id: true, name: true, parentId: true, order: true, icon: true },
+    select: { id: true, name: true, parentId: true, order: true, icon: true, iconImage: true },
     orderBy: [{ order: "asc" }, { id: "asc" }],
   });
   const worldArticles = await prisma.article.findMany({
@@ -79,10 +84,11 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
   const categories = allCategories.filter(category => visibleCategoryIds.has(category.id));
 
   const assets = await prisma.imageAsset.findMany({
-    where: readableAssetWhere,
+    where: { ...readableAssetWhere, displayRestricted: false },
     select: { id: true },
   });
   const assetIds = new Set(assets.map(a => a.id));
+  const projectedCategories = categories.map(category => ({ ...category, iconImage: publicImage(category.iconImage, assetIds) }));
 
   const blocks = await prisma.rpgBlock.findMany({ where: readableBlockWhere });
 
@@ -113,7 +119,14 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
 
   const appearance = parseAppearance(world.appearance);
   appearance.backgroundImage = publicImage(appearance.backgroundImage, assetIds) || "";
-  const coverImage = publicImage(article.coverImage, assetIds);
+  const ownCover = publicImage(article.coverImage, assetIds);
+  const coverImage = ownCover || publicImage(world.bannerImage, assetIds);
+  const coverImageAlt = ownCover ? article.coverImageAlt : world.bannerImageAlt;
+  const portraitImage = publicImage(article.portraitImage, assetIds);
+  const decorations = [appearance.backgroundImage, ...projectedCategories.map(category => category.iconImage)];
+  const credits = await readerCreditsForAssets(world.id, [...articleImageAssetIds(doc, coverImage, portraitImage), ...decorations.flatMap(url => { const id = url && imageAssetId(url); return id ? [id] : []; })]);
+  const coverAssetId = imageAssetId(coverImage || "");
+  const portraitAssetId = imageAssetId(portraitImage || "");
 
   const breadcrumbs = [
     { label: world.title, href: `/c/${world.slug}` },
@@ -142,9 +155,12 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
           <ReaderBreadcrumbs items={breadcrumbs} />
           {!isPreview && <Link href="/player" className="text-sm text-indigo-300 hover:underline">Your worlds</Link>}
         </div>
-        <ReaderMobileBrowse categories={categories} articles={worldArticles} worldSlug={world.slug} currentArticleId={article.id} readerType="campaign" />
+        <ReaderMobileBrowse categories={projectedCategories} articles={worldArticles} worldSlug={world.slug} currentArticleId={article.id} readerType="campaign" />
 
-        {coverImage && <img src={coverImage} alt="" className="h-72 w-full rounded-2xl object-cover" />}
+        {coverImage && <figure className="space-y-1.5">
+          <img src={coverImage} alt={resolvePlacementAlt(coverImageAlt, article.title)} className="h-72 w-full rounded-2xl object-cover" />
+          <ReaderAdjacentCredit credits={credits} assetId={coverAssetId} className="px-1" />
+        </figure>}
         <header>
           <p className="text-xs uppercase tracking-wider text-amber-400">{article.template}</p>
           <h1 className="mt-2 font-serif text-4xl">{article.title}</h1>
@@ -154,7 +170,7 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
         {article.template === "CHARACTER" && isCharacterSystem(system) && <CharacterSheet system={system} metadata={metadata} title={article.title} />}
         <div className="world-article-layout grid gap-8">
           <article className="min-w-0">
-            <PublicRichText doc={doc} links={links} blocks={blocks} />
+            <PublicRichText doc={doc} links={links} blocks={blocks} credits={credits} />
             {references.size > 0 && (
               <div className="mt-10 border-t border-zinc-800 pt-6">
                 <section>
@@ -170,11 +186,16 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
           </article>
 
           <aside className="space-y-6">
+            {portraitImage && <figure className="space-y-1.5">
+              <img src={portraitImage} alt={resolvePlacementAlt(article.portraitImageAlt, article.title)} className="w-full rounded-xl border border-zinc-800 object-cover" />
+              <ReaderAdjacentCredit credits={credits} assetId={portraitAssetId} />
+            </figure>}
             <ArticleQuickFacts template={article.template as ArticleTemplateType} system={system} metadata={metadata} blocks={blocks} />
             <div className="hidden rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3 lg:block">
               <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-400/90">World Contents</h2>
-              <ReaderCategoryTree categories={categories} articles={worldArticles} worldSlug={world.slug} currentArticleId={article.id} readerType="campaign" />
+              <ReaderCategoryTree categories={projectedCategories} articles={worldArticles} worldSlug={world.slug} currentArticleId={article.id} readerType="campaign" />
             </div>
+            <ReaderImageCredits credits={credits} className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-4" />
           </aside>
         </div>
       </main>

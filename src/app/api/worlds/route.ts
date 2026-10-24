@@ -3,13 +3,15 @@ import { withAuthor, sessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { validateAppearance } from "@/lib/world-appearance";
 import { validateImageReference } from "@/lib/asset-validation";
+import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { RPG_SYSTEMS } from "@/lib/rpg";
 import { createWorld, normalizeWorldCreation } from "@/lib/world-creation";
 
 const WORLD_PROJECTION = {
   id: true, slug: true, title: true, description: true, genre: true, system: true,
   isPublic: true, coverImage: true, bannerImage: true, appearance: true, createdAt: true, updatedAt: true,
-  categories: { select: { id: true, worldId: true, name: true, parentId: true, order: true, icon: true, createdAt: true, updatedAt: true }, orderBy: { order: "asc" as const } },
+  coverImageAlt: true, bannerImageAlt: true,
+  categories: { select: { id: true, worldId: true, name: true, parentId: true, order: true, icon: true, iconImage: true, createdAt: true, updatedAt: true }, orderBy: { order: "asc" as const } },
   _count: { select: { articles: true, maps: true, timelines: true, secrets: true, variableCollections: true } },
 } as const;
 
@@ -73,6 +75,8 @@ async function patchHandler(request: Request) {
     const error = await validateImageReference(body[key], body.id);
     if (error) return NextResponse.json({ error }, { status: 400 });
   }
+  const altError = validatePlacementAlt(body.coverImageAlt) || validatePlacementAlt(body.bannerImageAlt);
+  if (altError) return NextResponse.json({ error: altError }, { status: 400 });
   let appearance;
   if (body.appearance !== undefined) {
     try { appearance = validateAppearance(body.appearance); } catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 400 }); }
@@ -84,9 +88,8 @@ async function patchHandler(request: Request) {
     if (!existing) return NextResponse.json({ error: "World not found" }, { status: 404 });
     await prisma.world.update({
       where: { id: body.id },
-      data: { ...(body.isPublic !== undefined ? { isPublic: body.isPublic } : {}), ...(body.system !== undefined ? { system: body.system } : {}), ...(appearance ? { appearance: JSON.stringify(appearance) } : {}), title: body.title.trim(), description: body.description.trim(), coverImage: body.coverImage.trim() || null, bannerImage: body.bannerImage.trim() || null },
-    });
-    const world = await prisma.world.findUnique({ where: { id: body.id }, select: WORLD_PROJECTION });
+      data: { ...(body.isPublic !== undefined ? { isPublic: body.isPublic } : {}), ...(body.system !== undefined ? { system: body.system } : {}), ...(appearance ? { appearance: JSON.stringify(appearance) } : {}), title: body.title.trim(), description: body.description.trim(), coverImage: body.coverImage.trim() || null, bannerImage: body.bannerImage.trim() || null, ...(body.coverImageAlt !== undefined ? { coverImageAlt: normalizePlacementAlt(body.coverImageAlt) } : {}), ...(body.bannerImageAlt !== undefined ? { bannerImageAlt: normalizePlacementAlt(body.bannerImageAlt) } : {}) },
+    });    const world = await prisma.world.findUnique({ where: { id: body.id }, select: WORLD_PROJECTION });
     return NextResponse.json(world);
   } catch (error) {
     console.error("Failed to update world:", error);

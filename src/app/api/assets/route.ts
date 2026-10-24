@@ -3,10 +3,26 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { assetUrl, IMAGE_ACCEPT, isAssetId } from "@/lib/assets";
+import { ASSET_SOURCE_FILTERS, assetSourceWhere, assetUrl, IMAGE_ACCEPT, isAssetId, type AssetSourceFilter, type ImageAssetProvenanceSummary } from "@/lib/assets";
 import { AssetInputError, normalizeImage, readImageForm, removeAssetFile, writeAsset } from "@/lib/asset-storage";
 
-const present = <T extends { id: string }>(asset: T) => ({ ...asset, url: assetUrl(asset.id) });
+import { provenanceVerificationOrigin } from "@/lib/stock-provenance";
+
+const provenanceSelect = { catalogEntryId: true, catalogVersion: true, verificationOrigin: true, snapshotJson: true, createdAt: true } as const;
+function present<T extends { id: string; createdAt: Date; provenance?: { catalogEntryId: string; catalogVersion: number; verificationOrigin: string; snapshotJson: string; createdAt: Date }[] }>(asset: T) {
+  return {
+    ...asset,
+    createdAt: asset.createdAt.toISOString(),
+    url: assetUrl(asset.id),
+    provenance: asset.provenance?.map((row): ImageAssetProvenanceSummary => ({
+      catalogEntryId: row.catalogEntryId,
+      catalogVersion: row.catalogVersion,
+      verificationOrigin: provenanceVerificationOrigin(row.verificationOrigin, row.snapshotJson),
+      createdAt: row.createdAt.toISOString(),
+    })),
+  };
+}
+
 function failure(error: unknown) {
   if (error instanceof AccessError) return NextResponse.json({ error: error.message }, { status: error.status });
   if (error instanceof AssetInputError) return NextResponse.json({ error: error.message }, { status: error.status });
@@ -20,11 +36,15 @@ async function getHandler(request: Request) {
     if (!worldId) throw new AssetInputError("A world is required.");
     if (!await prisma.world.findUnique({ where: { id: worldId }, select: { id: true } })) throw new AssetInputError("World not found.", 404);
     const query = (params.get("q") || "").slice(0, 200);
+    const rawSource = params.get("source") || "all";
+    if (!ASSET_SOURCE_FILTERS.includes(rawSource as AssetSourceFilter)) throw new AssetInputError("Choose a supported image source.");
+    const source = rawSource as AssetSourceFilter;
     const cursor = params.get("cursor");
     if (cursor && !isAssetId(cursor)) throw new AssetInputError("Invalid image cursor.");
+    const search = query ? { OR: [{ title: { contains: query } }, { alt: { contains: query } }, { originalName: { contains: query } }] } : {};
     const assets = await prisma.imageAsset.findMany({
-      where: { worldId, ...(params.get("includeArchived") !== "true" ? { archived: false } : {}),
-        ...(query ? { OR: [{ title: { contains: query } }, { alt: { contains: query } }, { originalName: { contains: query } }] } : {}) },
+      where: { AND: [{ worldId }, ...(params.get("includeArchived") !== "true" ? [{ archived: false }] : []), assetSourceWhere(source), search] },
+      include: { provenance: { select: provenanceSelect, orderBy: { createdAt: "asc" } } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 41,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
@@ -43,9 +63,9 @@ async function postHandler(request: Request) {
     if (typeof alt !== "string" || alt.length > 1000 || (title !== null && (typeof title !== "string" || title.length > 200))) throw new AssetInputError("Use a title up to 200 characters and alternative text up to 1000 characters.");
     await ownedWorld(worldId);
     const image = await normalizeImage(Buffer.from(await file.arrayBuffer()));
-    const existing = await prisma.imageAsset.findUnique({ where: { worldId_sha256: { worldId, sha256: image.sha256 } } });
+    const existing = await prisma.imageAsset.findUnique({ where: { worldId_sha256: { worldId, sha256: image.sha256 } }, include: { provenance: { select: provenanceSelect, orderBy: { createdAt: "asc" } } } });
     if (existing) {
-      const restored = existing.archived ? await prisma.imageAsset.update({ where: { id: existing.id }, data: { archived: false } }) : existing;
+      const restored = existing.archived ? await prisma.imageAsset.update({ where: { id: existing.id }, data: { archived: false }, include: { provenance: { select: provenanceSelect, orderBy: { createdAt: "asc" } } } }) : existing;
       return NextResponse.json({ ...present(restored), reused: true });
     }
     const id = randomUUID();
@@ -58,7 +78,7 @@ async function postHandler(request: Request) {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         await removeAssetFile(id); fileId = null;
-        const asset = await prisma.imageAsset.update({ where: { worldId_sha256: { worldId, sha256: image.sha256 } }, data: { archived: false } });
+        const asset = await prisma.imageAsset.update({ where: { worldId_sha256: { worldId, sha256: image.sha256 } }, data: { archived: false }, include: { provenance: { select: provenanceSelect, orderBy: { createdAt: "asc" } } } });
         return NextResponse.json({ ...present(asset), reused: true });
       }
       throw error;
@@ -73,7 +93,7 @@ async function patchHandler(request: Request) {
     if (body.title !== undefined && (typeof body.title !== "string" || !body.title.trim() || body.title.length > 200)) throw new AssetInputError("A title of up to 200 characters is required.");
     if (body.alt !== undefined && (typeof body.alt !== "string" || body.alt.length > 1000)) throw new AssetInputError("Alternative text must be at most 1000 characters.");
     if (body.archived !== undefined && typeof body.archived !== "boolean") throw new AssetInputError("Invalid visibility choice.");
-    const asset = await prisma.imageAsset.update({ where: { id: body.id }, data: {
+    const asset = await prisma.imageAsset.update({ where: { id: body.id }, include: { provenance: { select: provenanceSelect, orderBy: { createdAt: "asc" } } }, data: {
       ...(body.title !== undefined ? { title: body.title.trim() } : {}), ...(body.alt !== undefined ? { alt: body.alt.trim() } : {}), ...(body.archived !== undefined ? { archived: body.archived } : {}),
     } });
     return NextResponse.json(present(asset));

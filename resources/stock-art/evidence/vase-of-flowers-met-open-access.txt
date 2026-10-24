@@ -1,0 +1,18 @@
+MET OPEN ACCESS — RIGHTS AND PROVENANCE EXCERPT
+Object ID: 436634
+Title: A Vase of Flowers
+Artist: Margareta Haverman
+Date: 1716
+Medium: Oil on wood
+Dimensions: 31 1/4 x 23 3/4 in. (79.4 x 60.3 cm)
+Department: European Paintings
+Classification: Paintings
+Credit line: Purchase, 1871
+Museum object page: https://www.metmuseum.org/art/collection/search/436634
+Metadata API: https://collectionapi.metmuseum.org/public/collection/v1/objects/436634
+isPublicDomain (API): true
+Rights basis: The Metropolitan Museum of Art Open Access. Images of public-domain works are made available under the Creative Commons Zero (CC0 1.0) dedication.
+License: CC0 1.0 Universal — https://creativecommons.org/publicdomain/zero/1.0/
+Open Access policy: https://www.metmuseum.org/about-the-met/policies-and-documents/open-access
+Retrieved: 2026-10-23
+Note: This file records authoritative museum metadata and the license basis. It is not a substitute for the recorded human rights/design review required before release.

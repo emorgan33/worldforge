@@ -1,0 +1,18 @@
+MET OPEN ACCESS — RIGHTS AND PROVENANCE EXCERPT
+Object ID: 437979
+Title: Ship by Moonlight
+Artist: Ivan Konstantinovich Aivazovsky (Hovhannes Aivazian)
+Date: 
+Medium: Oil on canvas
+Dimensions: 6 1/4 x 9 1/4 in. (15.9 x 23.5 cm)
+Department: European Paintings
+Classification: Paintings
+Credit line: Bequest of Mary Jane Dastich, in memory of her husband, General Frank Dastich, 1975
+Museum object page: https://www.metmuseum.org/art/collection/search/437979
+Metadata API: https://collectionapi.metmuseum.org/public/collection/v1/objects/437979
+isPublicDomain (API): true
+Rights basis: The Metropolitan Museum of Art Open Access. Images of public-domain works are made available under the Creative Commons Zero (CC0 1.0) dedication.
+License: CC0 1.0 Universal — https://creativecommons.org/publicdomain/zero/1.0/
+Open Access policy: https://www.metmuseum.org/about-the-met/policies-and-documents/open-access
+Retrieved: 2026-10-23
+Note: This file records authoritative museum metadata and the license basis. It is not a substitute for the recorded human rights/design review required before release.

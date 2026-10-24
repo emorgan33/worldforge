@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { syncArticleMentions } from "@/lib/article-mention-index";
 import { validateImageReference } from "@/lib/asset-validation";
+import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { prisma } from "@/lib/db";
 import { validateCharacterRows } from "@/lib/character-sheet";
 
@@ -62,6 +63,9 @@ async function postHandler(req: NextRequest) {
       excerpt,
       contentHtml,
       coverImage,
+      coverImageAlt,
+      portraitImage,
+      portraitImageAlt,
       contentJson,
       metadata,
       tags,
@@ -82,6 +86,12 @@ async function postHandler(req: NextRequest) {
       const error = await validateImageReference(coverImage, worldId);
       if (error) return NextResponse.json({ error }, { status: 400 });
     }
+    if (portraitImage !== undefined) {
+      const error = await validateImageReference(portraitImage, worldId);
+      if (error) return NextResponse.json({ error }, { status: 400 });
+    }
+    const altError = validatePlacementAlt(coverImageAlt) || validatePlacementAlt(portraitImageAlt);
+    if (altError) return NextResponse.json({ error: altError }, { status: 400 });
     if (categoryId && !await prisma.category.findFirst({ where: { id: categoryId, worldId }, select: { id: true } })) {
       return NextResponse.json({ error: "Category not found in this world" }, { status: 400 });
     }
@@ -106,6 +116,9 @@ async function postHandler(req: NextRequest) {
           excerpt: excerpt || null,
           contentHtml: contentHtml || "",
           coverImage: coverImage?.trim() || null,
+          coverImageAlt: normalizePlacementAlt(coverImageAlt) ?? null,
+          portraitImage: portraitImage?.trim() || null,
+          portraitImageAlt: normalizePlacementAlt(portraitImageAlt) ?? null,
           contentJson: contentJson ? JSON.stringify(contentJson) : null,
           metadata: metadata ? JSON.stringify(metadata) : null,
           tags: tags || null,
@@ -128,6 +141,10 @@ async function postHandler(req: NextRequest) {
           contentJson: created.contentJson,
           metadata: created.metadata,
           tags: created.tags,
+          coverImage: created.coverImage,
+          coverImageAlt: created.coverImageAlt,
+          portraitImage: created.portraitImage,
+          portraitImageAlt: created.portraitImageAlt,
           publicationStatus: created.publicationStatus,
           visibility: created.visibility,
           state: created.state,

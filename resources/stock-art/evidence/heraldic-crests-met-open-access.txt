@@ -1,0 +1,18 @@
+MET OPEN ACCESS — RIGHTS AND PROVENANCE EXCERPT
+Object ID: 386495
+Title: Design for Heraldic Ornament
+Artist: Anonymous, British, 19th century
+Date: 19th century
+Medium: Pen and ink, brush and wash
+Dimensions: 
+Department: Drawings and Prints
+Classification: Drawings
+Credit line: The Elisha Whittelsey Collection, The Elisha Whittelsey Fund, 1960
+Museum object page: https://www.metmuseum.org/art/collection/search/386495
+Metadata API: https://collectionapi.metmuseum.org/public/collection/v1/objects/386495
+isPublicDomain (API): true
+Rights basis: The Metropolitan Museum of Art Open Access. Images of public-domain works are made available under the Creative Commons Zero (CC0 1.0) dedication.
+License: CC0 1.0 Universal — https://creativecommons.org/publicdomain/zero/1.0/
+Open Access policy: https://www.metmuseum.org/about-the-met/policies-and-documents/open-access
+Retrieved: 2026-10-23
+Note: This file records authoritative museum metadata and the license basis. It is not a substitute for the recorded human rights/design review required before release.

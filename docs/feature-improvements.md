@@ -249,3 +249,42 @@ See `.hermes/plans/2026-10-16_063812-worldforge-gm-table-safety.md` for full tas
 - Phase 2: Membership/audience/audit/preview APIs with immutable audit trail
 - Phase 3: Rules/canon badges, session desk UI, entity picker, player reader at /c/[worldSlug]
 - Phase 4: Clone endpoint, effective-policy enforcement, v2 export/import, recovery drill tests
+
+## Curated stock-art library (issue #7) — implementation complete; release review open
+
+This is separate from the completed “Library and maintenance improvements”
+milestone numbered 7 above. Slices 1–7 are implemented, including the catalog
+contract, review scaffolding, validator, durable provenance and selection APIs,
+picker integration with source filters, placement completeness, reader credits
+and reference integrity, portable v3 export/import, withdrawal tooling, and
+automated release verification. Eight candidates are installed in the
+development catalog and clearly labelled pending; no artwork is approved, so
+production selection remains disabled. Human rights, collection, placement,
+browser and accessibility sign-offs remain open. Implementation completion does
+not constitute those approvals.
+
+- [x] Define and validate a versioned local catalog manifest with rights
+  evidence, allowed-use gates, purpose recommendations, file digests, and
+  lifecycle state. Run `pnpm stock-art:validate`.
+- [x] Add the collection brief, contact-sheet, and subject-by-placement coverage
+  templates under `docs/stock-art-review/`.
+- [x] Add durable provenance and world-nested selection APIs that copy reviewed
+  bytes into world-asset storage with `(worldId, sha256)` deduplication.
+- [x] Add World images/Stock art tabs, All saved/Uploaded/Stock source filters,
+  purpose-aware recommendations, placement previews, and the selected-artwork
+  inspector with credits and provenance status.
+- [x] Add placement description fields (`Article`/`World` alt columns, revision
+  and draft snapshots), portrait editing, category illustrations, shared
+  placement geometry, and human-readable accessibility controls.
+- [x] Add reader credits, reference repairs, and category-image reader fallbacks.
+- [x] Add portable v3 export/import, legacy export guards, withdrawal advisories,
+  and Docker packaging.
+- [ ] Complete item-by-item rights review and the first approved collection.
+- [x] Complete automated release verification (suite, build, catalog and
+  packaging checks recorded).
+- [ ] Complete human release verification (rights, collection/placement,
+  browser/accessibility review, screenshots and withdrawal drill).
+
+See [Curated stock art](stock-art.md), the
+[release verification record](stock-art-review/release-verification.md), and the
+[implementation plan](feature-requests/curated-stock-art-library.md).

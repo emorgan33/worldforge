@@ -3,6 +3,7 @@ import { AccessError } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { removeAssetFile, assetDirectory } from "@/lib/asset-storage";
+import { referencedAssetIds } from "@/lib/asset-references";
 import { readdir } from "node:fs/promises";
 
 export interface CleanupResult {
@@ -43,49 +44,9 @@ export const DELETE = withAuthor(async (_request: Request, { params }: { params:
     const dbAssetIds = new Set(dbAssets.map(a => a.id));
     const archivedAssetIds = new Set(dbAssets.filter(a => a.archived).map(a => a.id));
 
-    // Get all articles that might reference assets
-    const articles = await prisma.article.findMany({
-      where: { worldId },
-      select: { contentHtml: true, coverImage: true },
-    });
-
-    // Get world appearance for background image
-    const worldData = await prisma.world.findUnique({
-      where: { id: worldId },
-      select: { coverImage: true, bannerImage: true, appearance: true },
-    });
-
-    // Find all referenced asset IDs
-    const referencedIds = new Set<string>();
-    
-    if (worldData?.coverImage) {
-      const match = worldData.coverImage.match(/\/api\/assets\/([\w-]+)\/file/);
-      if (match) referencedIds.add(match[1]);
-    }
-    if (worldData?.bannerImage) {
-      const match = worldData.bannerImage.match(/\/api\/assets\/([\w-]+)\/file/);
-      if (match) referencedIds.add(match[1]);
-    }
-    if (worldData?.appearance) {
-      try {
-        const appearance = JSON.parse(worldData.appearance);
-        if (appearance.backgroundImage) {
-          const match = appearance.backgroundImage.match(/\/api\/assets\/([\w-]+)\/file/);
-          if (match) referencedIds.add(match[1]);
-        }
-      } catch { /* ignore */ }
-    }
-
-    for (const article of articles) {
-      if (article.coverImage) {
-        const match = article.coverImage.match(/\/api\/assets\/([\w-]+)\/file/);
-        if (match) referencedIds.add(match[1]);
-      }
-      if (article.contentHtml) {
-        const matches = article.contentHtml.matchAll(/\/api\/assets\/([\w-]+)\/file/g);
-        for (const m of matches) referencedIds.add(m[1]);
-      }
-    }
+    // Find every referenced asset ID using the shared exhaustive scan so
+    // portraits, parsed article bodies and category illustrations are honored.
+    const referencedIds = await referencedAssetIds(worldId);
 
     // Find orphaned archived assets (in DB but no longer referenced)
     const orphanedDbAssets = dbAssets.filter(a => 

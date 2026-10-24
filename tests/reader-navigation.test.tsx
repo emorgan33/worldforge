@@ -7,6 +7,7 @@ import { ReaderBreadcrumbs } from "../src/components/public/ReaderBreadcrumbs";
 import { ReaderCategoryTree } from "../src/components/public/ReaderCategoryTree";
 import { ReaderMobileBrowse } from "../src/components/public/ReaderMobileBrowse";
 import { ReaderSearch } from "../src/components/public/ReaderSearch";
+import { ReaderImageCredits, ReaderAdjacentCredit } from "../src/components/public/ReaderImageCredits";
 import { Sidebar } from "../src/components/Sidebar";
 
 const publicArticles = [
@@ -92,8 +93,50 @@ test("ReaderCategoryTree renders nested hierarchy and root articles", () => {
   assert(html.includes('aria-current="page"'));
 });
 
-test("campaign reader tree uses campaign links and marks the home location", () => {
+test("ReaderCategoryTree renders category illustrations with a folder fallback", () => {
+  const categoriesWithArt = [
+    { id: "cat-places", name: "Places", parentId: null, order: 0, iconImage: "/api/assets/11111111-1111-4111-8111-111111111111/file" },
+    { id: "cat-orgs", name: "Factions & Guilds", parentId: null, order: 1, iconImage: null },
+  ];
   const html = renderToStaticMarkup(
+    <ReaderCategoryTree categories={categoriesWithArt} articles={publicArticles} worldSlug="elmsworth" />,
+  );
+
+  // The authorized illustration renders as an image with no leaking alt text.
+  assert(html.includes('src="/api/assets/11111111-1111-4111-8111-111111111111/file"'));
+  assert(html.includes('alt=""'));
+  // A category without a readable image keeps its labelled folder fallback.
+  assert(html.includes("Factions &amp; Guilds"));
+});
+
+test("ReaderImageCredits lists deduped credits and ReaderAdjacentCredit shows only adjacent art", () => {
+  const credits = [
+    { assetId: "11111111-1111-4111-8111-111111111111", title: "Ship by Moonlight", creditText: "Ivan Aivazovsky, Ship by Moonlight, CC0 1.0", placement: "adjacent" as const, verificationOrigin: "BUNDLED_REVIEW" as const },
+    { assetId: "22222222-2222-4222-8222-222222222222", title: "Forest Brook", creditText: "Ivan Shishkin, Forest Brook, CC0 1.0", placement: "credits-section" as const, verificationOrigin: "BUNDLED_REVIEW" as const },
+  ];
+  const html = renderToStaticMarkup(
+    <>
+      <ReaderImageCredits credits={credits} />
+      <ReaderAdjacentCredit credits={credits} assetId="11111111-1111-4111-8111-111111111111" />
+      <ReaderAdjacentCredit credits={credits} assetId="22222222-2222-4222-8222-222222222222" />
+    </>,
+  );
+
+  assert(html.includes('aria-label="Artwork credits"'));
+  assert(html.includes("Ivan Aivazovsky, Ship by Moonlight, CC0 1.0"));
+  assert(html.includes("Ivan Shishkin, Forest Brook, CC0 1.0"));
+  assert(!html.includes("22222222-2222-4222-8222-222222222222</p>"));
+  // Exactly one adjacent caption: the credits-section artwork must not appear inline.
+  assert.equal((html.match(/Ivan Aivazovsky/g) || []).length, 2);
+  assert.equal((html.match(/Ivan Shishkin/g) || []).length, 1);
+});
+
+test("ReaderImageCredits renders nothing without credits", () => {
+  const html = renderToStaticMarkup(<ReaderImageCredits credits={[]} />);
+  assert.equal(html, "");
+});
+
+test("campaign reader tree uses campaign links and marks the home location", () => {  const html = renderToStaticMarkup(
     <ReaderCategoryTree
       categories={publicCategories}
       articles={publicArticles}

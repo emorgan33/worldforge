@@ -38,6 +38,12 @@ Both views come from the optional Aethelgard demo seed and show the author works
   widths, with live author preview.
 - **Image library** — upload, normalize to WebP, reuse across articles and
   worlds, with archive and safe deletion.
+- **Curated stock art** — browse a local fantasy-art catalog, inspect source and
+  rights details, preview placements, preserve provenance through world
+  backups, and show credits to readers. The installed candidates are still
+  pending human rights and design review; production selection remains disabled
+  until those reviews are recorded. See [curated stock art](docs/stock-art.md)
+  and its [review gates](docs/stock-art-review/README.md).
 - **Revision history** — server-side snapshots, restore, and concurrent-edit
   detection.
 - **GM tools** — secrets, preview-as-player, campaign sessions and notebooks.
@@ -167,6 +173,7 @@ Design and feature references live in [`docs/`](docs/):
 - [Editor and category manager](docs/editor-and-category-manager.md)
 - [Autosave and recovery](docs/autosave-and-recovery.md)
 - [Image library](docs/image-library.md)
+- [Curated stock art](docs/stock-art.md) · [Stock-art review gates](docs/stock-art-review/README.md)
 - [World appearance](docs/world-appearance.md)
 - [Campaign rules profiles](docs/rpg-systems.md)
 - [Interactive character sheets](docs/character-sheets.md)

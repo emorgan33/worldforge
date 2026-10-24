@@ -177,7 +177,7 @@ test("v2 import creates world with new IDs and inactive memberships", { skip: !o
 });
 
 test("v1 export still works for backward compatibility", { skip: !origin }, async () => {
-  const res = await ownerFetch(`/api/worlds/${worldId}/export`);
+  const res = await ownerFetch(`/api/worlds/${worldId}/export?format=v1`);
   assert.equal(res.status, 200);
   const data = await res.json();
   assert.equal(data.version, 1);
@@ -188,7 +188,7 @@ test("v1 export still works for backward compatibility", { skip: !origin }, asyn
 });
 
 test("v1 import still works for v1 format data", { skip: !origin }, async () => {
-  const exportRes = await ownerFetch(`/api/worlds/${worldId}/export?includePrivate=true`);
+  const exportRes = await ownerFetch(`/api/worlds/${worldId}/export?format=v1&includePrivate=true`);
   const exportData = await exportRes.json();
   assert.equal(exportData.version, 1);
 

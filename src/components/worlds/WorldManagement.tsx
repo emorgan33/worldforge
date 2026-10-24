@@ -165,14 +165,14 @@ export function WorldManagement({ worlds, currentWorldId, actorId, onClose, onRe
   }
   function exportWorld(world: WorldSummary) {
     void perform("Export", "export", world.id, async () => {
-      const response = await fetch(`/api/worlds/${world.id}/export?format=v2`);
+      const response = await fetch(`/api/worlds/${world.id}/export`);
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(body && typeof body.error === "string" ? body.error : "World export failed.");
       }
       const blob = await response.blob();
       const href = URL.createObjectURL(blob);
-      const anchor = document.createElement("a"); anchor.href = href; anchor.download = `${world.slug}-export-v2.json`; anchor.click();
+      const anchor = document.createElement("a"); anchor.href = href; anchor.download = `${world.slug}-export.json`; anchor.click();
       URL.revokeObjectURL(href);
     });
   }

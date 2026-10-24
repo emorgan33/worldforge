@@ -1,4 +1,6 @@
 "use client";
+/* Category illustrations are managed local images shown beside the name. */
+/* eslint-disable @next/next/no-img-element */
 
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Folder, FolderOpen, GripVertical, Inbox } from "lucide-react";
@@ -70,7 +72,7 @@ export function ArticleTree({ categories, articles, selectedArticleId, selectedC
         <div {...dropProps(`category-${category.id}`, category.id)} className={`flex items-center gap-0.5 rounded-lg border ${dropTarget === `category-${category.id}` ? "border-amber-500 bg-amber-950/30" : selectedCategoryId === category.id ? "border-zinc-700 bg-zinc-900" : "border-transparent hover:bg-zinc-900"}`}>
           <button type="button" draggable={!disabled} onDragStart={event => start(event, "category", category.id)} onDragEnd={() => setDropTarget(null)} aria-label={`Drag category ${category.name}`} className="cursor-grab p-1 text-zinc-600 hover:text-zinc-300"><GripVertical size={12} /></button>
           <button type="button" aria-expanded={open} aria-label={`${open ? "Collapse" : "Expand"} ${category.name}`} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(category.id)) next.delete(category.id); else next.add(category.id); return next; })} className={mobile ? "flex h-11 w-11 shrink-0 items-center justify-center text-zinc-400" : "p-1 text-zinc-500"}>{open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</button>
-          <button type="button" onClick={() => onSelectCategory(category.id)} className="flex min-w-0 flex-1 items-center gap-2 py-2 pr-2 text-left text-sm font-semibold text-zinc-200">{open ? <FolderOpen size={14} className="shrink-0 text-amber-500" /> : <Folder size={14} className="shrink-0 text-amber-500" />}<span className="truncate">{category.name}</span><span className="ml-auto text-xs text-zinc-400">{count}</span></button>
+          <button type="button" onClick={() => onSelectCategory(category.id)} className="flex min-w-0 flex-1 items-center gap-2 py-2 pr-2 text-left text-sm font-semibold text-zinc-200">{category.iconImage ? <img src={category.iconImage} alt="" width={16} height={16} className="h-4 w-4 shrink-0 rounded object-cover" /> : open ? <FolderOpen size={14} className="shrink-0 text-amber-500" /> : <Folder size={14} className="shrink-0 text-amber-500" />}<span className="truncate">{category.name}</span><span className="ml-auto text-xs text-zinc-400">{count}</span></button>
         </div>
         {open && <ul className="ml-5 border-l border-zinc-800 pl-1.5">{branch(category.id, childAncestors, showChildren)}{articleRows(category.id, showChildren)}</ul>}
       </li>;

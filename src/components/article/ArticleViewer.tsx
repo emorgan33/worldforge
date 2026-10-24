@@ -24,6 +24,7 @@ import { RulesProfileBadge } from "@/components/blocks/RulesProfileBadge";
 import { CanonStateBadge } from "@/components/blocks/CanonStateBadge";
 import { CharacterSheet } from "./CharacterSheet";
 import { isCharacterSystem } from "@/lib/character-sheet";
+import { PLACEMENT_GEOMETRY, resolvePlacementAlt } from "@/lib/image-placement";
 
 interface ArticleViewerProps {
   publicUrl?: string;
@@ -79,11 +80,11 @@ export function ArticleViewer({
     <div className="space-y-6">
       {/* Article Cover Banner */}
       {article.coverImage && (
-        <div className="relative w-full h-64 md:h-80 rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl">
+        <div className={PLACEMENT_GEOMETRY["article-cover"].frameClassName}>
           <img
             src={article.coverImage}
-            alt={article.title}
-            className="w-full h-full object-cover"
+            alt={resolvePlacementAlt(article.coverImageAlt, article.title)}
+            className={PLACEMENT_GEOMETRY["article-cover"].imageClassName}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
         </div>
@@ -303,8 +304,8 @@ export function ArticleViewer({
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-xl p-2">
               <img
                 src={article.portraitImage}
-                alt={article.title}
-                className="w-full h-64 object-cover rounded-lg border border-zinc-800"
+                alt={resolvePlacementAlt(article.portraitImageAlt, article.title)}
+                className={`${PLACEMENT_GEOMETRY.portrait.imageClassName} rounded-lg border border-zinc-800`}
               />
             </div>
           )}

@@ -16,6 +16,9 @@ export function parseArticleDraft(raw: string, worldId: string): ArticleDraft | 
       (data.visibility !== undefined && !["PRIVATE", "PUBLIC"].includes(data.visibility)) ||
       !(data.categoryId === null || typeof data.categoryId === "string") ||
       (data.coverImage !== undefined && typeof data.coverImage !== "string") ||
+      (data.portraitImage !== undefined && typeof data.portraitImage !== "string") ||
+      (data.coverImageAlt !== undefined && data.coverImageAlt !== null && typeof data.coverImageAlt !== "string") ||
+      (data.portraitImageAlt !== undefined && data.portraitImageAlt !== null && typeof data.portraitImageAlt !== "string") ||
       !data.metadata || Array.isArray(data.metadata) || typeof data.metadata !== "object" ||
       !Object.values(data.metadata).every(value => typeof value === "string") ||
       (data.contentJson !== undefined && (data.contentJson?.type !== "doc" || !Array.isArray(data.contentJson.content))) ||

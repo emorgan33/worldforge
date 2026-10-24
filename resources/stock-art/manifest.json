@@ -1,0 +1,1087 @@
+{
+  "schemaVersion": 1,
+  "catalogRevision": "2026-10-23.live-review-state",
+  "collections": [
+    {
+      "id": "painterly-fantasy",
+      "title": "Painterly fantasy",
+      "brief": "Atmospheric portraits and places with visible brushwork, a restrained earth-and-jewel palette, soft directional light, and edges that read clearly when cropped. Coherence is judged from the contact sheet before an entry is admitted."
+    },
+    {
+      "id": "engraved-field-guide",
+      "title": "Engraved field guide",
+      "brief": "Optional second direction: restrained linework objects and emblems. Kept separate from the painterly collection so incompatible rendering styles never mix."
+    }
+  ],
+  "entries": [
+    {
+      "id": "ship-by-moonlight",
+      "version": 1,
+      "collection": "painterly-fantasy",
+      "title": "Ship by Moonlight",
+      "subjectTypes": [
+        "location"
+      ],
+      "styleTags": [
+        "painterly",
+        "seascape",
+        "moonlight"
+      ],
+      "searchTerms": [
+        "ship",
+        "moon",
+        "sea",
+        "night",
+        "harbor",
+        "coastal"
+      ],
+      "defaultAlt": "A sailing ship on a calm moonlit sea beneath a pale full moon.",
+      "visual": {
+        "contactSheet": "docs/stock-art-review/contact-sheet.md",
+        "coverageSheet": "docs/stock-art-review/coverage-sheet.md",
+        "recommendations": [
+          {
+            "purpose": "body",
+            "recommended": true,
+            "rationale": "Contain fitting keeps the moon and ship in both tested crops.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          },
+          {
+            "purpose": "world-cover",
+            "recommended": true,
+            "rationale": "The moon and ship survive the wide banner crop; the dark left sea holds title text.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          },
+          {
+            "purpose": "article-cover",
+            "recommended": true,
+            "rationale": "Both reviewed crops keep the moon and ship identifiable.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          },
+          {
+            "purpose": "background",
+            "recommended": true,
+            "rationale": "Evenly dark across the frame so reader text stays legible.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          }
+        ]
+      },
+      "creator": {
+        "name": "Ivan Konstantinovich Aivazovsky (Hovhannes Aivazian)"
+      },
+      "source": {
+        "itemUrl": "https://www.metmuseum.org/art/collection/search/437979",
+        "originalFilename": "437979.jpg",
+        "acquiredAt": "2026-10-23"
+      },
+      "rights": {
+        "licenseId": "CC0-1.0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "publicDomainBasis": "The Metropolitan Museum of Art Open Access public-domain work; image dedicated under CC0 1.0.",
+        "evidence": {
+          "id": "ship-by-moonlight-met-open-access",
+          "file": "evidence/ship-by-moonlight-met-open-access.txt",
+          "sha256": "d58e075f1c3414985d2b17df90fe56f347a31ff36b3ffa67126cf18fe684c843",
+          "reviewer": "PENDING HUMAN REVIEW",
+          "reviewedAt": "2026-10-23"
+        },
+        "reviewStatus": "pending"
+      },
+      "allowedUses": {
+        "applicationBundling": "allowed",
+        "standaloneRedistribution": "allowed",
+        "worldExport": "allowed",
+        "modification": "allowed",
+        "publicDisplay": "allowed"
+      },
+      "attribution": {
+        "creditText": "The Metropolitan Museum of Art. Ship by Moonlight by Ivan Konstantinovich Aivazovsky (Hovhannes Aivazian), n.d.. CC0 1.0.",
+        "required": false,
+        "placement": "credits-section",
+        "sourceUrl": "https://www.metmuseum.org/art/collection/search/437979",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "files": {
+        "image": "images/ship-by-moonlight/1.webp",
+        "thumbnail": "images/ship-by-moonlight/1.thumb.webp"
+      },
+      "derivatives": {
+        "originalSha256": "f72dd3cc1c52b82062e6dfb3f89bd9fc2b470fe8a0daa1b1d8feab57e4a7a25d",
+        "imageSha256": "eeb1d95dd7cd60ce11290b3aef43c21298a557f261f46a68958b2d27b2dcf4a8",
+        "thumbnailSha256": "02eb731ac4033a50a83315ac85fe073119f9636fd0c9b795315cac862078725f",
+        "width": 1800,
+        "height": 1215,
+        "byteSize": 238354,
+        "thumbnail": {
+          "width": 480,
+          "height": 324,
+          "byteSize": 10354
+        },
+        "normalizationRecipe": "sharp rotate; strip metadata; resize long edge to max 1800px without enlargement; WebP quality 82; thumbnail max 480px WebP quality 78",
+        "modifications": [
+          "Resized to a 1800px long edge",
+          "Re-encoded to WebP quality 82",
+          "Stripped embedded metadata",
+          "Generated a 480px thumbnail"
+        ]
+      },
+      "lifecycle": {
+        "state": "available"
+      }
+    },
+    {
+      "id": "forest-brook",
+      "version": 1,
+      "collection": "painterly-fantasy",
+      "title": "A Brook in the Forest",
+      "subjectTypes": [
+        "location"
+      ],
+      "styleTags": [
+        "painterly",
+        "forest",
+        "ruins"
+      ],
+      "searchTerms": [
+        "forest",
+        "brook",
+        "stream",
+        "woodland",
+        "grotto"
+      ],
+      "defaultAlt": "A shallow forest stream winding between dark rocky banks and tall trees.",
+      "visual": {
+        "contactSheet": "docs/stock-art-review/contact-sheet.md",
+        "coverageSheet": "docs/stock-art-review/coverage-sheet.md",
+        "recommendations": [
+          {
+            "purpose": "body",
+            "recommended": true,
+            "rationale": "The brook and rocky banks stay centered in both tested crops.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          },
+          {
+            "purpose": "background",
+            "recommended": true,
+            "rationale": "Muted and low-contrast behind a reading surface.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          }
+        ]
+      },
+      "creator": {
+        "name": "Gustave Courbet"
+      },
+      "source": {
+        "itemUrl": "https://www.metmuseum.org/art/collection/search/436010",
+        "originalFilename": "436010.jpg",
+        "acquiredAt": "2026-10-23"
+      },
+      "rights": {
+        "licenseId": "CC0-1.0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "publicDomainBasis": "The Metropolitan Museum of Art Open Access public-domain work; image dedicated under CC0 1.0.",
+        "evidence": {
+          "id": "forest-brook-met-open-access",
+          "file": "evidence/forest-brook-met-open-access.txt",
+          "sha256": "a5b2880180c1de096da3562494a4809ee55458b17c1142042877d51e653101a9",
+          "reviewer": "PENDING HUMAN REVIEW",
+          "reviewedAt": "2026-10-23"
+        },
+        "reviewStatus": "pending"
+      },
+      "allowedUses": {
+        "applicationBundling": "allowed",
+        "standaloneRedistribution": "allowed",
+        "worldExport": "allowed",
+        "modification": "allowed",
+        "publicDisplay": "allowed"
+      },
+      "attribution": {
+        "creditText": "The Metropolitan Museum of Art. A Brook in the Forest by Gustave Courbet, ca. 1868–77. CC0 1.0.",
+        "required": false,
+        "placement": "credits-section",
+        "sourceUrl": "https://www.metmuseum.org/art/collection/search/436010",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "files": {
+        "image": "images/forest-brook/1.webp",
+        "thumbnail": "images/forest-brook/1.thumb.webp"
+      },
+      "derivatives": {
+        "originalSha256": "133440812dd765261a51f86026c1cdca5da781b6961dd4cd73afc39d14c74845",
+        "imageSha256": "8e234d311738aa40f13c3f5c0aa0b3e03b0ea2c86ce3ef57ecfedfb6ca1bc9e0",
+        "thumbnailSha256": "68c38b192aa1dab5f7c4669f06d069aed37373c558fdd1c12eccd2132f09e609",
+        "width": 1800,
+        "height": 1480,
+        "byteSize": 272138,
+        "thumbnail": {
+          "width": 480,
+          "height": 395,
+          "byteSize": 15916
+        },
+        "normalizationRecipe": "sharp rotate; strip metadata; resize long edge to max 1800px without enlargement; WebP quality 82; thumbnail max 480px WebP quality 78",
+        "modifications": [
+          "Resized to a 1800px long edge",
+          "Re-encoded to WebP quality 82",
+          "Stripped embedded metadata",
+          "Generated a 480px thumbnail"
+        ]
+      },
+      "lifecycle": {
+        "state": "available"
+      }
+    },
+    {
+      "id": "praying-woman",
+      "version": 1,
+      "collection": "painterly-fantasy",
+      "title": "Young Woman Praying",
+      "subjectTypes": [
+        "portrait"
+      ],
+      "styleTags": [
+        "painterly",
+        "devotional",
+        "soft-light"
+      ],
+      "searchTerms": [
+        "portrait",
+        "woman",
+        "prayer",
+        "cloak",
+        "devotion"
+      ],
+      "defaultAlt": "A young woman with long auburn hair, hands clasped in prayer, wearing a dark cloak.",
+      "visual": {
+        "contactSheet": "docs/stock-art-review/contact-sheet.md",
+        "coverageSheet": "docs/stock-art-review/coverage-sheet.md",
+        "recommendations": [
+          {
+            "purpose": "body",
+            "recommended": true,
+            "rationale": "The figure and hands remain legible when contained.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          },
+          {
+            "purpose": "portrait",
+            "recommended": true,
+            "rationale": "The face and clasped hands sit inside the portrait frame at both widths.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          }
+        ]
+      },
+      "creator": {
+        "name": "Jean-Jacques Henner"
+      },
+      "source": {
+        "itemUrl": "https://www.metmuseum.org/art/collection/search/436645",
+        "originalFilename": "436645.jpg",
+        "acquiredAt": "2026-10-23"
+      },
+      "rights": {
+        "licenseId": "CC0-1.0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "publicDomainBasis": "The Metropolitan Museum of Art Open Access public-domain work; image dedicated under CC0 1.0.",
+        "evidence": {
+          "id": "praying-woman-met-open-access",
+          "file": "evidence/praying-woman-met-open-access.txt",
+          "sha256": "388332f5e0472e916beeb7220a5b64a0c0dbe997fe679697b020cc35f6cff3c8",
+          "reviewer": "PENDING HUMAN REVIEW",
+          "reviewedAt": "2026-10-23"
+        },
+        "reviewStatus": "pending"
+      },
+      "allowedUses": {
+        "applicationBundling": "allowed",
+        "standaloneRedistribution": "allowed",
+        "worldExport": "allowed",
+        "modification": "allowed",
+        "publicDisplay": "allowed"
+      },
+      "attribution": {
+        "creditText": "The Metropolitan Museum of Art. Young Woman Praying by Jean-Jacques Henner, n.d.. CC0 1.0.",
+        "required": false,
+        "placement": "credits-section",
+        "sourceUrl": "https://www.metmuseum.org/art/collection/search/436645",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "files": {
+        "image": "images/praying-woman/1.webp",
+        "thumbnail": "images/praying-woman/1.thumb.webp"
+      },
+      "derivatives": {
+        "originalSha256": "dc087e9305054434f143b7432ce880bef7175f5625ba73d7005b37e4321a7730",
+        "imageSha256": "53a4a92fcc25f8cda926977e465749237138a0286ba6e2291665f96df10ae12b",
+        "thumbnailSha256": "4a149df0e408741685b670ecaff86c8a41503d4bd7a2c9d77d4a7f218c9ed5d6",
+        "width": 1303,
+        "height": 1800,
+        "byteSize": 106330,
+        "thumbnail": {
+          "width": 347,
+          "height": 480,
+          "byteSize": 6012
+        },
+        "normalizationRecipe": "sharp rotate; strip metadata; resize long edge to max 1800px without enlargement; WebP quality 82; thumbnail max 480px WebP quality 78",
+        "modifications": [
+          "Resized to a 1800px long edge",
+          "Re-encoded to WebP quality 82",
+          "Stripped embedded metadata",
+          "Generated a 480px thumbnail"
+        ]
+      },
+      "lifecycle": {
+        "state": "available"
+      }
+    },
+    {
+      "id": "man-in-shadow",
+      "version": 1,
+      "collection": "painterly-fantasy",
+      "title": "Portrait of a Man",
+      "subjectTypes": [
+        "portrait"
+      ],
+      "styleTags": [
+        "painterly",
+        "chiaroscuro",
+        "baroque"
+      ],
+      "searchTerms": [
+        "portrait",
+        "man",
+        "hat",
+        "shadow",
+        "gloves"
+      ],
+      "defaultAlt": "A man in a wide-brimmed black hat and dark coat lit from one side against a shadowed background.",
+      "visual": {
+        "contactSheet": "docs/stock-art-review/contact-sheet.md",
+        "coverageSheet": "docs/stock-art-review/coverage-sheet.md",
+        "recommendations": [
+          {
+            "purpose": "body",
+            "recommended": true,
+            "rationale": "The chiaroscuro figure survives contained fitting.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          },
+          {
+            "purpose": "portrait",
+            "recommended": true,
+            "rationale": "Hat, face and gesturing hand read at both tested widths.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          }
+        ]
+      },
+      "creator": {
+        "name": "Willem Drost"
+      },
+      "source": {
+        "itemUrl": "https://www.metmuseum.org/art/collection/search/436211",
+        "originalFilename": "436211.jpg",
+        "acquiredAt": "2026-10-23"
+      },
+      "rights": {
+        "licenseId": "CC0-1.0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "publicDomainBasis": "The Metropolitan Museum of Art Open Access public-domain work; image dedicated under CC0 1.0.",
+        "evidence": {
+          "id": "man-in-shadow-met-open-access",
+          "file": "evidence/man-in-shadow-met-open-access.txt",
+          "sha256": "ee6d75927064fed19049344f1777b365f0f17a0c7bcd25ef7d88ab3cdf6c9e0c",
+          "reviewer": "PENDING HUMAN REVIEW",
+          "reviewedAt": "2026-10-23"
+        },
+        "reviewStatus": "pending"
+      },
+      "allowedUses": {
+        "applicationBundling": "allowed",
+        "standaloneRedistribution": "allowed",
+        "worldExport": "allowed",
+        "modification": "allowed",
+        "publicDisplay": "allowed"
+      },
+      "attribution": {
+        "creditText": "The Metropolitan Museum of Art. Portrait of a Man by Willem Drost, 1653 or 1655. CC0 1.0.",
+        "required": false,
+        "placement": "credits-section",
+        "sourceUrl": "https://www.metmuseum.org/art/collection/search/436211",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "files": {
+        "image": "images/man-in-shadow/1.webp",
+        "thumbnail": "images/man-in-shadow/1.thumb.webp"
+      },
+      "derivatives": {
+        "originalSha256": "1ea0c9e04681460c260f2f655f1091a6ea52fc19eeea4771244d74190d88e330",
+        "imageSha256": "41abf98d82cd0d641c8338e7094fb72e7cff64a09faef2e4b553d3803c38a6b6",
+        "thumbnailSha256": "59b03ccb42e790894dceb1f9d1485f4d5ea9cc8575206ec423ebcdde8c4e746f",
+        "width": 1505,
+        "height": 1800,
+        "byteSize": 136292,
+        "thumbnail": {
+          "width": 401,
+          "height": 480,
+          "byteSize": 5602
+        },
+        "normalizationRecipe": "sharp rotate; strip metadata; resize long edge to max 1800px without enlargement; WebP quality 82; thumbnail max 480px WebP quality 78",
+        "modifications": [
+          "Resized to a 1800px long edge",
+          "Re-encoded to WebP quality 82",
+          "Stripped embedded metadata",
+          "Generated a 480px thumbnail"
+        ]
+      },
+      "lifecycle": {
+        "state": "available"
+      }
+    },
+    {
+      "id": "vase-of-flowers",
+      "version": 1,
+      "collection": "painterly-fantasy",
+      "title": "A Vase of Flowers",
+      "subjectTypes": [
+        "object"
+      ],
+      "styleTags": [
+        "painterly",
+        "still-life",
+        "botanical"
+      ],
+      "searchTerms": [
+        "flowers",
+        "vase",
+        "still life",
+        "bouquet",
+        "botanical"
+      ],
+      "defaultAlt": "A tall glass vase holding a dense bouquet of red, white and blue flowers on a dark ground.",
+      "visual": {
+        "contactSheet": "docs/stock-art-review/contact-sheet.md",
+        "coverageSheet": "docs/stock-art-review/coverage-sheet.md",
+        "recommendations": [
+          {
+            "purpose": "body",
+            "recommended": true,
+            "rationale": "The bouquet stays whole and centered; the dark ground frames it.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          }
+        ]
+      },
+      "creator": {
+        "name": "Margareta Haverman"
+      },
+      "source": {
+        "itemUrl": "https://www.metmuseum.org/art/collection/search/436634",
+        "originalFilename": "436634.jpg",
+        "acquiredAt": "2026-10-23"
+      },
+      "rights": {
+        "licenseId": "CC0-1.0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "publicDomainBasis": "The Metropolitan Museum of Art Open Access public-domain work; image dedicated under CC0 1.0.",
+        "evidence": {
+          "id": "vase-of-flowers-met-open-access",
+          "file": "evidence/vase-of-flowers-met-open-access.txt",
+          "sha256": "fad490a2473d65e80b670b5aee70cf7b4fb48a55d05b6172a8ea617798f8fbd4",
+          "reviewer": "PENDING HUMAN REVIEW",
+          "reviewedAt": "2026-10-23"
+        },
+        "reviewStatus": "pending"
+      },
+      "allowedUses": {
+        "applicationBundling": "allowed",
+        "standaloneRedistribution": "allowed",
+        "worldExport": "allowed",
+        "modification": "allowed",
+        "publicDisplay": "allowed"
+      },
+      "attribution": {
+        "creditText": "The Metropolitan Museum of Art. A Vase of Flowers by Margareta Haverman, 1716. CC0 1.0.",
+        "required": false,
+        "placement": "credits-section",
+        "sourceUrl": "https://www.metmuseum.org/art/collection/search/436634",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "files": {
+        "image": "images/vase-of-flowers/1.webp",
+        "thumbnail": "images/vase-of-flowers/1.thumb.webp"
+      },
+      "derivatives": {
+        "originalSha256": "df94f0778aad30c2911c895f1c966e22d29295c8fd7ee07531f7a381f3d9d94b",
+        "imageSha256": "90226dbc34007bb4acf35af445f2f8fd0b4a7d25f1255b0b1a795c3e6f98ec6e",
+        "thumbnailSha256": "95a44b47887100aa8a27af1de6d27ec17e8fe3300ccc5523e9f3a36dbe84045f",
+        "width": 1381,
+        "height": 1800,
+        "byteSize": 203518,
+        "thumbnail": {
+          "width": 368,
+          "height": 480,
+          "byteSize": 19408
+        },
+        "normalizationRecipe": "sharp rotate; strip metadata; resize long edge to max 1800px without enlargement; WebP quality 82; thumbnail max 480px WebP quality 78",
+        "modifications": [
+          "Resized to a 1800px long edge",
+          "Re-encoded to WebP quality 82",
+          "Stripped embedded metadata",
+          "Generated a 480px thumbnail"
+        ]
+      },
+      "lifecycle": {
+        "state": "available"
+      }
+    },
+    {
+      "id": "etruscan-vase",
+      "version": 1,
+      "collection": "painterly-fantasy",
+      "title": "Etruscan Vase with Flowers",
+      "subjectTypes": [
+        "object",
+        "category"
+      ],
+      "styleTags": [
+        "painterly",
+        "symbolist",
+        "decorative"
+      ],
+      "searchTerms": [
+        "vase",
+        "flowers",
+        "etruscan",
+        "ornament",
+        "symbolist"
+      ],
+      "defaultAlt": "A rounded Etruscan vase of flowers painted in warm yellows and blues against a pale patterned ground.",
+      "visual": {
+        "contactSheet": "docs/stock-art-review/contact-sheet.md",
+        "coverageSheet": "docs/stock-art-review/coverage-sheet.md",
+        "recommendations": [
+          {
+            "purpose": "body",
+            "recommended": true,
+            "rationale": "The vase and surrounding motifs survive contained fitting.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          },
+          {
+            "purpose": "category-icon",
+            "recommended": false,
+            "rationale": "Only the vase silhouette is distinctive; the floral field is too busy at small sizes.",
+            "reviewedCrops": [
+              {
+                "width": 16,
+                "height": 16,
+                "result": "fail",
+                "notes": "Icon-sized crop is indistinct."
+              }
+            ],
+            "categorySizes": [
+              {
+                "size": 16,
+                "readable": false,
+                "notes": "The patterned field collapses into texture below 32px."
+              },
+              {
+                "size": 24,
+                "readable": false,
+                "notes": "The patterned field collapses into texture below 32px."
+              },
+              {
+                "size": 32,
+                "readable": true,
+                "notes": "The patterned field collapses into texture below 32px."
+              }
+            ]
+          }
+        ]
+      },
+      "creator": {
+        "name": "Odilon Redon"
+      },
+      "source": {
+        "itemUrl": "https://www.metmuseum.org/art/collection/search/437381",
+        "originalFilename": "437381.jpg",
+        "acquiredAt": "2026-10-23"
+      },
+      "rights": {
+        "licenseId": "CC0-1.0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "publicDomainBasis": "The Metropolitan Museum of Art Open Access public-domain work; image dedicated under CC0 1.0.",
+        "evidence": {
+          "id": "etruscan-vase-met-open-access",
+          "file": "evidence/etruscan-vase-met-open-access.txt",
+          "sha256": "e9efaad363ab81192d676a37c44ee3d404fefdd2c1e2b9d22b01a3c31fc56a44",
+          "reviewer": "PENDING HUMAN REVIEW",
+          "reviewedAt": "2026-10-23"
+        },
+        "reviewStatus": "pending"
+      },
+      "allowedUses": {
+        "applicationBundling": "allowed",
+        "standaloneRedistribution": "allowed",
+        "worldExport": "allowed",
+        "modification": "allowed",
+        "publicDisplay": "allowed"
+      },
+      "attribution": {
+        "creditText": "The Metropolitan Museum of Art. Etruscan Vase with Flowers by Odilon Redon, 1900–1910. CC0 1.0.",
+        "required": false,
+        "placement": "credits-section",
+        "sourceUrl": "https://www.metmuseum.org/art/collection/search/437381",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "files": {
+        "image": "images/etruscan-vase/1.webp",
+        "thumbnail": "images/etruscan-vase/1.thumb.webp"
+      },
+      "derivatives": {
+        "originalSha256": "842092ccc5126bd2c639302abb0abbeb7ac8fad205db8b6a0cf5a27644f1763d",
+        "imageSha256": "56ca828d3e3af7f4299f54e424d35656e274373f22fdff8cd98136da978f0861",
+        "thumbnailSha256": "9725e777a98f4e6f2525f55eeafa2ef089b85000e3fa48d12d8075c3fb7e620b",
+        "width": 1325,
+        "height": 1800,
+        "byteSize": 677744,
+        "thumbnail": {
+          "width": 354,
+          "height": 480,
+          "byteSize": 35362
+        },
+        "normalizationRecipe": "sharp rotate; strip metadata; resize long edge to max 1800px without enlargement; WebP quality 82; thumbnail max 480px WebP quality 78",
+        "modifications": [
+          "Resized to a 1800px long edge",
+          "Re-encoded to WebP quality 82",
+          "Stripped embedded metadata",
+          "Generated a 480px thumbnail"
+        ]
+      },
+      "lifecycle": {
+        "state": "available"
+      }
+    },
+    {
+      "id": "garden-basket",
+      "version": 1,
+      "collection": "painterly-fantasy",
+      "title": "Basket of Flowers",
+      "subjectTypes": [
+        "object"
+      ],
+      "styleTags": [
+        "painterly",
+        "romantic",
+        "garden"
+      ],
+      "searchTerms": [
+        "basket",
+        "flowers",
+        "garden",
+        "blooms",
+        "still life"
+      ],
+      "defaultAlt": "A woven basket overflowing with red, white and blue garden flowers beneath a leafy arbor.",
+      "visual": {
+        "contactSheet": "docs/stock-art-review/contact-sheet.md",
+        "coverageSheet": "docs/stock-art-review/coverage-sheet.md",
+        "recommendations": [
+          {
+            "purpose": "body",
+            "recommended": true,
+            "rationale": "The basket and flowers stay readable in both tested crops.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          },
+          {
+            "purpose": "background",
+            "recommended": true,
+            "rationale": "Soft garden tones work behind a reading surface.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          }
+        ]
+      },
+      "creator": {
+        "name": "Eugène Delacroix"
+      },
+      "source": {
+        "itemUrl": "https://www.metmuseum.org/art/collection/search/436175",
+        "originalFilename": "436175.jpg",
+        "acquiredAt": "2026-10-23"
+      },
+      "rights": {
+        "licenseId": "CC0-1.0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "publicDomainBasis": "The Metropolitan Museum of Art Open Access public-domain work; image dedicated under CC0 1.0.",
+        "evidence": {
+          "id": "garden-basket-met-open-access",
+          "file": "evidence/garden-basket-met-open-access.txt",
+          "sha256": "f7f639fd90d2bb7db4fc6df9fe9490ffa51e6cfea499867227bb72671d114ada",
+          "reviewer": "PENDING HUMAN REVIEW",
+          "reviewedAt": "2026-10-23"
+        },
+        "reviewStatus": "pending"
+      },
+      "allowedUses": {
+        "applicationBundling": "allowed",
+        "standaloneRedistribution": "allowed",
+        "worldExport": "allowed",
+        "modification": "allowed",
+        "publicDisplay": "allowed"
+      },
+      "attribution": {
+        "creditText": "The Metropolitan Museum of Art. Basket of Flowers by Eugène Delacroix, 1848–49. CC0 1.0.",
+        "required": false,
+        "placement": "credits-section",
+        "sourceUrl": "https://www.metmuseum.org/art/collection/search/436175",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "files": {
+        "image": "images/garden-basket/1.webp",
+        "thumbnail": "images/garden-basket/1.thumb.webp"
+      },
+      "derivatives": {
+        "originalSha256": "b5bee28023873dab9aaa12e464492a5cea4b0b8c26e13337d48e84e1e4a73969",
+        "imageSha256": "d3181582aff33917d26ef1b38491c98701842e1fecfa6c1c61f33706cfc06550",
+        "thumbnailSha256": "2ef213035dcc125d245f5fa31a234131dae92e1084d6b3f3744999f96747b0a1",
+        "width": 1800,
+        "height": 1359,
+        "byteSize": 272520,
+        "thumbnail": {
+          "width": 480,
+          "height": 362,
+          "byteSize": 22078
+        },
+        "normalizationRecipe": "sharp rotate; strip metadata; resize long edge to max 1800px without enlargement; WebP quality 82; thumbnail max 480px WebP quality 78",
+        "modifications": [
+          "Resized to a 1800px long edge",
+          "Re-encoded to WebP quality 82",
+          "Stripped embedded metadata",
+          "Generated a 480px thumbnail"
+        ]
+      },
+      "lifecycle": {
+        "state": "available"
+      }
+    },
+    {
+      "id": "heraldic-crests",
+      "version": 1,
+      "collection": "engraved-field-guide",
+      "title": "Design for Heraldic Ornament",
+      "subjectTypes": [
+        "emblem",
+        "category"
+      ],
+      "styleTags": [
+        "engraving",
+        "linework",
+        "heraldic"
+      ],
+      "searchTerms": [
+        "heraldry",
+        "crest",
+        "lion",
+        "emblem",
+        "ornament",
+        "linework"
+      ],
+      "defaultAlt": "An ink drawing of two heraldic crests: a lion holding a shield and a lion holding a book.",
+      "visual": {
+        "contactSheet": "docs/stock-art-review/contact-sheet.md",
+        "coverageSheet": "docs/stock-art-review/coverage-sheet.md",
+        "recommendations": [
+          {
+            "purpose": "body",
+            "recommended": true,
+            "rationale": "Ink linework stays crisp when contained.",
+            "reviewedCrops": [
+              {
+                "width": 960,
+                "height": 432,
+                "result": "pass",
+                "notes": "Wide banner crop reviewed."
+              },
+              {
+                "width": 360,
+                "height": 600,
+                "result": "pass",
+                "notes": "Narrow crop reviewed."
+              }
+            ]
+          },
+          {
+            "purpose": "category-icon",
+            "recommended": false,
+            "rationale": "Fine heraldic linework does not resolve at 16 or 24px.",
+            "reviewedCrops": [
+              {
+                "width": 16,
+                "height": 16,
+                "result": "fail",
+                "notes": "Icon-sized crop is indistinct."
+              }
+            ],
+            "categorySizes": [
+              {
+                "size": 16,
+                "readable": false,
+                "notes": "Two crests and their lettering are indistinct below 32px."
+              },
+              {
+                "size": 24,
+                "readable": false,
+                "notes": "Two crests and their lettering are indistinct below 32px."
+              },
+              {
+                "size": 32,
+                "readable": true,
+                "notes": "Two crests and their lettering are indistinct below 32px."
+              }
+            ]
+          }
+        ]
+      },
+      "creator": {
+        "name": "Anonymous, British, 19th century"
+      },
+      "source": {
+        "itemUrl": "https://www.metmuseum.org/art/collection/search/386495",
+        "originalFilename": "386495.jpg",
+        "acquiredAt": "2026-10-23"
+      },
+      "rights": {
+        "licenseId": "CC0-1.0",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "publicDomainBasis": "The Metropolitan Museum of Art Open Access public-domain work; image dedicated under CC0 1.0.",
+        "evidence": {
+          "id": "heraldic-crests-met-open-access",
+          "file": "evidence/heraldic-crests-met-open-access.txt",
+          "sha256": "b7f55c0bc415c22aaf08afe2f3aea931bb1736a04abebf8568a5fb43cf97daaa",
+          "reviewer": "PENDING HUMAN REVIEW",
+          "reviewedAt": "2026-10-23"
+        },
+        "reviewStatus": "pending"
+      },
+      "allowedUses": {
+        "applicationBundling": "allowed",
+        "standaloneRedistribution": "allowed",
+        "worldExport": "allowed",
+        "modification": "allowed",
+        "publicDisplay": "allowed"
+      },
+      "attribution": {
+        "creditText": "The Metropolitan Museum of Art. Design for Heraldic Ornament by Anonymous, British, 19th century, 19th century. CC0 1.0.",
+        "required": false,
+        "placement": "credits-section",
+        "sourceUrl": "https://www.metmuseum.org/art/collection/search/386495",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "files": {
+        "image": "images/heraldic-crests/1.webp",
+        "thumbnail": "images/heraldic-crests/1.thumb.webp"
+      },
+      "derivatives": {
+        "originalSha256": "677f8f00b6adf5d6d2132949028729cf8b68b1cd063e6f1b5e5e043427033dea",
+        "imageSha256": "c6f9dcee07fcfceb7019b10fd844dc5a8c4833fb26c6a48714dffcf05780a24b",
+        "thumbnailSha256": "38e8fc5a6acbc62ccd8bb1a17718bdebc7d285a5aff31031a8abb7f26e1310d4",
+        "width": 1800,
+        "height": 1779,
+        "byteSize": 242420,
+        "thumbnail": {
+          "width": 480,
+          "height": 474,
+          "byteSize": 24062
+        },
+        "normalizationRecipe": "sharp rotate; strip metadata; resize long edge to max 1800px without enlargement; WebP quality 82; thumbnail max 480px WebP quality 78",
+        "modifications": [
+          "Resized to a 1800px long edge",
+          "Re-encoded to WebP quality 82",
+          "Stripped embedded metadata",
+          "Generated a 480px thumbnail"
+        ]
+      },
+      "lifecycle": {
+        "state": "available"
+      }
+    }
+  ]
+}
