@@ -155,9 +155,9 @@ Done when owners can identify asset dependencies and recover or move a complete 
 - UI shows confirmation dialog with warning when asset is still referenced
 
 ### Orphan Cleanup
-- `DELETE /api/worlds/[id]/cleanup` removes orphaned archived assets from database and disk
-- Cleans up orphaned files that exist on disk but have no database record
-- Returns deleted assets list and any errors encountered
+- `DELETE /api/worlds/[id]/cleanup` is retained for compatibility but performs no file deletion because shared-directory ownership is ambiguous; archived-world purge uses durable cleanup jobs
+- It currently returns empty deletion lists; unregistered files remain untouched until an ownership-safe inventory exists
+- Archived-world purge reports durable cleanup jobs separately
 
 ### World Export
 - `GET /api/worlds/[id]/export` exports complete world as JSON bundle

@@ -2,7 +2,7 @@
 
 Audit basis: repository revision `1be1903`.
 
-Status: audit complete; R01, R01a, and R02 implementation are complete. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
+Status: audit complete; R01, R01a, and R02 implementation and validation are complete. R03 is next. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
 
 ## 1. Executive summary
 
@@ -299,8 +299,8 @@ Effort is relative: **Small** is a bounded change; **Medium** spans several rela
 | Task | Priority | Risk | Effort | Dependencies | Status |
 |---|---|---|---|---|---|
 | R01 Trustworthy test baseline | P1 | Low | Medium | None | **Complete** |
-| R01a Verify isolation sentinel file contents | P2 | Low | Small | R01 | Scheduled alongside R02 test work; before R03 |
-| R02 Contain unsafe cleanup | **P0** | Low | Small | Minimum fixture work from R01 | Not started |
+| R01a Verify isolation sentinel file contents | P2 | Low | Small | R01 | **Complete** |
+| R02 Contain unsafe cleanup | **P0** | Low | Small | Minimum fixture work from R01 | **Complete** |
 | R03 Establish asset lifetime operations | P1 | High | Large | R01, R01a, R02 | Not started |
 | R04 Repair asset parameter validation | P1 | Low | Small | R03 before enabling permanent deletion | Not started |
 | R05 Make variable rendering and writes safe | P1 | Medium | Medium | R01 | Not started |
@@ -353,7 +353,7 @@ The asset API tests now codify the `404` response for a collection request witho
 
 **Rollback:** Revert this test-only commit independently; preserve R01's existing isolation guards and regression checks.
 
-**Validation:** Focused isolation regression passed against the dedicated temporary database and asset directory. A controlled same-filename overwrite was detected by the byte assertion; rejected-configuration and origin-unset subprocesses preserved the sentinel.
+**Validation:** Focused isolation regression and the full isolated suite passed against the dedicated temporary database and asset directory. A controlled same-filename overwrite was detected by the byte assertion; rejected-configuration and origin-unset subprocesses preserved the sentinel.
 
 ### R02 — Contain the destructive cleanup endpoint
 
@@ -361,7 +361,7 @@ The asset API tests now codify the `404` response for a collection request witho
 
 **Changes and benefit:** Removed all physical and metadata deletion from this legacy endpoint. Shared-directory files cannot be safely attributed to a world, and the current reference collector does not cover every persistent reference. The route remains available and returns an empty successful cleanup result; archived-world purge continues through durable cleanup jobs.
 
-**Validation and acceptance:** An isolated HTTP regression with two owners, multiple worlds and an unregistered staged file confirms cleanup leaves all asset rows and file bytes unchanged. Anonymous requests return 401 and another owner's request returns 403. Focused regression passed.
+**Validation and acceptance:** An isolated HTTP regression with two owners, multiple worlds and an unregistered staged file confirms cleanup leaves all asset rows and file bytes unchanged. Anonymous requests return 401 and another owner's request returns 404 under the route's privacy contract. Focused regression passed. The full isolated suite passed: 221 passed, one production-auth smoke skipped by its separate production-server origin gate, zero failed.
 
 **Rollback:** Do not restore the unsafe sweep. Retain the containment while later cleanup work is reverted.
 
@@ -557,8 +557,8 @@ The asset API tests now codify the `404` response for a collection request witho
 
 ### Recommended implementation order
 
-1. **Safety foundation:** R01 is complete; contain cleanup with R02 next. Schedule R01a alongside R02's test work in a separate commit, without delaying containment, and finish it before R03.
-2. **Focused correctness/security:** R03–R08 and R15.
+1. **Safety foundation complete:** R01, R01a and R02 are implemented and validated.
+2. **Focused correctness/security:** R03 is next, followed by R04–R08 and R15.
 3. **Shared contracts and durable operations:** R09–R14.
 4. **Architectural extraction and measured optimization:** R16–R19.
 5. **Documentation throughout; optional cleanup last:** R20 and R21.
@@ -676,7 +676,7 @@ Changes:
 - Propagate the creation-test database variable.
 - Record baseline failures uncovered by making the tests meaningful. The five previously hidden asset route failures are fixed and now pass; the missing-world assertion reflects the authorization wrapper's intentional 404 contract.
 
-### Commit 2: Cleanup containment
+### Commit 2: Cleanup containment — complete
 
 Files:
 
@@ -690,9 +690,9 @@ Changes:
 - Preserve bytes when reference ownership is uncertain.
 - Add two-owner, multiworld fixtures with file-content checks.
 
-### Companion test commit: Isolation sentinel bytes (R01a)
+### Companion test commit: Isolation sentinel bytes (R01a) — complete
 
-Schedule alongside Commit 2's integration-test work, before R03. Keep P0 containment independent of this commit.
+Completed alongside Commit 2's integration-test work, before R03, with P0 containment independent of this test-only commit.
 
 Files:
 
