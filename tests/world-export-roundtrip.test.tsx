@@ -77,13 +77,14 @@ test("v2 roundtrip remaps map content and session entity links, and warns on mis
   await db.imageAsset.create({ data: { id: sourceAssetId, worldId: sourceId, title: "Map art", originalName: "map.png", mimeType: "image/webp", byteSize: image.data.length, width: image.width, height: image.height, sha256: image.sha256, archived: true } });
   await db.world.update({ where: { id: sourceId }, data: { appearance: JSON.stringify({ logoUrl: `/api/assets/${sourceAssetId}/file` }) } });
   const block = await db.rpgBlock.create({ data: { worldId: sourceId, category: "NPC", name: "Map block", system: "DND_5E", statsJson: "{}" } });
+  const legacyBlock = await db.rpgBlock.create({ data: { worldId: sourceId, category: "NPC", name: "Call of Cthulhu block", system: "COC", statsJson: "{}" } });
   await db.article.update({ where: { id: parentArticle.id }, data: {
     contentJson: JSON.stringify({ type: "doc", content: [{ type: "paragraph", content: [
       { type: "articleLink", attrs: { articleId: article.id, label: article.title } },
       { type: "campaignStatblock", attrs: { blockId: block.id } },
     ] }] }),
     contentHtml: `<p><span data-article-id="${article.id}">Map target</span><section data-statblock-id="${block.id}"></section></p>`,
-    metadata: JSON.stringify({ dnd5eStatblockId: block.id }),
+    metadata: JSON.stringify({ dnd5eStatblockId: block.id, dnd5eParticipant1: block.id, COCStatblockId: legacyBlock.id, linkedLocation: article.id, linkedEncounters: `${article.id}\n${childArticle.id}\nmissing-article`, unknownExtension: "preserve" }),
   } });
   const session = await db.campaignSession.create({ data: { worldId: sourceId, title: "Linked session" } });
   await db.sessionEntityLink.createMany({ data: [
@@ -114,6 +115,7 @@ test("v2 roundtrip remaps map content and session entity links, and warns on mis
   assert.equal(restored.success, true);
   const newArticle = await db.article.findFirstOrThrow({ where: { worldId: restored.worldId, slug: article.slug } });
   const newBlock = await db.rpgBlock.findFirstOrThrow({ where: { worldId: restored.worldId } });
+  const importedLegacyBlock = await db.rpgBlock.findFirstOrThrow({ where: { worldId: restored.worldId, system: "COC" } });
   const newSession = await db.campaignSession.findFirstOrThrow({ where: { worldId: restored.worldId } });
   const links = await db.sessionEntityLink.findMany({ where: { worldId: restored.worldId } });
   assert.equal(links.length, 2);
@@ -135,6 +137,12 @@ test("v2 roundtrip remaps map content and session entity links, and warns on mis
   assert.equal(JSON.parse(importedParent.contentJson!).content[0].content[0].attrs.articleId, newArticle.id);
   assert.equal(JSON.parse(importedParent.contentJson!).content[0].content[1].attrs.blockId, newBlock.id);
   assert.equal(JSON.parse(importedParent.metadata!).dnd5eStatblockId, newBlock.id);
+  assert.equal(JSON.parse(importedParent.metadata!).dnd5eParticipant1, newBlock.id);
+  assert.equal(JSON.parse(importedParent.metadata!).COCStatblockId, importedLegacyBlock.id);
+  assert.equal(JSON.parse(importedParent.metadata!).linkedLocation, newArticle.id);
+  assert.equal(JSON.parse(importedParent.metadata!).linkedEncounters, `${newArticle.id}\n${importedChild.id}`);
+  assert.equal(JSON.parse(importedParent.metadata!).unknownExtension, "preserve");
+  assert.ok(restored.warnings?.some(warning => warning.includes("metadata article reference") && warning.includes("missing-article")));
   assert.match(importedParent.contentHtml!, new RegExp(newArticle.id));
   assert.match(importedParent.contentHtml!, new RegExp(newBlock.id));
   assert.equal(await db.articleMention.count({ where: { sourceArticleId: importedParent.id, targetArticleId: newArticle.id } }), 1);

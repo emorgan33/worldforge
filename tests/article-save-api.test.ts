@@ -62,3 +62,35 @@ test("article saves reject stale versions without changing content, revisions or
   assert.equal((await db.article.findUniqueOrThrow({ where: { id: article.id } })).version, 5, "restoring never reuses a previous concurrency token");
   assert.equal((await send(`/${article.id}`, { expectedVersion: 1, title: "Editor from before restore" })).status, 409);
 });
+
+test("article metadata rejects non-string reference values on create and update", { skip: !origin }, async context => {
+  const db = new PrismaClient();
+  const owner = await db.user.create({ data: { name: "Metadata validation fixture", email: `metadata-validation-${randomUUID()}@example.invalid` } });
+  context.after(async () => { await db.user.delete({ where: { id: owner.id } }); await db.$disconnect(); });
+  const world = await db.world.create({ data: { ownerId: owner.id, title: "Metadata validation", slug: randomUUID() } });
+  const owned = await authorFetch(db, owner.id, origin!);
+  const send = (path: string, body: object, method = "PATCH") => owned(`${origin}/api/articles${path}`, {
+    method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+
+  const metadata = { linkedLocation: "target-id", linkedEncounters: "first-id\nsecond-id", COCStatblockId: "coc-block-id", customExtension: { retained: true } };
+  const created = await send("", { worldId: world.id, title: "Metadata shape", metadata }, "POST");
+  assert.equal(created.status, 201);
+  const article = await created.json();
+  assert.deepEqual(JSON.parse(article.metadata), metadata);
+
+  const malformed = [
+    { linkedLocation: [] },
+    { linkedEncounters: {} },
+    { dnd5eParticipant1: { id: "block-id" } },
+    { COCStatblockId: ["block-id"] },
+  ];
+  for (const invalidMetadata of malformed) {
+    assert.equal((await send("", { worldId: world.id, title: "Invalid metadata", metadata: invalidMetadata }, "POST")).status, 400);
+    assert.equal((await send(`/${article.id}`, { expectedVersion: 1, metadata: invalidMetadata })).status, 400);
+  }
+
+  const unchanged = await db.article.findUniqueOrThrow({ where: { id: article.id } });
+  assert.equal(unchanged.version, 1);
+  assert.deepEqual(JSON.parse(unchanged.metadata!), metadata);
+});

@@ -7,6 +7,7 @@ import { assertDocumentImageReferences, assertImageReference, ImageReferenceErro
 import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { prisma } from "@/lib/db";
 import { validateCharacterRows } from "@/lib/character-sheet";
+import { validateMetadataReferences } from "@/lib/metadata-references";
 
 async function getHandler(req: NextRequest) {
   try {
@@ -78,6 +79,8 @@ async function postHandler(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     if (typeof contentJson === "string") return NextResponse.json({ error: "Article content must be a document object, not a serialized string." }, { status: 400 });
+    const referenceError = validateMetadataReferences(metadata);
+    if (referenceError) return NextResponse.json({ error: referenceError }, { status: 400 });
     const sheetError = validateCharacterRows(metadata);
     if (sheetError) return NextResponse.json({ error: sheetError }, { status: 400 });
 

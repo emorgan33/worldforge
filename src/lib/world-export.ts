@@ -5,6 +5,7 @@ import { normalizeImage, removeAssetFile } from "@/lib/asset-storage";
 import { provenanceVerificationOrigin, validateImportedStockSnapshot } from "./stock-provenance";
 import { collectHtmlReferences } from "@/lib/article-mention-index";
 import { collectJsonReferences } from "@/lib/article-links";
+import { remapArticleMetadata } from "@/lib/metadata-references";
 import type { JSONContent } from "@tiptap/core";
 
 // ---------------------------------------------------------------------------
@@ -591,7 +592,7 @@ export async function importWorldV2(
         contentHtml: remapArticleHtml(article.contentHtml),
         contentJson: remapArticleJson(article.contentJson),
         sidebarJson: remapArticleJson(article.sidebarJson ?? null),
-        metadata: remapArticleJson(article.metadata),
+        metadata: remapUrls(remapArticleMetadata(article.metadata, articleIdMap, statblockIdMap, (key, sourceId, kind) => warnings.push(`Removed metadata ${kind} reference "${sourceId}" from ${key}`))),
         tags: article.tags,
         publicationStatus: "DRAFT", visibility: "PRIVATE", state: "DRAFT",
         coverImage: article.coverImage ? assetUrlMap.get(article.coverImage) ?? null : null,
@@ -651,7 +652,7 @@ export async function importWorldV2(
     await prisma.articleRevision.create({ data: {
       id: randomUUID(), articleId, title: revision.title, slug: revision.slug,
       excerpt: revision.excerpt, contentHtml: remapArticleHtml(revision.contentHtml),
-      contentJson: remapArticleJson(revision.contentJson), metadata: remapArticleJson(revision.metadata),
+      contentJson: remapArticleJson(revision.contentJson), metadata: remapUrls(remapArticleMetadata(revision.metadata, articleIdMap, statblockIdMap, (key, sourceId, kind) => warnings.push(`Removed metadata ${kind} reference "${sourceId}" from ${key}`))),
       tags: revision.tags, publicationStatus: revision.publicationStatus,
       visibility: revision.visibility === "PUBLIC" ? "PUBLIC" : "PRIVATE", state: revision.state, userId: ownerUserId,
       savedAt: new Date(revision.savedAt), articleVersionAtSave: revision.articleVersionAtSave,

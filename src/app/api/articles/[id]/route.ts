@@ -7,6 +7,7 @@ import { assertDocumentImageReferences, assertImageReference, ImageReferenceErro
 import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { prisma } from "@/lib/db";
 import { validateCharacterRows } from "@/lib/character-sheet";
+import { validateMetadataReferences } from "@/lib/metadata-references";
 
 class ArticleConflict extends Error {}
 
@@ -101,6 +102,8 @@ async function patchHandler(
     } = body;
 
     if (typeof contentJson === "string") return NextResponse.json({ error: "Article content must be a document object, not a serialized string." }, { status: 400 });
+    const referenceError = metadata === undefined ? null : validateMetadataReferences(metadata);
+    if (referenceError) return NextResponse.json({ error: referenceError }, { status: 400 });
 
     let previousMetadata: Record<string, unknown> = {};
     try { previousMetadata = JSON.parse(existing.metadata || "{}") || {}; } catch {}

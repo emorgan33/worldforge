@@ -22,6 +22,7 @@ import { ArticleQuickFacts } from "@/components/article/ArticleQuickFacts";
 import { CharacterSheet } from "@/components/article/CharacterSheet";
 import { isCharacterSystem, readerCharacterRows } from "@/lib/character-sheet";
 import { getArticleTemplate } from "@/lib/templates";
+import { projectReaderMetadata } from "@/lib/metadata-references";
 import { BookOpen, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import type { ArticleTemplateType } from "@/types";
@@ -100,10 +101,13 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
 
   const system = typeof rawMetadata.rulesSystem === "string" ? rawMetadata.rulesSystem : world.system;
   const definition = getArticleTemplate(article.template as ArticleTemplateType, system);
-  const metadata: Record<string, unknown> = Object.fromEntries(
-    definition.fields.filter(f => typeof rawMetadata[f.key] === "string").map(f => [f.key, rawMetadata[f.key]])
+  const metadata = projectReaderMetadata(
+    rawMetadata,
+    definition,
+    system,
+    new Set(worldArticles.map(candidate => candidate.id)),
+    new Set(blocks.filter(block => block.system === system).map(block => block.id)),
   );
-  metadata.rulesSystem = system;
   if (article.template === "CHARACTER") Object.assign(metadata, readerCharacterRows(system, rawMetadata));
 
   const references = documentReferences(doc, "articleLink", "articleId");

@@ -6,6 +6,7 @@ import { articleStatblockKey, articleBlockCategory } from "./article-template-co
 import { getArticleTemplate } from "./templates";
 import type { ArticleTemplateType } from "@/types";
 import { readerCharacterRows } from "./character-sheet";
+import { projectReaderMetadata } from "./metadata-references";
 import { articleImageAssetIds } from "./asset-references";
 import { readerCreditsForAssets } from "./stock-credits";
 
@@ -36,13 +37,22 @@ export async function publicArticle(worldSlug: string, articleSlug: string) {
   let rawMetadata: Record<string, unknown> = {}; try { const value = JSON.parse(article.metadata || "{}"); if (value && typeof value === "object" && !Array.isArray(value)) rawMetadata = value; } catch {}
   const system = typeof rawMetadata.rulesSystem === "string" ? rawMetadata.rulesSystem : world.system;
   const definition = getArticleTemplate(article.template as ArticleTemplateType, system);
-  const metadata: Record<string, unknown> = Object.fromEntries(definition.fields.filter(field => typeof rawMetadata[field.key] === "string").map(field => [field.key, rawMetadata[field.key]]));
-  metadata.rulesSystem = system;
-  if (article.template === "CHARACTER") Object.assign(metadata, readerCharacterRows(system, rawMetadata));
+  // Public metadata can reference only blocks already surfaced by this article's
+  // public document or its validated article-level statblock link.
+  const publicBlockIds = documentReferences(doc, "campaignStatblock", "blockId");
   const linkedId = rawMetadata[articleStatblockKey(system)];
   const linked = blocks.find(block => block.id === linkedId && block.system === system && block.category === articleBlockCategory(article.template));
+  if (linked) publicBlockIds.add(linked.id);
+  const metadata = projectReaderMetadata(
+    rawMetadata,
+    definition,
+    system,
+    new Set(world.articles.map(candidate => candidate.id)),
+    publicBlockIds,
+  );
+  if (article.template === "CHARACTER") Object.assign(metadata, readerCharacterRows(system, rawMetadata));
   if (linked) metadata[articleStatblockKey(system)] = linked.id;
-  const usedBlocks = documentReferences(doc, "campaignStatblock", "blockId"); if (linked) usedBlocks.add(linked.id);
+  const usedBlocks = publicBlockIds;
   const ownCover = publicImage(article.coverImage, world.assetIds);
   const coverImage = ownCover || world.bannerImage;
   const coverImageAlt = ownCover ? article.coverImageAlt : world.bannerImageAlt;

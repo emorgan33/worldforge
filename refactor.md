@@ -309,7 +309,7 @@ Effort is relative: **Small** is a bounded change; **Medium** spans several rela
 | R06 Establish article save preconditions | P1 | Medium | Medium | R01 | **Complete** |
 | R07 Unify revision restore and clone lifecycles | P1 | High | Medium | R06 | **Complete** |
 | R08 Repair imported publication compatibility | P1 | Low | Small | R01 | **Complete** |
-| R09 Define metadata reference contracts | P1 | High | Medium | R08 | Not started |
+| R09 Define metadata reference contracts | P1 | High | Medium | R08 | **Complete** |
 | R10 Extract transfer format adapters | P2 | Medium | Medium | R08, R09 | Not started |
 | R11 Close backup fidelity and capacity gaps | P1 | High | Large | R10 | Not started |
 | R12 Make world import retryable | P1 | High | Large | R10 | Not started |
@@ -501,6 +501,10 @@ Validation used dedicated temporary SQLite databases and asset directories, matc
 **Validation and acceptance:** Denied references do not expose private IDs or labels to readers. Allowed references survive. Encounter participants and session-preparation relationships resolve to imported records after roundtrip.
 
 **Rollback:** Keep the serialized metadata representation compatible. Roll back UI changes without discarding stored fields.
+
+**Implementation (2026-10-24):** Added a shared metadata reference registry and helpers for reader projection and transfer remapping. Encounter participant fields are statblock references; linked location/plot/session and previous/next plot fields are single article references; report/plot relationship lists are newline-separated article references. Public and campaign reader projections keep only active-template fields and remove IDs outside their existing readable article/statblock sets. Both v1 and v2/v3 imports remap these references, clear unavailable targets with warnings, and retain unknown author extensions; the serialized metadata shape is unchanged. Added helper, public-reader, campaign-reader and v2 roundtrip regressions. Validation passed: metadata helper tests **4/4**; template compatibility tests **9/9**; world export/import roundtrip tests **6/6**; public/campaign HTTP tests **11/11** against an isolated temporary database and server; TypeScript; focused ESLint (zero errors); and `git diff --check`. The roundtrip suite emitted its expected Prisma uniqueness error while asserting that a failed provenance write leaves no usable image row.
+
+**Follow-up findings and validation (2026-10-24):** Review reproduced three gaps in the first pass: public Encounter pages allowed every same-system block ID, non-D&D/PF statblock key prefixes were not classified, and API writes accepted structured values in known reference fields. Public allowlisting now uses blocks explicitly surfaced by the public article (or its validated linked statblock); COC, FATE and CUSTOM statblock keys are classified; and create/update validate reference value types while remapping clears malformed known values. Added regressions for those exact cases. Follow-up validation passed: metadata/template tests **14/14**; v2/v3 roundtrip tests **6/6**; public, campaign and article-save HTTP tests **13/13** against isolated temporary storage; TypeScript; focused ESLint (zero errors); and `git diff --check`. The user validated R09 on 2026-10-24; R09 is complete.
 
 ### R10 — Extract versioned transfer adapters behind the existing interface
 

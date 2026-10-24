@@ -236,6 +236,53 @@ test("shared articles reveal embedded assets and statblocks only after their own
   assert.equal((await playerFetch(`${origin}/api/articles/${article.id}`)).status, 404);
 });
 
+test("player article metadata removes references to unreadable articles and statblocks", { skip: !origin }, async context => {
+  const db = new PrismaClient();
+  const stamp = Date.now();
+  const owner = await db.user.create({ data: { name: "Metadata GM", email: `metadata-gm-${stamp}@example.invalid` } });
+  const player = await db.user.create({ data: { name: "Metadata player", email: `metadata-player-${stamp}@example.invalid` } });
+  const world = await db.world.create({ data: { ownerId: owner.id, title: "Metadata", slug: `metadata-${stamp}` } });
+  context.after(async () => {
+    await db.world.delete({ where: { id: world.id } });
+    await db.user.deleteMany({ where: { id: { in: [owner.id, player.id] } } });
+    await db.$disconnect();
+  });
+
+  const readableArticle = await db.article.create({ data: { worldId: world.id, title: "Readable target", slug: `metadata-readable-${stamp}`, publicationStatus: "PUBLISHED", visibility: "PRIVATE" } });
+  const hiddenArticle = await db.article.create({ data: { worldId: world.id, title: "Hidden target", slug: `metadata-hidden-${stamp}`, publicationStatus: "PUBLISHED", visibility: "PRIVATE" } });
+  const readableBlock = await db.rpgBlock.create({ data: { worldId: world.id, name: "Readable block", system: "DND_5E", category: "MONSTER", statsJson: "{}" } });
+  const hiddenBlock = await db.rpgBlock.create({ data: { worldId: world.id, name: "Hidden block", system: "DND_5E", category: "MONSTER", statsJson: "{}" } });
+  const article = await db.article.create({ data: {
+    worldId: world.id, title: "Encounter metadata", slug: `metadata-encounter-${stamp}`, template: "ENCOUNTER",
+    metadata: JSON.stringify({
+      dnd5eParticipant1: hiddenBlock.id,
+      dnd5eParticipant2: readableBlock.id,
+      linkedLocation: hiddenArticle.id,
+      linkedPlot: readableArticle.id,
+      linkedSession: hiddenArticle.id,
+      linkedEncounters: `${readableArticle.id}\n${hiddenArticle.id}`,
+      extension: "author-only-extension-sentinel",
+    }),
+  } });
+  const gmFetch = await authorFetch(db, owner.id, origin!);
+  const playerFetch = await authorFetch(db, player.id, origin!);
+  assert.equal((await gmFetch(`${origin}/api/worlds/${world.id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: player.id }) })).status, 200);
+  async function share(kind: string, id: string) {
+    const response = await gmFetch(`${origin}/api/resources/${kind}/${id}/audience`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "PLAYER_SNAPSHOT", userIds: [player.id] }) });
+    assert.equal(response.status, 200);
+  }
+  await share("articles", article.id);
+  await share("articles", readableArticle.id);
+  await share("statblocks", readableBlock.id);
+
+  const response = await playerFetch(`${origin}/c/${world.slug}/a/${article.slug}`);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert(html.includes(readableArticle.id));
+  assert(html.includes(readableBlock.id));
+  for (const hidden of [hiddenArticle.id, hiddenBlock.id, "author-only-extension-sentinel"]) assert(!html.includes(hidden), `reader output leaked ${hidden}`);
+});
+
 test("player access: revocation takes effect immediately", { skip: !origin }, async (context) => {
   const db = new PrismaClient();
   const stamp = Date.now();

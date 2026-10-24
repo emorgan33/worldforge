@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import type { WorldExport } from "@/app/api/worlds/[id]/export/route";
 import type { WorldExportV2 } from "@/lib/world-export";
 import { importWorldV2 } from "@/lib/world-export";
+import { remapArticleMetadata } from "@/lib/metadata-references";
 
 export interface ImportResult {
   success: boolean;
@@ -136,17 +137,18 @@ export const POST = withAuthor(async (request: Request) => {
     const appearance = remapUrls(v1Body.world.appearance);
     if (appearance !== v1Body.world.appearance) await prisma.world.update({ where: { id: newWorldId }, data: { appearance } });
 
-    const articleIdMap = new Map<string, string>();
+    const articleIdMap = new Map<string, string>((v1Body.articles || []).map(article => [article.id, randomUUID()]));
+    const statblockIdMap = new Map<string, string>((v1Body.statblocks || []).map(block => [block.id, randomUUID()]));
     let articlesImported = 0;
     for (const article of v1Body.articles || []) {
-      const newId = randomUUID();
-      articleIdMap.set(article.id, newId);
-      await prisma.article.create({ data: { id: newId, worldId: newWorldId, categoryId: remapCategoryId(article.categoryId), template: article.template || "GENERIC", title: article.title, slug: article.slug, excerpt: article.excerpt, contentHtml: remapUrls(article.contentHtml), contentJson: remapUrls(article.contentJson), metadata: remapUrls(article.metadata), tags: article.tags, publicationStatus: "DRAFT", visibility: "PRIVATE", coverImage: article.coverImage ? assetUrlMap.get(article.coverImage) ?? null : null } });
+      const newId = articleIdMap.get(article.id)!;
+      const metadata = remapArticleMetadata(article.metadata, articleIdMap, statblockIdMap, (key, sourceId, kind) => warnings.push(`Removed metadata ${kind} reference "${sourceId}" from ${key}`));
+      await prisma.article.create({ data: { id: newId, worldId: newWorldId, categoryId: remapCategoryId(article.categoryId), template: article.template || "GENERIC", title: article.title, slug: article.slug, excerpt: article.excerpt, contentHtml: remapUrls(article.contentHtml), contentJson: remapUrls(article.contentJson), metadata: remapUrls(metadata), tags: article.tags, publicationStatus: "DRAFT", visibility: "PRIVATE", coverImage: article.coverImage ? assetUrlMap.get(article.coverImage) ?? null : null } });
       articlesImported++;
     }
 
     let statblocksImported = 0;
-    for (const block of v1Body.statblocks || []) { await prisma.rpgBlock.create({ data: { id: randomUUID(), worldId: newWorldId, category: block.category, name: block.name, system: block.system, statsJson: block.statsJson } }); statblocksImported++; }
+    for (const block of v1Body.statblocks || []) { await prisma.rpgBlock.create({ data: { id: statblockIdMap.get(block.id)!, worldId: newWorldId, category: block.category, name: block.name, system: block.system, statsJson: block.statsJson } }); statblocksImported++; }
 
     let secretsImported = 0;
     for (const secret of v1Body.secrets || []) { await prisma.secret.create({ data: { id: randomUUID(), worldId: newWorldId, articleId: secret.articleId ? articleIdMap.get(secret.articleId) ?? null : null, title: secret.title, content: secret.content, isRevealed: false } }); secretsImported++; }
