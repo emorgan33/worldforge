@@ -639,22 +639,21 @@ export default function WorldForgeApp() {
   };
 
   const handleUpdateVariable = async (id: string, value: string) => {
-    if (!world) return;
+    if (!world) throw new Error("Choose a campaign first.");
     const writeWorldId = world.id;
     const epoch = loadEpoch.current;
-    try {
-      await fetch("/api/variables", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, value }),
-      });
-      // Refresh variable collections
-      const resVars = await fetch(`/api/variables?worldId=${writeWorldId}`);
-      if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
-      setCollections(await resVars.json());
-    } catch (e) {
-      console.error("Variable update error:", e);
-    }
+    const response = await fetch("/api/variables", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, value }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(typeof result?.error === "string" ? result.error : "Unable to save this variable. Please try again.");
+    if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
+    setCollections(previous => previous.map(collection => ({
+      ...collection,
+      variables: collection.variables.map(variable => variable.id === id ? { ...variable, value } : variable),
+    })));
   };
 
   // Secret reveal, map pins and rules-profile changes have no child-side busy

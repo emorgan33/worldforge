@@ -2,7 +2,7 @@
 
 Audit basis: repository revision `1be1903`.
 
-Status: audit complete; R01, R01a, R02, R03, R03a, R04 and R04a implementation and validation are complete. R05 is next. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
+Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a and R05 implementation and validation are complete. R06 is next. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
 
 ## 1. Executive summary
 
@@ -305,7 +305,7 @@ Effort is relative: **Small** is a bounded change; **Medium** spans several rela
 | R03a Repair public image reference authorization | P2 | Medium | Small | R03; before R04 | **Complete** |
 | R04 Repair asset parameter validation | P1 | Low | Small | R03 before enabling permanent deletion | **Complete** |
 | R04a Correct R04 reporting and strengthen regressions | P3 | Low | Small | R04; before R05 | **Complete** |
-| R05 Make variable rendering and writes safe | P1 | Medium | Medium | R01 | Not started |
+| R05 Make variable rendering and writes safe | P1 | Medium | Medium | R01 | **Complete** |
 | R06 Establish article save preconditions | P1 | Medium | Medium | R01 | Not started |
 | R07 Unify revision restore and clone lifecycles | P1 | High | Medium | R06 | Not started |
 | R08 Repair imported publication compatibility | P1 | Low | Small | R01 | Not started |
@@ -439,6 +439,14 @@ The asset API tests now codify the `404` response for a collection request witho
 **Changes and benefit:** Render scalar values through escaped text/attributes. Define an allowlisted rich-fragment policy instead of inserting arbitrary HTML. Reject failed mutation responses and retain edited values. Track outstanding saves by operation or counter rather than one row ID.
 
 **Validation and acceptance:** Imported HTML cannot introduce executable attributes or unsafe links. Intended formatting survives. Failed saves preserve edits and show an error. Two concurrent saves keep navigation blocked until both settle.
+
+**Implementation and validation (2026-10-24):** Completed R05. Scalar values, labels, descriptions and link attributes are escaped. Rich fragments are parsed with the existing `htmlparser2` dependency and rebuilt from a documented formatting/link allowlist; unsafe elements, attributes and destinations cannot enter the preview. The testbench source is plain text, while article interpolation expands only text-node macros and preserves surrounding markup and attributes. Stored/imported values remain intact. Variable create/update routes validate scalar fields and supported creation types. The workspace now rejects failed responses, propagates network errors and merges each committed row into its current-world collection state without a race-prone collection refetch. The editor retains failed edits with accessible row errors, preserves newer typing after a successful write, prevents overlapping saves of one row, and keeps navigation busy until all pending rows settle. Added [the variable macro contract](docs/variable-macros.md) and linked it from README.
+
+Validation used dedicated temporary SQLite databases/assets, matching server/test configuration and `WORLD_CREATION_TEST_DATABASE_URL`, with dev/build snapshots isolated from existing servers. The focused parser, HTTP and navigation checks passed **15/15 with no skips**. The full isolated `pnpm test` passed **244/245**, with only the production-auth smoke skipped in that run; the separate production-server checks passed **3/3** (authentication smoke plus both variable API tests). Headless Chrome exercised the mounted workspace with delayed/injected responses: HTTP 400/401/403/500 and network failures retained edits and showed errors, newer typing survived successful completion, two concurrent saves blocked navigation until both settled, both committed values survived leaving/returning, and hostile scalar/source/fragment markup remained inert while supported bold formatting survived. These interaction checks are browser validation evidence, not automated Node-suite coverage. TypeScript, production build and focused ESLint passed; repository lint had **zero errors and six existing warnings**. `git diff --check` passed. R05 is complete; R06 is next.
+
+**Review follow-ups (2026-10-24):** Corrected the roadmap status row to **Complete** and preserved the manual browser scenarios in `tests/browser/variables.spec.ts`, run by `pnpm test:browser` and the integration CI job. The suite uses isolated owner/world/session fixtures and explicitly held PATCH requests. It checks HTTP 400/401/403/500 and network errors with retry, preservation of newer edits and their discard guard, both concurrent-save completion orders, navigation after all saves settle, committed values after returning, and inert hostile markup with supported formatting. Navigation checks wait for React's passive guard update rather than assuming the row render and parent registration complete together. All **9/9 browser tests** passed against a separate source snapshot and fresh temporary SQLite/assets; **153/153 unit tests**, TypeScript, focused ESLint and `git diff --check` passed. Browser checks remain separate from the earlier Node-suite counts. The full suite and production build were not rerun for these test/documentation follow-ups.
+
+**CI hostname correction (2026-10-24):** Bound the integration dev server explicitly with `--hostname 127.0.0.1` to match its readiness probe, application origin and browser/HTTP test origins. Reproduced the default-host failure as HTTP **403** for `/_next/hmr` with the CI origin. With the explicit hostname, development assets returned **200** and all **9/9 browser tests** passed using Turbopack against a fresh isolated database/assets on a separate port, without adding `allowedDevOrigins`. No blocked-origin messages appeared in the corrected server log. `git diff --check` passed; the full suite and production build were not rerun for this workflow-only correction.
 
 **Rollback:** Retain the safe renderer. Revert presentation changes without reintroducing the raw DOM sink; stored values need not be rewritten.
 
@@ -605,7 +613,7 @@ The asset API tests now codify the `404` response for a collection request witho
 ### Recommended implementation order
 
 1. **Safety foundation complete:** R01, R01a and R02 are implemented and validated.
-2. **Focused correctness/security:** R03, its R03a public image authorization follow-up, R04 and R04a are complete; continue with R05–R08 and R15.
+2. **Focused correctness/security:** R03, its R03a public image authorization follow-up, R04, R04a and R05 are complete; continue with R06–R08 and R15.
 3. **Shared contracts and durable operations:** R09–R14.
 4. **Architectural extraction and measured optimization:** R16–R19.
 5. **Documentation throughout; optional cleanup last:** R20 and R21.
@@ -785,4 +793,4 @@ WorldForge's core technology and several existing safeguards should remain. The 
 
 The recommended sequence is to establish reliable tests, contain destructive cleanup, repair data and rendering contracts, centralize complete operations, and then simplify UI coordination and measured performance bottlenecks.
 
-That approach improves correctness, recovery and maintainability while keeping the application recognizable and deployable throughout. **R01, R01a, R02, R03, R03a, R04 and R04a are complete; R05 is next.**
+That approach improves correctness, recovery and maintainability while keeping the application recognizable and deployable throughout. **R01, R01a, R02, R03, R03a, R04, R04a and R05 are complete; R06 is next.**

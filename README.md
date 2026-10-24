@@ -57,7 +57,7 @@ Both views come from the optional Aethelgard demo seed and show the author works
 - **Interactive maps** — multiple maps per world with layers, pins linked to
   articles, labels, lines, circles, rectangles, freehand drawing and a
   paint-style eraser. See [interactive maps](docs/interactive-maps.md).
-- **Timelines and variable macros** (`[prefix:key]`).
+- **Timelines and [variable macros](docs/variable-macros.md)** (`[prefix:key]`).
 - **Public and campaign reader pages** with breadcrumbs, expandable category
   navigation, mobile browsing controls and search scoped to readable articles.
 - **Responsive campaign navigation** with a collapsible desktop sidebar and a

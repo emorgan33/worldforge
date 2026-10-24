@@ -33,8 +33,11 @@ async function postHandler(req: NextRequest) {
     const body = await req.json();
     const { collectionId, key, title, type = "TERM_SIMPLE", value, description } = body;
 
-    if (!collectionId || !key || value === undefined) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    if (typeof collectionId !== "string" || !collectionId || typeof key !== "string" || !key || typeof value !== "string" ||
+      (title !== undefined && title !== null && typeof title !== "string") ||
+      (description !== undefined && description !== null && typeof description !== "string") ||
+      !["TERM_SIMPLE", "TERM_ADVANCED", "RENDERED_FRAGMENT", "LINK", "NUMBER"].includes(type)) {
+      return NextResponse.json({ error: "Provide a collection ID, key, supported type and string value; title and description must be text or null." }, { status: 400 });
     }
 
     const variable = await prisma.variable.create({
@@ -60,8 +63,10 @@ async function patchHandler(req: NextRequest) {
     const body = await req.json();
     const { id, value, title, description } = body;
 
-    if (!id || value === undefined) {
-      return NextResponse.json({ error: "Missing id or value" }, { status: 400 });
+    if (typeof id !== "string" || !id || typeof value !== "string" ||
+      (title !== undefined && title !== null && typeof title !== "string") ||
+      (description !== undefined && description !== null && typeof description !== "string")) {
+      return NextResponse.json({ error: "Provide a variable ID and string value; title and description must be text or null." }, { status: 400 });
     }
 
     const updated = await prisma.variable.update({

@@ -59,6 +59,21 @@ pnpm test:http       # HTTP suites; requires the dev server below
 pnpm test            # all three groups
 ```
 
+Browser interaction tests run separately with Playwright against that same
+isolated dev server. In terminal 2, keep the database and asset environment
+variables from the setup below, then run:
+
+```bash
+pnpm exec playwright install chromium  # once per Playwright browser version
+WORLDFORGE_TEST_ORIGIN=http://127.0.0.1:3131 pnpm test:browser
+```
+
+The browser configuration rejects missing or non-isolated storage settings.
+Each test creates and removes its own owner, world, variables and session.
+CI installs Chromium and runs these checks after the HTTP suites. Failure
+traces are written to `test-results/` and can be opened with
+`pnpm exec playwright show-trace <path-to-trace.zip>`.
+
 Test files run serially. This matters because the integration suites share a
 SQLite database with the dev server; parallel processes can race on the
 rollback journal and produce spurious `disk I/O error` failures.
@@ -79,17 +94,19 @@ export WORLD_CREATION_TEST_DATABASE_URL="$DATABASE_URL"
 export WORLDFORGE_ASSET_DIR="$TEST_ROOT/assets"
 mkdir -p "$WORLDFORGE_ASSET_DIR"
 pnpm db:deploy
-WORLDFORGE_ORIGIN=http://localhost:3131 pnpm exec next dev --port 3131
+WORLDFORGE_ORIGIN=http://127.0.0.1:3131 pnpm exec next dev --hostname 127.0.0.1 --port 3131
 
 # terminal 2 — paste the TEST_ROOT path printed in terminal 1
 export TEST_ROOT="<paste-the-printed-test-root>"
 export DATABASE_URL="file:$TEST_ROOT/test.db?connection_limit=1"
 export WORLD_CREATION_TEST_DATABASE_URL="$DATABASE_URL"
 export WORLDFORGE_ASSET_DIR="$TEST_ROOT/assets"
-WORLDFORGE_TEST_ORIGIN=http://localhost:3131 pnpm test
+WORLDFORGE_TEST_ORIGIN=http://127.0.0.1:3131 pnpm test
 ```
 
 Use the exact `TEST_ROOT` value printed in terminal 1 in both terminals.
+Keep the explicit server hostname and both origins aligned as shown above so
+development assets and browser tests use the same host as CI.
 Absolute SQLite paths avoid different resolution between Prisma CLI and
 generated-client test processes.
 Never point tests at real data or run `pnpm db:seed` for the test workflow.
@@ -112,6 +129,7 @@ pnpm build
 pnpm test:unit
 pnpm test:service
 pnpm test:http   # start the dev server first
+pnpm test:browser # same isolated dev server and storage as test:http
 # CI also runs pnpm test:production-auth against next start and isolated storage
 ```
 

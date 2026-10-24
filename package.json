@@ -12,6 +12,7 @@
     "test:unit": "node scripts/run-tests.mjs unit",
     "test:service": "node scripts/run-tests.mjs service",
     "test:http": "node scripts/run-tests.mjs http",
+    "test:browser": "playwright test",
     "test:production-auth": "node --import tsx --test --test-concurrency=1 tests/production-auth-smoke.test.ts",
     "auth:setup": "tsx scripts/auth-setup.ts",
     "db:generate": "prisma generate",
@@ -44,6 +45,7 @@
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@prisma/client": "6.19.3",
     "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/turbopack": "^4",
