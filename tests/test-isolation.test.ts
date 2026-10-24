@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readdirSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { assertIsolatedTestEnvironment } from "./auth-fixture";
@@ -24,6 +24,15 @@ test("rejected test configuration and origin-unset skips preserve database and a
   const assetDir = process.env.WORLDFORGE_ASSET_DIR!;
   mkdirSync(assetDir, { recursive: true });
   const token = randomUUID();
+  const sentinelFile = `${randomUUID()}.webp`;
+  const sentinelPath = `${assetDir}/${sentinelFile}`;
+  const sentinelBytes = Buffer.from("worldforge-isolation-asset-sentinel");
+  writeFileSync(sentinelPath, sentinelBytes, { flag: "wx" });
+  context.after(async () => { await import("node:fs/promises").then(fs => fs.unlink(sentinelPath).catch(() => undefined)); });
+  const assertSentinelBytes = () => assert.deepEqual(readFileSync(sentinelPath), sentinelBytes, "asset sentinel bytes must remain unchanged");
+  writeFileSync(sentinelPath, Buffer.from("controlled-overwrite"));
+  assert.throws(() => assertSentinelBytes());
+  writeFileSync(sentinelPath, sentinelBytes);
   const email = `isolation-sentinel-${token}@example.invalid`;
   const slug = `isolation-sentinel-${token}`;
   const user = await db.user.create({ data: { name: "Isolation sentinel", email } });
@@ -66,6 +75,7 @@ test("rejected test configuration and origin-unset skips preserve database and a
     assert.match(result.stdout + result.stderr, /Set WORLD_CREATION_TEST_DATABASE_URL/);
     assert.deepEqual(await tableCounts(), baselineCounts, `${suite} must not create or delete database rows`);
     assert.deepEqual(readdirSync(assetDir).sort(), baselineFiles, `${suite} must not change the asset directory`);
+    assertSentinelBytes();
     assert.ok(await db.user.findUnique({ where: { id: user.id } }), `${suite} must preserve the sentinel user`);
     assert.ok(await db.world.findUnique({ where: { id: world.id } }), `${suite} must preserve the sentinel world`);
   }
@@ -78,6 +88,7 @@ test("rejected test configuration and origin-unset skips preserve database and a
     assert.match(result.stdout, /# SKIP/);
     assert.deepEqual(await tableCounts(), baselineCounts, `${suite} must not write when its origin is unset`);
     assert.deepEqual(readdirSync(assetDir).sort(), baselineFiles, `${suite} must not touch assets when its origin is unset`);
+    assertSentinelBytes();
     assert.ok(await db.world.findUnique({ where: { id: world.id } }), `${suite} must preserve the sentinel world`);
   }
 });
