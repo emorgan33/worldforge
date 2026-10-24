@@ -68,7 +68,7 @@ export function ArticleEditorForm({
   const [excerpt, setExcerpt] = useState(initialArticle?.excerpt || "");
   const [tags, setTags] = useState(initialArticle?.tags || "");
   const [state, setState] = useState<PublicationStatus>(initialArticle?.publicationStatus || (initialArticle?.state === "PRIVATE" ? "PUBLISHED" : initialArticle?.state) || "DRAFT");
-  const [visibility, setVisibility] = useState<ArticleVisibility>(initialArticle?.visibility || "PRIVATE");
+  const [visibility, setVisibility] = useState<ArticleVisibility>(initialArticle?.visibility === "PUBLIC" ? "PUBLIC" : "PRIVATE");
   const [canonState, setCanonState] = useState(initialArticle?.canonState || "GM_DRAFT");
   const [contentHtml, setContentHtml] = useState(initialArticle?.contentHtml || "");
 

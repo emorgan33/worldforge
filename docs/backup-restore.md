@@ -111,7 +111,11 @@ It uses format 3, the complete owner backup (see below).
 5. Review import warnings (if any)
 6. Confirm import
 
-**Note:** Imported worlds are always set to private by default. Articles are imported as drafts.
+**Note:** Imported worlds are always private, and imported articles are drafts with
+owner-only visibility. An imported article can be made public later by changing
+its visibility and publication status in the editor. Older records with the
+legacy `INHERITED` visibility value are treated as private when saved; no data
+migration is required.
 
 ## Verification
 

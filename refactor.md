@@ -2,7 +2,7 @@
 
 Audit basis: repository revision `1be1903`.
 
-Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a, R05, R06 and R07 are complete. R08 is next. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
+Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a, R05, R06, R07 and R08 are complete. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
 
 ## 1. Executive summary
 
@@ -308,7 +308,7 @@ Effort is relative: **Small** is a bounded change; **Medium** spans several rela
 | R05 Make variable rendering and writes safe | P1 | Medium | Medium | R01 | **Complete** |
 | R06 Establish article save preconditions | P1 | Medium | Medium | R01 | **Complete** |
 | R07 Unify revision restore and clone lifecycles | P1 | High | Medium | R06 | **Complete** |
-| R08 Repair imported publication compatibility | P1 | Low | Small | R01 | Not started |
+| R08 Repair imported publication compatibility | P1 | Low | Small | R01 | **Complete** |
 | R09 Define metadata reference contracts | P1 | High | Medium | R08 | Not started |
 | R10 Extract transfer format adapters | P2 | Medium | Medium | R08, R09 | Not started |
 | R11 Close backup fidelity and capacity gaps | P1 | High | Large | R10 | Not started |
@@ -489,6 +489,8 @@ Validation used dedicated temporary SQLite databases and asset directories, matc
 **Validation and acceptance:** Import v1/v2/v3 fixtures, open each article in the actual editor, make an unrelated edit and save. The world stays private; imported access remains inactive; metadata and prose survive.
 
 **Rollback:** Valid `PRIVATE` values remain compatible. Do not restore invalid values during rollback; back up before a data repair.
+
+**Implementation and validation (2026-10-24):** Both the v1 API importer and the v2/v3 importer create articles as `DRAFT`/`PRIVATE`; imported revision snapshots normalize unsupported visibility to `PRIVATE`. `publicationFields()` treats existing legacy `INHERITED` visibility as `PRIVATE` when an update omits visibility, while continuing to reject explicitly submitted invalid visibility. The editor also initializes persisted visibility other than `PUBLIC` as `PRIVATE`, avoiding a render-time exception. This requires no migration and cannot grant public access. The backup/restore guide documents the behavior. Validation passed using isolated temporary databases, assets and servers: publication and round-trip checks **10/10**; import/export and revision HTTP checks **19/19**; fresh v1/v2/v3 import editing and saving in the browser; and the legacy `INHERITED` browser regression **1/1**, which verifies the editor displays Private and saves an unrelated title edit while preserving private visibility. TypeScript, focused ESLint (zero errors; one existing hook dependency warning) and `git diff --check` passed.
 
 ### R09 — Define shared metadata reference semantics
 
@@ -803,4 +805,4 @@ WorldForge's core technology and several existing safeguards should remain. The 
 
 The recommended sequence is to establish reliable tests, contain destructive cleanup, repair data and rendering contracts, centralize complete operations, and then simplify UI coordination and measured performance bottlenecks.
 
-That approach improves correctness, recovery and maintainability while keeping the application recognizable and deployable throughout. **R01, R01a, R02, R03, R03a, R04, R04a, R05, R06 and R07 are complete; R08 is next.**
+That approach improves correctness, recovery and maintainability while keeping the application recognizable and deployable throughout. **R01, R01a, R02, R03, R03a, R04, R04a, R05, R06, R07 and R08 are complete.**

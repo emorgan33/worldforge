@@ -126,6 +126,8 @@ test("v2 roundtrip remaps map content and session entity links, and warns on mis
   assert.equal(await db.audienceGrant.count({ where: { policy: { worldId: restored.worldId } } }), 0);
   assert.equal((await db.accessAuditEvent.findFirstOrThrow({ where: { worldId: restored.worldId, action: "test.foreign" } })).actorId, null);
   const importedArticle = await db.article.findFirstOrThrow({ where: { worldId: restored.worldId, slug: article.slug } });
+  assert.equal(importedArticle.publicationStatus, "DRAFT");
+  assert.equal(importedArticle.visibility, "PRIVATE");
   const importedChild = await db.article.findFirstOrThrow({ where: { worldId: restored.worldId, slug: childArticle.slug } });
   const importedParent = await db.article.findFirstOrThrow({ where: { worldId: restored.worldId, slug: parentArticle.slug } });
   assert.equal(importedParent.sidebarJson, JSON.stringify({ summary: "Quick fact retained" }));

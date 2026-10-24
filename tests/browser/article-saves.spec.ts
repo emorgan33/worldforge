@@ -36,6 +36,18 @@ const test = base.extend<{ article: { page: Page; db: PrismaClient; ownerId: str
   },
 });
 
+test("legacy inherited visibility opens in the editor as private and saves unrelated edits", async ({ article }) => {
+  const { page, open, db, id } = article;
+  await db.article.update({ where: { id }, data: { visibility: "INHERITED" } });
+  await open(page);
+  await expect(page.getByRole("combobox", { name: "Article visibility" })).toHaveValue("PRIVATE");
+  await title(page).fill("Updated legacy lore");
+  await expect(page.getByRole("main").getByRole("status")).toHaveText("All changes saved");
+  const saved = await db.article.findUniqueOrThrow({ where: { id } });
+  expect(saved.title).toBe("Updated legacy lore");
+  expect(saved.visibility).toBe("PRIVATE");
+});
+
 test("two editors cannot overwrite each other; conflicts keep recovery and can save a copy", async ({ article, context }) => {
   const { page, open, db, id, worldId, keyFor } = article;
   const second = await context.newPage();

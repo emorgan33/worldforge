@@ -157,6 +157,9 @@ test("world import creates new world with remapped IDs", { skip: !origin }, asyn
   assert.ok(importedWorld);
   assert.equal(importedWorld.title, `Export World ${stamp}`);
   assert.equal(importedWorld.isPublic, false);
+  const importedArticles = await db.article.findMany({ where: { worldId: importResult.worldId } });
+  assert.ok(importedArticles.length > 0);
+  assert.ok(importedArticles.every(article => article.publicationStatus === "DRAFT" && article.visibility === "PRIVATE"));
   
   // Verify category was imported with remapped ID
   const categories = await db.category.findMany({ where: { worldId: importResult.worldId } });

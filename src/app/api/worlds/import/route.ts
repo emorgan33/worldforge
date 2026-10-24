@@ -141,7 +141,7 @@ export const POST = withAuthor(async (request: Request) => {
     for (const article of v1Body.articles || []) {
       const newId = randomUUID();
       articleIdMap.set(article.id, newId);
-      await prisma.article.create({ data: { id: newId, worldId: newWorldId, categoryId: remapCategoryId(article.categoryId), template: article.template || "GENERIC", title: article.title, slug: article.slug, excerpt: article.excerpt, contentHtml: remapUrls(article.contentHtml), contentJson: remapUrls(article.contentJson), metadata: remapUrls(article.metadata), tags: article.tags, publicationStatus: "DRAFT", visibility: "INHERITED", coverImage: article.coverImage ? assetUrlMap.get(article.coverImage) ?? null : null } });
+      await prisma.article.create({ data: { id: newId, worldId: newWorldId, categoryId: remapCategoryId(article.categoryId), template: article.template || "GENERIC", title: article.title, slug: article.slug, excerpt: article.excerpt, contentHtml: remapUrls(article.contentHtml), contentJson: remapUrls(article.contentJson), metadata: remapUrls(article.metadata), tags: article.tags, publicationStatus: "DRAFT", visibility: "PRIVATE", coverImage: article.coverImage ? assetUrlMap.get(article.coverImage) ?? null : null } });
       articlesImported++;
     }
 
