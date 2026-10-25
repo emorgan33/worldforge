@@ -50,10 +50,16 @@ Every resource has an audience policy with one of three modes:
 
 - `GET /api/worlds/[id]/audit` - View audit events (owner only)
 
+Membership revocation and its snapshot-grant and preview-session revocations commit with their audit event as one database transaction. Audience policy and grant changes, preview issue/revocation, and session “next” reassignment also commit atomically with their related writes. If one write fails, the transaction leaves the operation unapplied. Rejoining a world restores membership only; revoked snapshot grants remain revoked unless the owner explicitly grants access again.
+
+Audit events are appended by the application and are not updated or deleted by its normal API. This is an application-level append-only convention; the database does not provide tamper-evident history or protection from direct database edits.
+
 ### Preview sessions
 
 - `POST /api/worlds/[id]/preview` - Issue a preview session (owner only, 15-min expiry)
 - `DELETE /api/worlds/[id]/preview` - Revoke a preview session (owner only)
+
+Preview creation or revocation and its audit event are committed together. Revoking a member also revokes that member’s outstanding preview sessions in the same transaction.
 
 ### Data model
 
@@ -63,6 +69,8 @@ Every resource has an audience policy with one of three modes:
 - **AccessAuditEvent**: immutable actor/action/before/after/parent fields
 - **PreviewSession**: token hash, user, world, expiry, revocation
 - **CampaignSession**: planned/played dates, recap, typed entity links
+
+Setting a campaign session as “next” clears the previous selection and selects the requested session in one transaction, so a committed update does not leave a partial reassignment.
 
 ### Compatibility
 
@@ -86,5 +94,7 @@ With Next.js streaming, an inaccessible public page can return the framework's s
 A consistent pre-change SQLite backup is at `/tmp/worldforge-before-publishing-20261015.sqlite`. Prisma adds password/session/setup/rate-limit tables and separate article publication/visibility fields. Existing status values are backfilled, all existing article visibility stays Private, and existing world public flags were reset to false for deliberate re-publication through the new controls. SQLite WAL journaling is enabled to keep concurrent session reads and authoring writes from racing over rollback-journal files. Use SQLite-aware backups (or include its WAL in a consistent snapshot); do not copy only a live database file. No content or ownership is reassigned. Other existing installations must run `pnpm exec prisma db push`, `pnpm exec prisma generate`, and apply `prisma/publication-backfill.sql` once before enabling public routes. The SQL deliberately closes public access; do not rerun it after deliberate publication.
 
 Tests cover status/visibility combinations, GM subtree removal, HTML safety, private-reference redaction, password hashing, authenticated owner boundaries, setup-token replay, CSRF origin checks, session expiry/logout, public-reader payloads and image grants/revocation. Existing API integration tests now use isolated owner sessions. Chromium verifies first setup, password sign-in, owner authoring, publication, Share URLs, public navigation/backlinks, absence of private/GM content, WIP/world revocation and logout.
+
+`tests/access-operations-api.test.tsx` injects database write failures across membership, grant, preview, audience-policy and session reassignment operations. It checks transactional rollback, confirms rejoining does not revive revoked grants or previews, and exercises concurrent “next session” updates.
 
 Production verification passed: all 41 tests (including owner isolation across each resource, authentication lifecycle, API regression checks and public payload/image filtering), TypeScript, focused ESLint and the production build. Chromium passed setup, login, publication, Share URLs, reader navigation, private/GM redaction, WIP/world revocation and logout on port 3033. Fixtures were removed afterward. The viewer retains two pre-existing Next.js image lint warnings; the build completes without the previous prerender-catch logs.

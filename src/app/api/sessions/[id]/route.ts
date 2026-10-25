@@ -36,15 +36,6 @@ async function patchHandler(
 ) {
   try {
     const { id } = await params;
-    const existing = await prisma.campaignSession.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-
-    if (!existing) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 });
-    }
-
     const body = await req.json();
     const { title, description, sessionDate, inWorldDate, currentLocation, status, recap, nextPrep, isNext } = body;
 
@@ -57,30 +48,20 @@ async function patchHandler(
     if (status !== undefined) data.status = status;
     if (recap !== undefined) data.recap = recap;
     if (nextPrep !== undefined) data.nextPrep = nextPrep;
-    if (isNext !== undefined) {
-      // Only one session can be "next" at a time
+    const result = await prisma.$transaction(async tx => {
+      const existing = await tx.campaignSession.findUnique({ where: { id }, select: { id: true, worldId: true } });
+      if (!existing) return null;
       if (isNext === true) {
-        const session = await prisma.campaignSession.findUnique({
-          where: { id },
-          select: { worldId: true },
+        // Clear the old selection and set this one in the same transaction.
+        await tx.campaignSession.updateMany({
+          where: { worldId: existing.worldId, isNext: true }, data: { isNext: false },
         });
-        if (session) {
-          await prisma.campaignSession.updateMany({
-            where: { worldId: session.worldId, isNext: true },
-            data: { isNext: false },
-          });
-        }
       }
-      data.isNext = isNext;
-    }
-
-    const updated = await prisma.campaignSession.update({
-      where: { id },
-      data,
-      include: sessionInclude,
+      if (isNext !== undefined) data.isNext = isNext;
+      return tx.campaignSession.update({ where: { id }, data, include: sessionInclude });
     });
-
-    return NextResponse.json(updated);
+    if (!result) return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    return NextResponse.json(result);
   } catch (error: unknown) {
     console.error("Failed to update session:", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process request." }, { status: 500 });

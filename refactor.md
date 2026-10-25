@@ -2,7 +2,7 @@
 
 Audit basis: repository revision `1be1903`.
 
-Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a, R05, R06, R07, R08, R09, R10 and R13 are complete. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
+Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a, R05, R06, R07, R08, R09, R10, R13 and R14 are complete. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
 
 ## 1. Executive summary
 
@@ -314,7 +314,7 @@ Effort is relative: **Small** is a bounded change; **Medium** spans several rela
 | R11 Close backup fidelity and capacity gaps | P1 | High | Large | R10 | **Complete** |
 | R12 Make world import retryable | P1 | High | Large | R10 | **Complete** |
 | R13 Consolidate identity and authorization | P1 | High | Large | R01, production baseline | **Complete** |
-| R14 Make access/session operations atomic | P1 | High | Medium | R13 | Not started |
+| R14 Make access/session operations atomic | P1 | High | Medium | R13 | **Complete** |
 | R15 Establish cartography lifecycle contracts | P1 | Medium | Medium | R01 | Not started |
 | R16 Extract workspace feature controllers | P2 | High | Large | R05–R07, R13, R15 | Not started |
 | R17 Bound search and reader work | P2 | Medium | Medium | R09, R13 | Not started |
@@ -567,6 +567,12 @@ Validation used dedicated temporary SQLite databases and asset directories, matc
 **Validation and acceptance:** Inject failure after each constituent write. The operation either fully commits or leaves state unchanged. Rejoining cannot revive revoked snapshot grants. Concurrent session changes leave one defined next session.
 
 **Rollback:** Revert operation code without changing access modes. Retain audit history; never fabricate missing historical events.
+
+**Implementation (2026-10-24):** Membership add/revocation, preview issue/revocation, audience policy creation/replacement/removal and retroactive grants now write their audit event in the same Prisma transaction as the state changes. Member revocation updates snapshot grants and outstanding preview sessions atomically; rejoining changes membership status only and does not reactivate grants. Audience selection validates active membership within its write transaction. Campaign session “next” reassignment clears the prior selection and sets the target in one transaction. `recordAuditEvent` accepts the transaction client so callers can compose it with their operation. Removed `verifyAuditImmutability()`, which always returned true and provided no verification. Updated [publishing and permissions](docs/publishing-and-permissions.md) to describe the transaction guarantees and the application-level, non-tamper-evident scope of the audit trail.
+
+**Regression coverage:** Added `tests/access-operations-api.test.tsx`. SQLite triggers inject failures at 31 write points across membership changes, policy creation/replacement/revocation, preview issue/revocation, audience API changes, and next-session reassignment. The suite verifies unchanged state after each injected failure, ensures rejoining leaves grants and previews revoked, and sends 20 concurrent reassignment pairs while checking that every request succeeds and exactly one session remains selected.
+
+**Validation (2026-10-24):** The focused isolated suite passed **6/6 tests, 0 skipped**, including all 31 failure injections and 40 concurrent session updates. TypeScript, focused ESLint and `git diff --check` passed. The full suite and production build were not rerun. The user independently verified 15 existing access/auth/invitation tests without skips.
 
 ### R15 — Own cartography validation and draft identity in one module
 

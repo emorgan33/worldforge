@@ -23,19 +23,26 @@ function routeHandlers(kind: ShareableKind) {
   const mode = body?.mode;
   if (!["GM_ONLY", "PLAYER_SNAPSHOT", "PUBLIC"].includes(mode) || !Array.isArray(body?.userIds) || body.userIds.length > 1000 || body.userIds.some((value: unknown) => typeof value !== "string")) return NextResponse.json({ error: "Choose a valid audience and members." }, { status: 400 });
   const userIds = mode === "PLAYER_SNAPSHOT" ? [...new Set(body.userIds as string[])] : [];
-  const activeCount = await prisma.worldMember.count({ where: { worldId, userId: { in: userIds }, status: "ACTIVE" } });
-  if (activeCount !== userIds.length) return NextResponse.json({ error: "Selected players must be active members of this world." }, { status: 400 });
-  await prisma.$transaction(async tx => {
+  const invalidMembers = await prisma.$transaction(async tx => {
+    const activeCount = await tx.worldMember.count({ where: { worldId, userId: { in: userIds }, status: "ACTIVE" } });
+    if (activeCount !== userIds.length) return true;
     const policy = await tx.audiencePolicy.upsert({ where: { resourceKind_resourceId: { resourceKind: kind, resourceId: id } }, create: { worldId, resourceKind: kind, resourceId: id, mode, createdById: actor.id }, update: { mode } });
     await tx.audienceGrant.deleteMany({ where: { policyId: policy.id } });
     if (userIds.length) await tx.audienceGrant.createMany({ data: userIds.map(userId => ({ policyId: policy.id, userId, grantedById: actor.id })) });
+    await recordAuditEvent({ worldId, resourceKind: kind, resourceId: id, action: "set_policy", actorId: actor.id, afterJson: JSON.stringify({ mode, userIds }) }, tx);
+    return false;
   });
-  await recordAuditEvent({ worldId, resourceKind: kind, resourceId: id, action: "set_policy", actorId: actor.id, afterJson: JSON.stringify({ mode, userIds }) });
+  if (invalidMembers) return NextResponse.json({ error: "Selected players must be active members of this world." }, { status: 400 });
   return NextResponse.json({ success: true, mode, userIds });
     }),
 
-    DELETE: withAuthorResource(kind, async (_request: NextRequest, _context, { worldId, resourceId: id }) => {
-  await prisma.audiencePolicy.deleteMany({ where: { resourceKind: kind, resourceId: id, worldId } });
+    DELETE: withAuthorResource(kind, async (_request: NextRequest, _context, { worldId, resourceId: id, user: actor }) => {
+  await prisma.$transaction(async tx => {
+    const policy = await tx.audiencePolicy.findUnique({ where: { resourceKind_resourceId: { resourceKind: kind, resourceId: id } }, select: { id: true, mode: true, worldId: true } });
+    if (!policy || policy.worldId !== worldId) return;
+    await tx.audiencePolicy.delete({ where: { id: policy.id } });
+    await recordAuditEvent({ worldId, resourceKind: kind, resourceId: id, action: "revoke_policy", actorId: actor.id, beforeJson: JSON.stringify({ mode: policy.mode }) }, tx);
+  });
   return NextResponse.json({ success: true });
     }),
   };
