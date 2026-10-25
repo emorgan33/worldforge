@@ -45,6 +45,43 @@ test("asset upload creates ImageAsset and writes file", { skip: !origin }, async
   assert.equal(res.status, 400);
 });
 
+test("oversized asset uploads are rejected by the bounded form reader", { skip: !origin }, async () => {
+  const boundary = "worldforge-oversized-upload";
+  const prefix = `--${boundary}\r\nContent-Disposition: form-data; name="worldId"\r\n\r\n${world.id}\r\n--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="oversized.png"\r\nContent-Type: image/png\r\n\r\n`;
+  let finishBody!: () => void;
+  let bodyFinished = false;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(prefix));
+      controller.enqueue(new Uint8Array(11 * 1024 * 1024));
+      finishBody = () => {
+        bodyFinished = true;
+        try { controller.close(); } catch { /* The server may already have cancelled the stream. */ }
+      };
+    },
+  });
+  const fetchAsAuthor = await authenticatedAuthorFetch(db, user.id, origin);
+  const responsePromise = fetchAsAuthor(`${origin}/api/assets`, {
+    method: "POST",
+    headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+    body,
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const response = await Promise.race([
+      responsePromise,
+      new Promise<never>((_resolve, reject) => { timeout = setTimeout(() => reject(new Error("Oversized upload response waited for the request body to finish.")), 5000); }),
+    ]);
+    assert.equal(response.status, 413);
+    assert.equal(bodyFinished, false, "413 should arrive while the upload body is still open");
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    finishBody();
+    await responsePromise.catch(() => {});
+  }
+});
+
 test("unknown requests return 405", { skip: !origin }, async () => {
   const res = await authorFetch(user.id, origin, "/api/assets", { method: "DELETE" });
   assert.equal(res.status, 405);

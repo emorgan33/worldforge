@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withAuthor, sessionUser } from "@/lib/auth";
+import { withAuthor } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { validateAppearance } from "@/lib/world-appearance";
 import type { WorldAppearance } from "@/lib/world-appearance";
@@ -16,9 +16,9 @@ const WORLD_PROJECTION = {
   _count: { select: { articles: true, maps: true, timelines: true, secrets: true, variableCollections: true } },
 } as const;
 
-async function getHandler() {
+async function getHandler(_request: Request, _context: unknown, { user }: { user: { id: string } }) {
   try {
-    const worlds = await prisma.world.findMany({ where: { ownerId: (await sessionUser())!.id, deletedAt: null }, select: WORLD_PROJECTION, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+    const worlds = await prisma.world.findMany({ where: { ownerId: user.id, deletedAt: null }, select: WORLD_PROJECTION, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
     return NextResponse.json(worlds);
   } catch (error) {
     console.error("Failed to fetch worlds:", error);
@@ -26,7 +26,7 @@ async function getHandler() {
   }
 }
 
-async function postHandler(request: Request) {
+async function postHandler(request: Request, _context: unknown, { user }: { user: { id: string } }) {
   const length = Number(request.headers.get("content-length") || 0);
   if (length > 64 * 1024) return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
   let raw: string;
@@ -52,7 +52,7 @@ async function postHandler(request: Request) {
   const payload = normalizeWorldCreation(body);
   if (!payload) return NextResponse.json({ error: "Provide a title, supported system and valid request ID; description must be up to 10,000 characters." }, { status: 400 });
   try {
-    const ownerId = (await sessionUser())!.id;
+    const ownerId = user.id;
     const result = await createWorld(ownerId, payload);
     if (result.conflict) return NextResponse.json({ error: "This request ID was already used for different world details." }, { status: 409 });
     const world = await prisma.world.findUnique({ where: { id: result.world.id }, select: WORLD_PROJECTION });
@@ -105,6 +105,6 @@ async function patchHandler(request: Request) {
   }
 }
 
-export const GET = withAuthor(getHandler);
-export const POST = withAuthor(postHandler);
-export const PATCH = withAuthor(patchHandler);
+export const GET = withAuthor({ target: "account" }, getHandler);
+export const POST = withAuthor({ target: "account" }, postHandler);
+export const PATCH = withAuthor({ target: "world-body", field: "id" }, patchHandler);

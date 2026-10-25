@@ -1,6 +1,6 @@
 import { isArticleVersion, type ArticleConflictResponse } from "@/lib/article-save";
 import { publicationFields } from "@/lib/publication";
-import { withAuthor, sessionUser } from "@/lib/auth";
+import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { syncArticleMentions } from "@/lib/article-mention-index";
 import { assertDocumentImageReferences, assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
@@ -61,12 +61,11 @@ async function getHandler(
 
 async function patchHandler(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  { user }: { user: { id: string } },
 ) {
   try {
     const { id } = await params;
-    const user = await sessionUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     
     const body = await req.json();
 
@@ -249,6 +248,6 @@ async function deleteHandler(
   }
 }
 
-export const GET = withAuthor(getHandler);
-export const PATCH = withAuthor(patchHandler);
-export const DELETE = withAuthor(deleteHandler);
+export const GET = withAuthor({ target: "resource-param", kind: "articles" }, getHandler);
+export const PATCH = withAuthor({ target: "resource-param", kind: "articles" }, patchHandler);
+export const DELETE = withAuthor({ target: "resource-param", kind: "articles" }, deleteHandler);

@@ -1,36 +1,19 @@
 import { cookies } from "next/headers";
 import { prisma } from "./db";
-import { SESSION_COOKIE } from "./auth-constants";
 import { tokenHash } from "./passwords";
-import type { Actor, ResourceRef } from "./access-types";
-
-// ---------------------------------------------------------------------------
-// Error type
-// ---------------------------------------------------------------------------
-export class AccessError extends Error {
-  constructor(message: string, public status: number = 404) {
-    super(message);
-    this.name = "AccessError";
-  }
-}
+import type { Actor, ResourceKind, ResourceRef } from "./access-types";
+import { AccessError, sessionUser } from "./authorization-core";
+export { AccessError, resolveResourceWorld, sameOrigin } from "./authorization-core";
 
 // ---------------------------------------------------------------------------
 // Session-based actor resolution (reliable pattern from original auth.ts)
 // ---------------------------------------------------------------------------
-async function sessionUserFromToken(token: string) {
-  const session = await prisma.authSession.findUnique({
-    where: { tokenHash: tokenHash(token) },
-    select: { expiresAt: true, user: { select: { id: true, email: true, name: true } } },
-  });
-  return session && session.expiresAt > new Date() ? session.user : null;
-}
-
 export async function resolveActor(): Promise<Actor> {
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
-
+  const [identity, previewToken] = await Promise.all([
+    sessionUser(),
+    cookies().then(jar => jar.get("wf_preview")?.value),
+  ]);
   // Check preview token cookie
-  const previewToken = jar.get("wf_preview")?.value;
   if (previewToken) {
     const preview = await prisma.previewSession.findUnique({
       where: { tokenHash: tokenHash(previewToken) },
@@ -40,28 +23,14 @@ export async function resolveActor(): Promise<Actor> {
       return {
         kind: "PREVIEW",
         userId: preview.userId,
-        realUserId: token ? (await sessionUserFromToken(token))?.id ?? undefined : undefined,
+        realUserId: identity?.id,
         previewWorldId: preview.worldId,
       };
     }
   }
 
-  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return { kind: "ANONYMOUS", userId: null };
-  const user = await sessionUserFromToken(token);
-  if (!user) return { kind: "ANONYMOUS", userId: null };
-  return { kind: "OWNER_GM", userId: user.id };
-}
-
-// Legacy sessionUser for backward compatibility
-export async function sessionUser() {
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
-  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
-  const session = await prisma.authSession.findUnique({
-    where: { tokenHash: tokenHash(token) },
-    select: { expiresAt: true, user: { select: { id: true, email: true, name: true } } },
-  });
-  return session && session.expiresAt > new Date() ? session.user : null;
+  if (!identity) return { kind: "ANONYMOUS", userId: null };
+  return { kind: "OWNER_GM", userId: identity.id };
 }
 
 // ---------------------------------------------------------------------------
@@ -81,29 +50,6 @@ export async function requireWorldManage(worldId: string, actor?: Actor): Promis
 // ---------------------------------------------------------------------------
 // Resource-to-world lookup
 // ---------------------------------------------------------------------------
-export async function resolveResourceWorld(kind: string, id: string): Promise<string | null> {
-  switch (kind) {
-    case "articles":
-      return (await prisma.article.findUnique({ where: { id }, select: { worldId: true } }))?.worldId ?? null;
-    case "statblocks":
-      return (await prisma.rpgBlock.findUnique({ where: { id }, select: { worldId: true } }))?.worldId ?? null;
-    case "secrets":
-      return (await prisma.secret.findUnique({ where: { id }, select: { worldId: true } }))?.worldId ?? null;
-    case "maps":
-      return (await prisma.map.findUnique({ where: { id }, select: { worldId: true } }))?.worldId ?? null;
-    case "collection":
-      return (await prisma.variableCollection.findUnique({ where: { id }, select: { worldId: true } }))?.worldId ?? null;
-    case "variable":
-      return (await prisma.variable.findUnique({ where: { id }, select: { collection: { select: { worldId: true } } } }))?.collection.worldId ?? null;
-    case "assets":
-      return (await prisma.imageAsset.findUnique({ where: { id }, select: { worldId: true } }))?.worldId ?? null;
-    case "campaign_sessions":
-      return (await prisma.campaignSession.findUnique({ where: { id }, select: { worldId: true } }))?.worldId ?? null;
-    default:
-      return null;
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Reader access check
 // ---------------------------------------------------------------------------
@@ -161,7 +107,7 @@ export async function requireReadableResource(ref: ResourceRef, actor?: Actor): 
 // ---------------------------------------------------------------------------
 // Prisma WHERE builder for list queries
 // ---------------------------------------------------------------------------
-export async function readableWhere(worldId: string, kind: string, actor?: Actor): Promise<{ where: Record<string, unknown> }> {
+export async function readableWhere(worldId: string, kind: ResourceKind, actor?: Actor): Promise<{ where: Record<string, unknown> }> {
   const resolved = actor ?? (await resolveActor());
   if (resolved.kind === "ANONYMOUS") {
     return { where: { worldId, publicationStatus: "PUBLISHED", visibility: "PUBLIC", world: { isPublic: true, deletedAt: null } } };
@@ -204,14 +150,6 @@ export function notFoundResponse(body?: unknown): Response {
 // ---------------------------------------------------------------------------
 // Same-origin check
 // ---------------------------------------------------------------------------
-export function sameOrigin(request: Request): void {
-  const url = new URL(request.url);
-  const expected = process.env.WORLDFORGE_ORIGIN || `${url.protocol}//${request.headers.get("host") || url.host}`;
-  if (request.headers.get("origin") !== expected) {
-    throw new AccessError("This request must come from this site.", 403);
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Existence predicate for efficient query-level pre-filtering
 // ---------------------------------------------------------------------------
@@ -226,7 +164,7 @@ export function readableExists(_actor: Actor): Record<string, unknown> {
 export async function canReadEntity(
   actor: Actor | null | undefined,
   worldId: string,
-  kind: string,
+  kind: ResourceKind,
   entityId: string
 ): Promise<boolean> {
   if (!actor || !actor.userId) {

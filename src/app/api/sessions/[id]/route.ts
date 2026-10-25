@@ -110,6 +110,6 @@ async function deleteHandler(
   }
 }
 
-export const GET = withAuthor(getHandler);
-export const PATCH = withAuthor(patchHandler);
-export const DELETE = withAuthor(deleteHandler);
+export const GET = withAuthor({ target: "resource-param", kind: "sessions" }, getHandler);
+export const PATCH = withAuthor({ target: "resource-param", kind: "sessions" }, patchHandler);
+export const DELETE = withAuthor({ target: "resource-param", kind: "sessions" }, deleteHandler);

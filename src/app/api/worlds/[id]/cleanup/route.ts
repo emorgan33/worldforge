@@ -16,7 +16,7 @@ export interface CleanupResult {
  * is disabled here because files share a directory across worlds and this
  * route cannot establish ownership of unregistered files.
  */
-export const DELETE = withAuthor(async (_request: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withAuthor({ target: "world-param" }, async (_request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   const errors: string[] = [];
   const orphanedFiles: string[] = [];
   const deletedAssets: string[] = [];
@@ -31,8 +31,7 @@ export const DELETE = withAuthor(async (_request: Request, { params }: { params:
 
     if (!world) return NextResponse.json({ error: "World not found" }, { status: 404 });
 
-    const user = await import("@/lib/auth").then(m => m.sessionUser());
-    if (user?.id !== world.ownerId) throw new AccessError("You do not have access to this world", 403);
+    if (user.id !== world.ownerId) throw new AccessError("You do not have access to this world", 403);
 
     return NextResponse.json({
       success: errors.length === 0,

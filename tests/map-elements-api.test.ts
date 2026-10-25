@@ -30,6 +30,12 @@ test("map elements validate, persist, update, delete and stay owner-scoped", { s
   assert.equal(mapResponse.status, 201);
   const map = await mapResponse.json();
 
+  const markerResponse = await send(owned, "/api/maps", {
+    action: "createMarker", mapId: map.id, title: "Fallback pin", x: 25, y: 40,
+  });
+  assert.equal(markerResponse.status, 201);
+  assert.equal((await markerResponse.json()).mapId, map.id);
+
   const layerResponse = await send(owned, "/api/maps", { action: "createLayer", worldId: world.id, mapId: map.id, name: "Ink" });
   assert.equal(layerResponse.status, 201);
   const layer = await layerResponse.json();

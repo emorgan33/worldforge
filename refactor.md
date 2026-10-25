@@ -2,7 +2,7 @@
 
 Audit basis: repository revision `1be1903`.
 
-Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a, R05, R06, R07, R08, R09 and R10 are complete. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
+Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a, R05, R06, R07, R08, R09, R10 and R13 are complete. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
 
 ## 1. Executive summary
 
@@ -313,7 +313,7 @@ Effort is relative: **Small** is a bounded change; **Medium** spans several rela
 | R10 Extract transfer format adapters | P2 | Medium | Medium | R08, R09 | Complete |
 | R11 Close backup fidelity and capacity gaps | P1 | High | Large | R10 | **Complete** |
 | R12 Make world import retryable | P1 | High | Large | R10 | **Complete** |
-| R13 Consolidate identity and authorization | P1 | High | Large | R01, production baseline | Not started |
+| R13 Consolidate identity and authorization | P1 | High | Large | R01, production baseline | **Complete** |
 | R14 Make access/session operations atomic | P1 | High | Medium | R13 | Not started |
 | R15 Establish cartography lifecycle contracts | P1 | Medium | Medium | R01 | Not started |
 | R16 Extract workspace feature controllers | P2 | High | Large | R05–R07, R13, R15 | Not started |
@@ -553,6 +553,10 @@ Validation used dedicated temporary SQLite databases and asset directories, matc
 **Validation and acceptance:** Preserve owner, foreign-owner, PLAYER, anonymous, expired-session, archived-world and preview-world outcomes. Test conflicting path/body/query identifiers and Origin checks. Production authentication smoke must pass.
 
 **Rollback:** Migrate one route family per commit. Avoid maintaining two independent policy implementations indefinitely; temporary adapters should delegate to one authority.
+
+**Implementation status (2026-10-24):** Added `authorization-core.ts` as the shared source for session identity, `AccessError`, same-origin enforcement, and typed resource-to-world lookup. Author authorization and campaign actor resolution delegate to those primitives. The resolver covers article/statblock/asset/secret/map resources, nested map annotations, variables and campaign sessions; unknown kinds fail closed. Every protected author API route now declares its authorization target. The wrapper passes the signed-in user and resolved world/resource context to handlers, and the migrated handlers no longer resolve the session again. Upload authorization consumes the bounded image form parser and passes its parsed form to the handler, so authorization does not buffer an unbounded clone. Map action authorization resolves map ownership from `mapId`, retaining marker creation's supported `worldId` fallback while rejecting conflicting identifiers. Audience routes use the same wrapper with an explicit resource-kind allowlist. Public invitation and player-reader APIs retain their dedicated access rules. Removed the path/body inference authorization implementation. Updated [publishing and permissions](docs/publishing-and-permissions.md) with the route declarations and actor flow.
+
+**Validation:** `pnpm exec tsc --noEmit --incremental false`, focused ESLint and `git diff --check` passed. The full isolated HTTP suite passed 81/81 with no skips. Coverage includes owner/foreign-owner and player behavior, anonymous publication, expired sessions, archived-world lifecycle, audience policy, identifier conflicts, Origin rejection, and preview-world confinement. The production build passed, and `pnpm test:production-auth` passed 1/1 against the isolated production server and database.
 
 ### R14 — Commit access/session invariants and audit together
 

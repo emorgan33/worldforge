@@ -25,7 +25,7 @@ export interface DeletionResult {
  * Permanently deletes an asset and its file.
  * Requires that the asset is not actively referenced in any content.
  */
-export const DELETE = withAuthor(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withAuthor({ target: "resource-param", kind: "assets" }, async (request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   try {
     const { id } = await params;
 
@@ -42,8 +42,7 @@ export const DELETE = withAuthor(async (request: Request, { params }: { params: 
       return NextResponse.json({ error: "Image not found" }, { status: 404 });
     }
 
-    const user = await import("@/lib/auth").then(m => m.sessionUser());
-    if (user?.id !== asset.world.ownerId) {
+    if (user.id !== asset.world.ownerId) {
       throw new AccessError("You do not have access to this image", 403);
     }
 

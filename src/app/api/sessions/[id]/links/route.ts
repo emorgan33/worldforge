@@ -2,7 +2,7 @@ import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-export const GET = withAuthor(async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withAuthor({ target: "resource-param", kind: "sessions" }, async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id: sessionId } = await params;
   const links = await prisma.sessionEntityLink.findMany({
     where: { sessionId },
@@ -11,7 +11,7 @@ export const GET = withAuthor(async (request: NextRequest, { params }: { params:
   return NextResponse.json(links);
 });
 
-export const POST = withAuthor(async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const POST = withAuthor({ target: "resource-param", kind: "sessions" }, async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id: sessionId } = await params;
 
   const session = await prisma.campaignSession.findUnique({
@@ -72,7 +72,7 @@ export const POST = withAuthor(async (request: NextRequest, { params }: { params
   return NextResponse.json(link, { status: 201 });
 });
 
-export const DELETE = withAuthor(async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withAuthor({ target: "resource-param", kind: "sessions" }, async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id: sessionId } = await params;
   const url = new URL(request.url);
   const linkId = url.searchParams.get("linkId");

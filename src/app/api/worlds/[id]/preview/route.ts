@@ -4,15 +4,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { issuePreviewSession, revokePreviewSession } from "@/lib/membership";
 import { tokenHash } from "@/lib/passwords";
 
-export const POST = withAuthor(async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const POST = withAuthor({ target: "world-param" }, async (request: NextRequest, { params }: { params: Promise<{ id: string }> }, { user }) => {
   const { id: worldId } = await params;
   const body = await request.json();
   const { userId } = body;
   if (!userId || typeof userId !== "string") {
     return NextResponse.json({ error: "userId is required" }, { status: 400 });
   }
-  const actor = await import("@/lib/auth").then(m => m.sessionUser());
-  const result = await issuePreviewSession(worldId, userId, actor!.id);
+  const result = await issuePreviewSession(worldId, userId, user.id);
   // Set the preview token as a cookie for the preview middleware
   const jar = await cookies();
   jar.set("wf_preview", result.token, {
@@ -25,13 +24,12 @@ export const POST = withAuthor(async (request: NextRequest, { params }: { params
   return NextResponse.json(result);
 });
 
-export const DELETE = withAuthor(async (request: NextRequest) => {
+export const DELETE = withAuthor({ target: "world-param" }, async (request: NextRequest, _context, { user }) => {
   const body = await request.json();
   const { token } = body;
   if (!token || typeof token !== "string") {
     return NextResponse.json({ error: "token is required" }, { status: 400 });
   }
-  const actor = await import("@/lib/auth").then(m => m.sessionUser());
-  await revokePreviewSession(tokenHash(token), actor!.id);
+  await revokePreviewSession(tokenHash(token), user.id);
   return NextResponse.json({ success: true });
 });

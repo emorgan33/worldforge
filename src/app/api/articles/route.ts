@@ -1,5 +1,5 @@
 import { publicationFields } from "@/lib/publication";
-import { withAuthor, sessionUser } from "@/lib/auth";
+import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { syncArticleMentions } from "@/lib/article-mention-index";
@@ -49,11 +49,8 @@ async function getHandler(req: NextRequest) {
   }
 }
 
-async function postHandler(req: NextRequest) {
+async function postHandler(req: NextRequest, _context: unknown, { user }: { user: { id: string } }) {
   try {
-    const user = await sessionUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    
     const body = await req.json();
     const {
       worldId,
@@ -163,5 +160,5 @@ async function postHandler(req: NextRequest) {
   }
 }
 
-export const GET = withAuthor(getHandler);
-export const POST = withAuthor(postHandler);
+export const GET = withAuthor({ target: "world-query", field: "worldId" }, getHandler);
+export const POST = withAuthor({ target: "world-body", field: "worldId" }, postHandler);

@@ -25,7 +25,7 @@ export interface AssetUsage {
  * backgrounds, category illustrations, and article covers/portraits/bodies.
  * Requires ownership of the world containing the asset.
  */
-export const GET = withAuthor(async (_request: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withAuthor({ target: "resource-param", kind: "assets" }, async (_request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   try {
     const { id } = await params;
 
@@ -42,8 +42,7 @@ export const GET = withAuthor(async (_request: Request, { params }: { params: Pr
       return NextResponse.json({ error: "Image not found" }, { status: 404 });
     }
 
-    const user = await import("@/lib/auth").then(m => m.sessionUser());
-    if (user?.id !== asset.world.ownerId) {
+    if (user.id !== asset.world.ownerId) {
       throw new AccessError("You do not have access to this image", 403);
     }
 

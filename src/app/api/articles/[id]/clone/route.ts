@@ -6,11 +6,9 @@ import { randomUUID } from "node:crypto";
 import { assertDocumentImageReferences, assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
 import { syncArticleMentions } from "@/lib/article-mention-index";
 
-export const POST = withAuthor(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const POST = withAuthor({ target: "resource-param", kind: "articles" }, async (request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   try {
     const { id } = await params;
-    const user = await import("@/lib/auth").then(m => m.sessionUser());
-    if (!user) throw new AccessError("Sign in first", 401);
 
     const source = await prisma.article.findUnique({
       where: { id },

@@ -8,7 +8,7 @@ import { isAssetId } from "@/lib/assets";
  * DELETE /api/assets/[id]
  * Archives an asset (soft delete). Use /api/assets/[id]/permanent for hard delete.
  */
-export const DELETE = withAuthor(async (_request: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withAuthor({ target: "resource-param", kind: "assets" }, async (_request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   try {
     const { id } = await params;
     
@@ -25,8 +25,7 @@ export const DELETE = withAuthor(async (_request: Request, { params }: { params:
       return NextResponse.json({ error: "Image not found" }, { status: 404 });
     }
 
-    const user = await import("@/lib/auth").then(m => m.sessionUser());
-    if (user?.id !== asset.world.ownerId) {
+    if (user.id !== asset.world.ownerId) {
       throw new AccessError("You do not have access to this image", 403);
     }
 

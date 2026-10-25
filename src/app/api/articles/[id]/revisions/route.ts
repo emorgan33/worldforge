@@ -1,4 +1,4 @@
-import { withAuthor, sessionUser } from "@/lib/auth";
+import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { syncArticleMentions } from "@/lib/article-mention-index";
@@ -8,14 +8,13 @@ class ArticleRestoreConflict extends Error {}
 
 async function getHandler(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  { user }: { user: { id: string } },
 ) {
   try {
     const { id } = await params;
     
     // Verify user owns this article
-    const user = await sessionUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     
     const article = await prisma.article.findUnique({
       where: { id },
@@ -68,12 +67,11 @@ async function getHandler(
 
 async function postHandler(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  { user }: { user: { id: string } },
 ) {
   try {
     const { id } = await params;
-    const user = await sessionUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     
     const body = await req.json();
     const { revisionId } = body;
@@ -162,5 +160,5 @@ async function postHandler(
   }
 }
 
-export const GET = withAuthor(getHandler);
-export const POST = withAuthor(postHandler);
+export const GET = withAuthor({ target: "resource-param", kind: "articles" }, getHandler);
+export const POST = withAuthor({ target: "resource-param", kind: "articles" }, postHandler);

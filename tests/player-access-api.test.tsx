@@ -398,3 +398,75 @@ test("player access: public reader behavior preserved", { skip: !origin }, async
   assert.equal(body.error, "Sign in to access your workspace.");
   assert(!JSON.stringify(body).includes("PRIVATE_SENTINEL"));
 });
+
+test("explicit author declarations bind access to their declared identifier and reject cross-origin writes", { skip: !origin }, async context => {
+  const db = new PrismaClient();
+  const stamp = Date.now();
+  const owner = await db.user.create({ data: { name: "Declaration owner", email: `declaration-owner-${stamp}@example.invalid` } });
+  const otherOwner = await db.user.create({ data: { name: "Declaration other", email: `declaration-other-${stamp}@example.invalid` } });
+  const ownWorld = await db.world.create({ data: { ownerId: owner.id, title: "Owned declaration world", slug: `decl-own-${stamp}` } });
+  const foreignWorld = await db.world.create({ data: { ownerId: otherOwner.id, title: "Foreign declaration world", slug: `decl-foreign-${stamp}` } });
+  const ownArticle = await db.article.create({ data: { worldId: ownWorld.id, slug: `own-${stamp}`, title: "Own article" } });
+  const foreignArticle = await db.article.create({ data: { worldId: foreignWorld.id, slug: `foreign-${stamp}`, title: "Foreign article" } });
+  context.after(async () => {
+    await db.world.deleteMany({ where: { id: { in: [ownWorld.id, foreignWorld.id] } } });
+    await db.user.deleteMany({ where: { id: { in: [owner.id, otherOwner.id] } } });
+    await db.$disconnect();
+  });
+
+  const owned = await authorFetch(db, owner.id, origin!);
+  const foreignQuery = await owned(`${origin}/api/articles?worldId=${foreignWorld.id}`);
+  assert.equal(foreignQuery.status, 404, "query declarations must authorize the requested world");
+
+  const pathWins = await owned(`${origin}/api/articles/${ownArticle.id}?worldId=${foreignWorld.id}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Path owned article" }),
+  });
+  assert.equal(pathWins.status, 200, "a resource path declaration authorizes the path resource");
+  assert.equal((await db.article.findUniqueOrThrow({ where: { id: ownArticle.id } })).title, "Path owned article");
+  assert.equal((await db.article.findUniqueOrThrow({ where: { id: foreignArticle.id } })).title, "Foreign article");
+
+  const bodyConflict = await owned(`${origin}/api/worlds?worldId=${ownWorld.id}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: foreignWorld.id, title: "Takeover", description: "No", coverImage: "", bannerImage: "" }),
+  });
+  assert.equal(bodyConflict.status, 404, "a body declaration must reject a foreign body ID");
+  const crossOrigin = await owned(`${origin}/api/articles/${ownArticle.id}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json", Origin: "https://foreign.invalid" },
+    body: JSON.stringify({ title: "Cross-origin takeover" }),
+  });
+  assert.equal(crossOrigin.status, 403);
+});
+
+test("preview sessions resolve one shared actor and stay confined to the declared world", { skip: !origin }, async context => {
+  const db = new PrismaClient();
+  const stamp = Date.now();
+  const owner = await db.user.create({ data: { name: "Preview owner", email: `preview-owner-${stamp}@example.invalid` } });
+  const player = await db.user.create({ data: { name: "Preview player", email: `preview-player-${stamp}@example.invalid` } });
+  const world = await db.world.create({ data: { ownerId: owner.id, title: "Preview world", slug: `preview-${stamp}` } });
+  const foreignWorld = await db.world.create({ data: { ownerId: owner.id, title: "Outside preview world", slug: `outside-preview-${stamp}` } });
+  const article = await db.article.create({ data: { worldId: world.id, slug: `preview-article-${stamp}`, title: "Preview-only shared article", publicationStatus: "PUBLISHED", visibility: "PRIVATE" } });
+  await db.worldMember.create({ data: { worldId: world.id, userId: player.id } });
+  await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "articles", resourceId: article.id, mode: "PUBLIC", createdById: owner.id } });
+  context.after(async () => {
+    await db.accessAuditEvent.deleteMany({ where: { worldId: world.id } });
+    await db.world.deleteMany({ where: { id: { in: [world.id, foreignWorld.id] } } });
+    await db.user.deleteMany({ where: { id: { in: [owner.id, player.id] } } });
+    await db.$disconnect();
+  });
+
+  const gmFetch = await authorFetch(db, owner.id, origin!);
+  const issued = await gmFetch(`${origin}/api/worlds/${world.id}/preview`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: player.id }),
+  });
+  assert.equal(issued.status, 200);
+  const { token } = await issued.json();
+  assert.equal(typeof token, "string");
+
+  const previewCookie = { Cookie: `wf_preview=${token}` };
+  const previewArticle = await fetch(`${origin}/c/${world.slug}/a/${article.slug}`, { headers: previewCookie });
+  assert.equal(previewArticle.status, 200);
+  assert((await previewArticle.text()).includes(article.title));
+  const outsidePreview = await fetch(`${origin}/c/${foreignWorld.slug}`, { headers: previewCookie });
+  const outsideBody = await outsidePreview.text();
+  assert(!outsideBody.includes(foreignWorld.title));
+});

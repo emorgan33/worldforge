@@ -24,4 +24,4 @@ async function getHandler(request: NextRequest) {
   }
 }
 
-export const GET = withAuthor(getHandler);
+export const GET = withAuthor({ target: "world-query", field: "worldId" }, getHandler);

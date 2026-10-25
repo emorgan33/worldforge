@@ -82,6 +82,6 @@ async function patchHandler(req: NextRequest) {
   }
 }
 
-export const GET = withAuthor(getHandler);
-export const POST = withAuthor(postHandler);
-export const PATCH = withAuthor(patchHandler);
+export const GET = withAuthor({ target: "world-query", field: "worldId" }, getHandler);
+export const POST = withAuthor({ target: "world-body", field: "worldId" }, postHandler);
+export const PATCH = withAuthor({ target: "resource-body", kind: "secrets", field: "id" }, patchHandler);

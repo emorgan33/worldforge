@@ -13,10 +13,16 @@ export interface Actor {
   previewWorldId?: string;
 }
 
+/** Resource families with an explicit world-ownership lookup. */
+export type ResourceKind =
+  | "articles" | "statblocks" | "secrets" | "maps" | "assets"
+  | "map-layers" | "map-markers" | "map-elements"
+  | "collection" | "variable" | "sessions" | "campaign_sessions";
+
 /** A typed reference to a world-scoped resource. */
 export interface ResourceRef {
   worldId: string;
-  kind: string; // e.g. "articles", "statblocks", "maps"
+  kind: ResourceKind;
   id: string;
 }
 

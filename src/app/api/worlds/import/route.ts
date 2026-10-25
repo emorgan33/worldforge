@@ -1,4 +1,4 @@
-import { withAuthor, sessionUser } from "@/lib/auth";
+import { withAuthor } from "@/lib/auth";
 import { AccessError } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { importWorldTransfer } from "@/lib/world-transfer-execution";
@@ -18,14 +18,13 @@ function hashPayload(body: unknown) {
   return createHash("sha256").update(JSON.stringify(stable(body))).digest("hex");
 }
 
-export const POST = withAuthor(async (request: Request) => {
+export const POST = withAuthor({ target: "account" }, async (request: Request, _context, { user }) => {
   let activeRecordId: string | undefined;
+  const ownerId = user.id;
   let leaseTimer: ReturnType<typeof setInterval> | undefined;
   let executionSucceeded = false;
   let recoveryAttempt = false;
   try {
-    const user = await sessionUser();
-    if (!user) throw new AccessError("You must be signed in", 401);
     const suppliedKey = requestKey(request);
     if (request.headers.has("Idempotency-Key") && !suppliedKey) return NextResponse.json({ error: "Idempotency-Key must be a UUID." }, { status: 400 });
     const key = suppliedKey ?? randomUUID();
@@ -34,16 +33,16 @@ export const POST = withAuthor(async (request: Request) => {
     try { body = await readWorldTransferJson(request); } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid JSON file" }, { status: 400 }); }
     const payloadJson = JSON.stringify(body);
     const payloadHash = hashPayload(body);
-    let record = await prisma.worldTransferImport.findUnique({ where: { ownerId_requestKey: { ownerId: user.id, requestKey: key } } });
+    let record = await prisma.worldTransferImport.findUnique({ where: { ownerId_requestKey: { ownerId, requestKey: key } } });
     if (record && record.payloadHash !== payloadHash) return NextResponse.json({ error: "This idempotency key was already used for different import content." }, { status: 409 });
     if (record?.status === "COMPLETED" && record.resultJson) return NextResponse.json(JSON.parse(record.resultJson));
     if (record && activeImports.has(record.id)) return NextResponse.json({ error: "This import request is still running. Check its status shortly." }, { status: 409, headers: { "Retry-After": "2" } });
     let recovering = false;
     if (!record) {
       try {
-        record = await prisma.worldTransferImport.create({ data: { id: randomUUID(), ownerId: user.id, requestKey: key, payloadHash, payloadJson, status: "PENDING" } });
+        record = await prisma.worldTransferImport.create({ data: { id: randomUUID(), ownerId, requestKey: key, payloadHash, payloadJson, status: "PENDING" } });
       } catch {
-        record = await prisma.worldTransferImport.findUnique({ where: { ownerId_requestKey: { ownerId: user.id, requestKey: key } } });
+        record = await prisma.worldTransferImport.findUnique({ where: { ownerId_requestKey: { ownerId, requestKey: key } } });
       }
     }
     if (!record) throw new Error("Could not establish durable import request");
@@ -70,7 +69,7 @@ export const POST = withAuthor(async (request: Request) => {
     activeRecordId = record.id;
     const runningStatus = recovering ? "RECOVERING" : "RUNNING";
     leaseTimer = setInterval(() => { void prisma.worldTransferImport.update({ where: { id: record!.id }, data: { status: runningStatus } }).catch(() => {}); }, 30_000);
-    const result = await importWorldTransfer(body, user.id, { requestId: record.id, recover: !!recovering });
+    const result = await importWorldTransfer(body, ownerId, { requestId: record.id, recover: !!recovering });
     if (!result.success) {
       clearInterval(leaseTimer);
       await prisma.worldTransferImport.update({ where: { id: record.id }, data: { status: "FAILED", error: result.error } });
@@ -94,10 +93,9 @@ export const POST = withAuthor(async (request: Request) => {
       }).catch(() => {});
       activeImports.delete(activeRecordId);
     }
-    const user = await sessionUser().catch(() => null);
     const key = requestKey(request);
-    if (user && key) {
-      const record = await prisma.worldTransferImport.findUnique({ where: { ownerId_requestKey: { ownerId: user.id, requestKey: key } } }).catch(() => null);
+    if (key) {
+      const record = await prisma.worldTransferImport.findUnique({ where: { ownerId_requestKey: { ownerId, requestKey: key } } }).catch(() => null);
       if (record) activeImports.delete(record.id);
     }
     if (error instanceof AccessError) return NextResponse.json({ error: error.message }, { status: error.status });
@@ -106,10 +104,8 @@ export const POST = withAuthor(async (request: Request) => {
   }
 });
 
-export const GET = withAuthor(async (request: Request) => {
+export const GET = withAuthor({ target: "account" }, async (request: Request, _context, { user }) => {
   try {
-    const user = await sessionUser();
-    if (!user) throw new AccessError("You must be signed in", 401);
     const key = requestKey(request);
     if (!key) return NextResponse.json({ error: "A valid Idempotency-Key UUID is required." }, { status: 400 });
     const record = await prisma.worldTransferImport.findUnique({ where: { ownerId_requestKey: { ownerId: user.id, requestKey: key } } });

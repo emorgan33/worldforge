@@ -1,4 +1,4 @@
-import { withAuthor, sessionUser } from "@/lib/auth";
+import { withAuthor } from "@/lib/auth";
 import { AccessError } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { exportWorldTransfer, WorldTransferExecutionError } from "@/lib/world-transfer-execution";
@@ -12,7 +12,7 @@ function failure(error: unknown) {
   return NextResponse.json({ error: "Failed to export world" }, { status: 500 });
 }
 
-export const GET = withAuthor(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withAuthor({ target: "world-param" }, async (request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   try {
     const { id } = await params;
     const url = new URL(request.url);
@@ -41,8 +41,6 @@ export const GET = withAuthor(async (request: Request, { params }: { params: Pro
       return NextResponse.json(data, { headers: { "Content-Disposition": `attachment; filename="${data.world.slug}-export-v2.json"`, "Accept-Version": "2" } });
     }
 
-    const user = await sessionUser();
-    if (!user) throw new AccessError("You must be signed in", 401);
     const data = await exportWorldTransfer(id, 1, user.id, { includeAssets: url.searchParams.get("includeAssets") !== "false", includePrivate: url.searchParams.get("includePrivate") !== "false" });
     return NextResponse.json(data, { headers: { "Content-Disposition": `attachment; filename="${data.world.slug}-export.json"` } });
   } catch (error) { return failure(error); }

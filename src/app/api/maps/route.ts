@@ -366,7 +366,7 @@ async function deleteHandler(req: NextRequest) {
   } catch (error) { return failure(error); }
 }
 
-export const GET = withAuthor(getHandler);
-export const POST = withAuthor(postHandler);
-export const PATCH = withAuthor(patchHandler);
-export const DELETE = withAuthor(deleteHandler);
+export const GET = withAuthor({ target: "world-query", field: "worldId" }, getHandler);
+export const POST = withAuthor({ target: "map-action-body", worldField: "worldId", mapField: "mapId" }, postHandler);
+export const PATCH = withAuthor({ target: "world-body", field: "worldId" }, patchHandler);
+export const DELETE = withAuthor({ target: "world-body", field: "worldId" }, deleteHandler);
