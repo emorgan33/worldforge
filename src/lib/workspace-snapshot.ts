@@ -1,4 +1,5 @@
 import { readWorkspaceJson } from "@/lib/workspace-client";
+import { fetchWorkspaceArticleList } from "@/lib/workspace-articles";
 
 export type WorldSnapshot = [
   unknown[],
@@ -15,7 +16,7 @@ const isArray = (value: unknown): value is unknown[] => Array.isArray(value);
 /** Fetch a world's seven workspace projections without committing partial data. */
 export async function fetchWorldSnapshot(worldId: string, signal: AbortSignal): Promise<WorldSnapshot> {
   const responses = await Promise.all([
-    fetch(`/api/articles?worldId=${worldId}`, { signal }).then(response => readWorkspaceJson(response, isArray, "Could not load articles.")),
+    fetchWorkspaceArticleList(worldId, { signal }),
     fetch(`/api/variables?worldId=${worldId}`, { signal }).then(response => readWorkspaceJson(response, isArray, "Could not load variables.")),
     fetch(`/api/maps?worldId=${worldId}`, { signal }).then(response => readWorkspaceJson(response, isArray, "Could not load maps.")),
     fetch(`/api/timelines?worldId=${worldId}`, { signal }).then(response => readWorkspaceJson(response, isArray, "Could not load timelines.")),

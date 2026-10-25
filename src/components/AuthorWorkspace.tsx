@@ -27,7 +27,7 @@ import { GmNotebook } from "@/components/campaign/GmNotebook";
 import { ShareResource } from "@/components/campaign/ShareResource";
 import { ArticleDetail, ArticleListItem, ArticleTemplateType, VariableCollectionItem } from "@/types";
 import { fetchWorldSnapshot } from "@/lib/workspace-snapshot";
-import { loadWorkspaceArticle, saveWorkspaceArticle } from "@/lib/workspace-articles";
+import { fetchWorkspaceArticleList, loadWorkspaceArticle, saveWorkspaceArticle } from "@/lib/workspace-articles";
 import { WorkspaceHistoryCoordinator } from "@/lib/workspace-history";
 import { saveWorkspaceMapMutation, saveWorkspaceVariable } from "@/lib/workspace-features";
 import { Globe, LogOut, Menu, Users, X } from "lucide-react";
@@ -628,9 +628,12 @@ export default function WorldForgeApp() {
     if (!world) return;
     const writeWorldId = world.id;
     const epoch = loadEpoch.current;
-    const [categoryResponse, articleResponse] = await Promise.all([fetch(`/api/categories?worldId=${writeWorldId}`), fetch(`/api/articles?worldId=${writeWorldId}`)]);
-    if (!categoryResponse.ok || !articleResponse.ok) throw new Error("Unable to reload the article tree. Please try again.");
-    const [categories, articleList] = await Promise.all([categoryResponse.json(), articleResponse.json()]);
+    const [categoryResponse, articleList] = await Promise.all([
+      fetch(`/api/categories?worldId=${writeWorldId}`),
+      fetchWorkspaceArticleList(writeWorldId),
+    ]);
+    if (!categoryResponse.ok) throw new Error("Unable to reload the article tree. Please try again.");
+    const categories = await categoryResponse.json();
     if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
     setWorld(previous => previous && previous.id === writeWorldId ? { ...previous, categories } : previous);
     setArticles(articleList);

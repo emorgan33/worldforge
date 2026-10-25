@@ -24,7 +24,13 @@ test("owner search finds body text, paginates, filters, and hides other campaign
   await db.article.create({ data: { worldId: world.id, slug: `spell-${stamp}`, title: `${titleToken} ward`, template: "SPELL", publicationStatus: "PUBLISHED" } });
   await db.article.create({ data: { worldId: world.id, slug: `char-${stamp}`, title: `${titleToken} envoy`, template: "CHARACTER", publicationStatus: "WIP" } });
   await db.article.create({ data: { worldId: other.id, slug: `foreign-${stamp}`, title: `${titleToken} stolen`, contentHtml: bodyToken, template: "SPELL", publicationStatus: "PUBLISHED" } });
-  await db.article.createMany({ data: Array.from({ length: 42 }, (_, index) => ({ worldId: world.id, slug: `page-${stamp}-${index}`, title: `SearchPage ${String(index).padStart(2, "0")}`, template: "GENERIC", publicationStatus: "PUBLISHED" })) });
+  await db.article.createMany({ data: Array.from({ length: 449 }, (_, index) => ({ worldId: world.id, slug: `page-${stamp}-${index}`, title: `SearchPage ${String(index).padStart(3, "0")}`, template: "GENERIC", publicationStatus: "PUBLISHED" })) });
+  await db.article.createMany({ data: [
+    { worldId: world.id, slug: `rain-start-${stamp}`, title: "Rain start", template: "GENERIC", publicationStatus: "PUBLISHED" },
+    { worldId: world.id, slug: `gate-rain-${stamp}`, title: "Gate of rain", template: "GENERIC", publicationStatus: "PUBLISHED" },
+    { worldId: world.id, slug: `unicode-title-${stamp}`, title: "Éclair", excerpt: "éclair", template: "GENERIC", publicationStatus: "PUBLISHED" },
+    { worldId: world.id, slug: `unicode-excerpt-${stamp}`, title: "Aardvark", excerpt: "éclair", template: "GENERIC", publicationStatus: "PUBLISHED" },
+  ] });
 
   const search = (query: string) => owned(`${origin}/api/search?${query}`);
   assert.equal((await fetch(`${origin}/api/search?worldId=${world.id}`)).status, 401);
@@ -42,12 +48,19 @@ test("owner search finds body text, paginates, filters, and hides other campaign
   const nested = await (await search(`worldId=${world.id}&categoryId=${child.id}`)).json();
   assert.equal(nested.articles[0].categoryPath, "Atlas / Cities");
 
-  const firstPage = await (await search(`worldId=${world.id}&q=SearchPage`)).json();
-  assert.equal(firstPage.articles.length, 40);
-  assert(firstPage.nextCursor);
-  const secondPage = await (await search(`worldId=${world.id}&q=SearchPage&cursor=${firstPage.nextCursor}`)).json();
-  assert.equal(secondPage.articles.length, 2);
-  assert.equal(secondPage.nextCursor, null);
-  assert.equal(new Set([...firstPage.articles, ...secondPage.articles].map((article: { id: string }) => article.id)).size, 42);
+  const rain = await (await search(`worldId=${world.id}&q=rain`)).json();
+  assert.deepEqual(rain.articles.map((article: { title: string }) => article.title), ["Rain start", "Gate of rain"]);
+  const unicode = await (await search(`worldId=${world.id}&q=${encodeURIComponent("éclair")}`)).json();
+  assert.deepEqual(unicode.articles.map((article: { title: string }) => article.title), ["Éclair", "Aardvark"]);
+
+  const allPages = [] as { id: string }[];
+  let cursor: string | null = null;
+  do {
+    const page = await (await search(`worldId=${world.id}&q=SearchPage${cursor ? `&cursor=${cursor}` : ""}`)).json();
+    allPages.push(...page.articles);
+    cursor = page.nextCursor;
+  } while (cursor);
+  assert.equal(allPages.length, 449);
+  assert.equal(new Set(allPages.map(article => article.id)).size, 449);
   assert.equal((await search(`worldId=${world.id}&template=NOPE`)).status, 400);
 });

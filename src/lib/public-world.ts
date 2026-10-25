@@ -9,6 +9,7 @@ import { readerCharacterRows } from "./character-sheet";
 import { projectReaderMetadata } from "./metadata-references";
 import { articleImageAssetIds } from "./asset-references";
 import { readerCreditsForAssets } from "./stock-credits";
+import type { PrismaClient } from "@prisma/client";
 
 export async function publicWorld(slug: string) {
   const world = await prisma.world.findFirst({ where: { slug, isPublic: true, deletedAt: null }, select: { id: true, slug: true, title: true, system: true, description: true, coverImage: true, coverImageAlt: true, bannerImage: true, bannerImageAlt: true, appearance: true } });
@@ -62,20 +63,26 @@ export async function publicArticle(worldSlug: string, articleSlug: string) {
   // Variables remain literal on public pages: private macro collections never enter the reader payload.
   return { world, summary, doc, metadata, system, coverImage, coverImageAlt, portraitImage, portraitImageAlt: article.portraitImageAlt, credits, blocks: blocks.filter(block => usedBlocks.has(block.id)) };
 }
-export async function assetIsPublic(id: string, worldId: string) {
-  const world = await prisma.world.findFirst({ where: { id: worldId, isPublic: true, deletedAt: null }, select: { slug: true, coverImage: true, bannerImage: true, appearance: true } });
+export async function assetIsPublic(id: string, worldId: string, client: PrismaClient = prisma) {
+  const world = await client.world.findFirst({ where: { id: worldId, isPublic: true, deletedAt: null }, select: { slug: true, coverImage: true, bannerImage: true, appearance: true } });
   if (!world) return false;
   const ids = new Set([id]);
   const referencesAsset = (value: string | null) => localAssetId(publicImage(value, ids) || "") === id;
   if ([world.coverImage, world.bannerImage, parseAppearance(world.appearance).backgroundImage].some(referencesAsset)) return true;
 
-  const categories = await prisma.category.findMany({ where: { worldId, iconImage: { not: null } }, select: { iconImage: true } });
+  const categories = await client.category.findMany({ where: { worldId, iconImage: { not: null } }, select: { iconImage: true } });
   if (categories.some(category => referencesAsset(category.iconImage))) return true;
 
-  // Stored encodings cannot safely prefilter parsed image references. Check
-  // every published article through the same projection used by the reader.
-  const articles = await prisma.article.findMany({
-    where: { worldId, ...publicArticleFilter },
+  const indexedPlacement = await client.articleAssetReference.findFirst({
+    where: { assetId: id, sourceArticle: { worldId, ...publicArticleFilter, assetReferencesIndexed: true } },
+    select: { sourceArticleId: true },
+  });
+  if (indexedPlacement) return true;
+
+  // Articles not yet covered by the exact reference index retain the full
+  // reader projection scan, including entity-decoded HTML and escaped JSON.
+  const articles = await client.article.findMany({
+    where: { worldId, ...publicArticleFilter, assetReferencesIndexed: false },
     select: { contentJson: true, contentHtml: true, coverImage: true, portraitImage: true },
   });
 
@@ -86,7 +93,29 @@ export async function assetIsPublic(id: string, worldId: string) {
   });
 }
 
-export async function publicBacklinks(worldId: string, articles: { id: string; title: string }[], targetId: string) {
-  const sources = await prisma.article.findMany({ where: { worldId, ...publicArticleFilter }, select: { id: true, contentJson: true, contentHtml: true } });
-  return new Set(sources.filter(source => source.id !== targetId && documentReferences(publicDocument(parseArticleDocument(source.contentJson, source.contentHtml), articles, new Set(), new Set()), "articleLink", "articleId").has(targetId)).map(source => source.id));
+export async function publicBacklinks(worldId: string, articles: { id: string; title: string }[], targetId: string, client: PrismaClient = prisma) {
+  const [indexedSources, fallbackSources] = await Promise.all([
+    client.articleMention.findMany({
+      where: {
+        targetArticleId: targetId,
+        sourceArticle: { worldId, ...publicArticleFilter, mentionsIndexed: true, hasLegacyArticleLinks: false },
+      },
+      select: { sourceArticleId: true, sourceArticle: { select: { contentJson: true, contentHtml: true } } },
+    }),
+    client.article.findMany({
+      where: { worldId, ...publicArticleFilter, OR: [{ mentionsIndexed: false }, { hasLegacyArticleLinks: true }] },
+      select: { id: true, contentJson: true, contentHtml: true },
+    }),
+  ]);
+  const backlinks = new Set(indexedSources.filter(source => {
+    if (source.sourceArticleId === targetId) return false;
+    const doc = publicDocument(parseArticleDocument(source.sourceArticle.contentJson, source.sourceArticle.contentHtml), articles, new Set(), new Set());
+    return documentReferences(doc, "articleLink", "articleId").has(targetId);
+  }).map(source => source.sourceArticleId));
+  for (const source of fallbackSources) {
+    if (source.id !== targetId && documentReferences(publicDocument(parseArticleDocument(source.contentJson, source.contentHtml), articles, new Set(), new Set()), "articleLink", "articleId").has(targetId)) {
+      backlinks.add(source.id);
+    }
+  }
+  return backlinks;
 }

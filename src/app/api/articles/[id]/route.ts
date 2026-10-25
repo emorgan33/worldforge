@@ -2,7 +2,7 @@ import { isArticleVersion, type ArticleConflictResponse } from "@/lib/article-sa
 import { publicationFields } from "@/lib/publication";
 import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
-import { syncArticleMentions } from "@/lib/article-mention-index";
+import { syncArticleAssetReferences, syncArticleMentions } from "@/lib/article-mention-index";
 import { assertDocumentImageReferences, assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
 import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { prisma } from "@/lib/db";
@@ -186,6 +186,13 @@ async function patchHandler(
 
       if (contentHtml !== undefined || contentJson !== undefined) {
         await syncArticleMentions(tx, existing.worldId, id, contentJson, contentHtml ?? existing.contentHtml ?? "");
+      }
+      if (contentHtml !== undefined || contentJson !== undefined || coverImage !== undefined || portraitImage !== undefined) {
+        const nextContentJson = contentJson !== undefined ? contentJson : contentHtml !== undefined ? null : existing.contentJson;
+        const nextContentHtml = contentHtml !== undefined ? contentHtml : existing.contentHtml ?? "";
+        const nextCover = coverImage !== undefined ? coverImage.trim() || null : existing.coverImage;
+        const nextPortrait = portraitImage !== undefined ? portraitImage.trim() || null : existing.portraitImage;
+        await syncArticleAssetReferences(tx, id, nextContentJson, nextContentHtml, nextCover, nextPortrait);
       }
       // Read within this transaction so the response carries this write's version.
       return tx.article.findUniqueOrThrow({

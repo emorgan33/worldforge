@@ -2,12 +2,14 @@ import { publicationFields } from "@/lib/publication";
 import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
-import { syncArticleMentions } from "@/lib/article-mention-index";
+import { syncArticleAssetReferences, syncArticleMentions } from "@/lib/article-mention-index";
 import { assertDocumentImageReferences, assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
 import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { prisma } from "@/lib/db";
 import { validateCharacterRows } from "@/lib/character-sheet";
 import { validateMetadataReferences } from "@/lib/metadata-references";
+
+const ARTICLE_LIST_PAGE_SIZE = 200;
 
 async function getHandler(req: NextRequest) {
   try {
@@ -16,6 +18,7 @@ async function getHandler(req: NextRequest) {
     const categoryId = searchParams.get("categoryId");
     const template = searchParams.get("template");
     const query = searchParams.get("q");
+    const cursor = searchParams.get("cursor");
 
     const where: Prisma.ArticleWhereInput = {};
     if (worldId) where.worldId = worldId;
@@ -28,21 +31,51 @@ async function getHandler(req: NextRequest) {
         { tags: { contains: query } },
       ];
     }
+    if (cursor && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cursor)) {
+      return NextResponse.json({ error: "Invalid article-list cursor." }, { status: 400 });
+    }
 
-    // Capped at 2000 articles for safety — frontend uses client-side tree filtering
-    const MAX_ARTICLES = 2000;
+    // Resolve the cursor inside the filtered result set before using it. This
+    // keeps a foreign or stale cursor from shifting the requested list page.
+    if (cursor && !await prisma.article.findFirst({ where: { ...where, id: cursor }, select: { id: true } })) {
+      return NextResponse.json({ error: "Invalid article-list cursor." }, { status: 400 });
+    }
+
     const articles = await prisma.article.findMany({
       where,
-      include: {
+      // The workspace list needs summaries only. Keep article bodies, metadata,
+      // tags, versioning and relation collections on the selected detail route.
+      select: {
+        id: true,
+        worldId: true,
+        categoryId: true,
+        template: true,
+        title: true,
+        slug: true,
+        excerpt: true,
+        publicationStatus: true,
+        visibility: true,
+        state: true,
+        isPinned: true,
+        order: true,
+        wordCount: true,
+        coverImage: true,
+        coverImageAlt: true,
+        portraitImage: true,
+        portraitImageAlt: true,
+        createdAt: true,
+        updatedAt: true,
         category: {
           select: { id: true, name: true, icon: true },
         },
       },
       orderBy: [{ order: "asc" }, { id: "asc" }],
-      take: MAX_ARTICLES,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      take: ARTICLE_LIST_PAGE_SIZE + 1,
     });
 
-    return NextResponse.json(articles);
+    const hasMore = articles.length > ARTICLE_LIST_PAGE_SIZE;
+    return NextResponse.json(hasMore ? articles.slice(0, ARTICLE_LIST_PAGE_SIZE) : articles);
   } catch (error: unknown) {
     console.error("Failed to list articles:", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process article." }, { status: 500 });
@@ -149,6 +182,7 @@ async function postHandler(req: NextRequest, _context: unknown, { user }: { user
       });
 
       await syncArticleMentions(tx, worldId, created.id, contentJson, contentHtml || "");
+      await syncArticleAssetReferences(tx, created.id, contentJson, contentHtml || "", created.coverImage, created.portraitImage);
       return created;
     });
 

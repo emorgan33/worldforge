@@ -1,7 +1,7 @@
 import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { syncArticleMentions } from "@/lib/article-mention-index";
+import { syncArticleAssetReferences, syncArticleMentions } from "@/lib/article-mention-index";
 import { assertDocumentImageReferences, assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
 
 class ArticleRestoreConflict extends Error {}
@@ -147,6 +147,7 @@ async function postHandler(
       let restoredContentJson: unknown = null;
       try { restoredContentJson = targetRevision.contentJson ? JSON.parse(targetRevision.contentJson) : null; } catch { /* use the historical HTML representation */ }
       await syncArticleMentions(tx, currentArticle.worldId, id, restoredContentJson, targetRevision.contentHtml || "");
+      await syncArticleAssetReferences(tx, id, targetRevision.contentJson, targetRevision.contentHtml || "", targetRevision.coverImage, targetRevision.portraitImage);
       const updatedArticle = await tx.article.findUniqueOrThrow({ where: { id } });
       return { revision: targetRevision, article: updatedArticle };
     });

@@ -119,6 +119,59 @@ test("public image authorization finds a visible placement after more than ten p
   assert.equal(await db.article.count({ where: { id: { in: misleading.map(row => row.id) } } }), 12);
 });
 
+test("article writes keep indexed public asset placement current for authorization", { skip: !origin }, async context => {
+  const { db, world, owned, image, imageResponse } = await publicImageFixture(context);
+  const asset = await image();
+  const created = await owned(`${origin}/api/articles`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ worldId: world.id, title: "Indexed placement", template: "GENERIC", publicationStatus: "PUBLISHED", visibility: "PUBLIC", contentHtml: `<img src="${asset.url}">` }),
+  });
+  assert.equal(created.status, 201);
+  const article = await created.json();
+  assert.equal(await db.article.count({ where: { id: article.id, assetReferencesIndexed: true } }), 1);
+  assert.equal(await db.articleAssetReference.count({ where: { sourceArticleId: article.id, assetId: asset.id } }), 1);
+  await imageResponse(asset, 200);
+
+  const updated = await owned(`${origin}/api/articles/${article.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedVersion: 1, contentHtml: "<p>Placement removed</p>" }),
+  });
+  assert.equal(updated.status, 200);
+  assert.equal(await db.articleAssetReference.count({ where: { sourceArticleId: article.id, assetId: asset.id } }), 0);
+  await imageResponse(asset, 404);
+});
+
+test("public backlinks use the explicit mention index and recheck legacy title links", { skip: !origin }, async context => {
+  const { db, world, owned, article } = await publicImageFixture(context);
+  const target = await article("backlink-target");
+  const source = await owned(`${origin}/api/articles`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      worldId: world.id,
+      title: "Indexed source",
+      publicationStatus: "PUBLISHED",
+      visibility: "PUBLIC",
+      contentJson: { type: "doc", content: [{ type: "articleLink", attrs: { articleId: target.id, label: target.title } }] },
+    }),
+  });
+  assert.equal(source.status, 201);
+  const sourceArticle = await source.json();
+  assert.equal(await db.article.count({ where: { id: sourceArticle.id, mentionsIndexed: true, hasLegacyArticleLinks: false } }), 1);
+  assert.ok(await db.articleMention.findFirst({ where: { sourceArticleId: sourceArticle.id, targetArticleId: target.id } }));
+
+  const page = await fetch(`${origin}/w/${world.slug}/a/${target.slug}`);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /Indexed source/);
+
+  const legacy = await article("legacy-source", { contentHtml: `<p>@[${target.title}]</p>` });
+  assert.equal(await db.article.count({ where: { id: legacy.id, mentionsIndexed: false } }), 1);
+  const legacyPage = await fetch(`${origin}/w/${world.slug}/a/${target.slug}`);
+  assert.match(await legacyPage.text(), /legacy-source/);
+});
+
 test("public image authorization excludes private references and revokes on publication and world changes", { skip: !origin }, async context => {
   const { db, world, owner, owned, image, article, html, imageResponse } = await publicImageFixture(context);
   const prose = await image();

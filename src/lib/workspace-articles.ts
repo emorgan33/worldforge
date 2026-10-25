@@ -46,6 +46,42 @@ const isSavedArticle: Decoder<SavedArticle> = (value): value is SavedArticle =>
   isWorkspaceArticleListItem(value) && isRecord(value) && isArticleVersion(value.version);
 const isArticleList = (value: unknown): value is ArticleListItem[] =>
   Array.isArray(value) && value.every(isWorkspaceArticleListItem);
+export interface WorkspaceArticlePageOptions {
+  fetcher?: typeof fetch;
+  signal?: AbortSignal;
+  cursor?: string;
+  query?: string;
+}
+
+export const WORKSPACE_ARTICLE_PAGE_SIZE = 200;
+
+/** Read one bounded article-list page in stable server order. */
+export async function fetchWorkspaceArticlePage(
+  worldId: string,
+  options: WorkspaceArticlePageOptions = {},
+): Promise<ArticleListItem[]> {
+  const fetcher = options.fetcher ?? fetch;
+  const params = new URLSearchParams({ worldId });
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.query) params.set("q", options.query);
+  const response = await fetcher(`/api/articles?${params}`, { signal: options.signal });
+  return readWorkspaceJson(response, isArticleList, "Could not load articles.");
+}
+
+/** Read every bounded article-list page in stable server order. */
+export async function fetchWorkspaceArticleList(
+  worldId: string,
+  options: Omit<WorkspaceArticlePageOptions, "cursor" | "query"> = {},
+): Promise<ArticleListItem[]> {
+  const articles: ArticleListItem[] = [];
+  let cursor: string | null = null;
+  do {
+    const page = await fetchWorkspaceArticlePage(worldId, { ...options, cursor: cursor ?? undefined });
+    articles.push(...page);
+    cursor = page.length === WORKSPACE_ARTICLE_PAGE_SIZE ? page[page.length - 1].id : null;
+  } while (cursor);
+  return articles;
+}
 
 export interface WorkspaceArticleIdentity {
   worldId: string;
@@ -120,8 +156,7 @@ export async function saveWorkspaceArticle(deps: SaveWorkspaceArticleOptions): P
 
     // A committed write stays successful when a follow-up projection fails.
     const [listResult, detailResult] = await Promise.allSettled([
-      fetcher(`/api/articles?worldId=${encodeURIComponent(deps.worldId)}`).then(result =>
-        readWorkspaceJson(result, isArticleList, "Could not refresh articles.")),
+      fetchWorkspaceArticleList(deps.worldId, { fetcher }),
       fetcher(`/api/articles/${saved.id}`).then(result =>
         readWorkspaceJson(result, isWorkspaceArticleDetail, "Could not refresh article details.")),
     ]);

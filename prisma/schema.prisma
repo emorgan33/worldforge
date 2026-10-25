@@ -160,6 +160,10 @@ model Article {
   // Bidirectional Knowledge Graph References
   outboundMentions ArticleMention[] @relation("MentionSource")
   inboundMentions  ArticleMention[] @relation("MentionTarget")
+  mentionsIndexed Boolean @default(false)
+  hasLegacyArticleLinks Boolean @default(false)
+  assetReferencesIndexed Boolean @default(false)
+  assetReferences ArticleAssetReference[]
 
   // Template-specific metadata (JSON: traits, demographics, biological specs, etc.)
   metadata String? // Serialized JSON
@@ -197,6 +201,15 @@ model ArticleMention {
 
   @@index([sourceArticleId])
   @@index([targetArticleId])
+}
+
+model ArticleAssetReference {
+  sourceArticleId String
+  sourceArticle   Article @relation(fields: [sourceArticleId], references: [id], onDelete: Cascade)
+  assetId         String
+
+  @@id([sourceArticleId, assetId])
+  @@index([assetId])
 }
 
 // -------------------------------------------------------------

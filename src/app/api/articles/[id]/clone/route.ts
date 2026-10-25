@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { randomUUID } from "node:crypto";
 import { assertDocumentImageReferences, assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
-import { syncArticleMentions } from "@/lib/article-mention-index";
+import { syncArticleAssetReferences, syncArticleMentions } from "@/lib/article-mention-index";
 
 export const POST = withAuthor({ target: "resource-param", kind: "articles" }, async (request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   try {
@@ -98,6 +98,7 @@ export const POST = withAuthor({ target: "resource-param", kind: "articles" }, a
       let contentDocument: unknown = null;
       try { contentDocument = created.contentJson ? JSON.parse(created.contentJson) : null; } catch { /* Keep legacy HTML references available. */ }
       await syncArticleMentions(tx, source.worldId, created.id, contentDocument, created.contentHtml ?? "");
+      await syncArticleAssetReferences(tx, created.id, contentDocument, created.contentHtml ?? "", created.coverImage, created.portraitImage);
       return created;
     });
 

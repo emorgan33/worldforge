@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { resolveActor, readableWhere } from "@/lib/access";
-import { searchTerms, paginateSearch, rankSearchArticles, presentSearchArticle, SearchInputError } from "@/lib/campaign-search";
+import { SEARCH_PAGE_SIZE, parseCampaignSearchParams, presentSearchArticle, SearchInputError } from "@/lib/campaign-search";
+import { rankedSearchPage } from "@/lib/campaign-search-db";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ worldSlug: string }> }) {
   try {
@@ -35,38 +36,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }
     }
 
-    const url = new URL(request.url);
-    const q = (url.searchParams.get("q") || "").slice(0, 200);
-    const cursor = url.searchParams.get("cursor") || "";
-    const terms = searchTerms(q);
+    const filters = parseCampaignSearchParams(new URL(request.url).searchParams);
 
     // Keep search results aligned with index, sidebar, and direct-read rules.
     const { where } = await readableWhere(world.id, "articles", actor);
 
-    if (terms.length) {
-      where.AND = terms.map(term => ({
-        OR: [
-          { title: { contains: term } },
-          { excerpt: { contains: term } },
-          { tags: { contains: term } },
-        ],
-      }));
-    }
-
-    const articles = await prisma.article.findMany({
-      where,
-      select: { id: true, title: true, excerpt: true, tags: true, template: true, publicationStatus: true, categoryId: true },
-    });
-
-    const categories = await prisma.category.findMany({
-      where: { worldId: world.id },
-      select: { id: true, name: true, parentId: true, order: true },
-    });
-
-    const page = paginateSearch(rankSearchArticles(articles, q), cursor || undefined);
+    const readableIds = where.id === "__NONE__"
+      ? []
+      : where.id && typeof where.id === "object" && "in" in where.id && Array.isArray(where.id.in)
+        ? where.id.in as string[]
+        : undefined;
+    const [articles, categories] = await Promise.all([
+      rankedSearchPage({ worldId: world.id, q: filters.q, cursor: filters.cursor, readableArticleIds: readableIds, searchBodies: false }),
+      prisma.category.findMany({ where: { worldId: world.id }, select: { id: true, name: true, parentId: true, order: true } }),
+    ]);
+    const hasMore = articles.length > SEARCH_PAGE_SIZE;
+    const page = articles.slice(0, SEARCH_PAGE_SIZE);
     return NextResponse.json({
-      articles: page.items.map(article => presentSearchArticle(article, categories)),
-      nextCursor: page.nextCursor,
+      articles: page.map(article => presentSearchArticle(article, categories)),
+      nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
     });
   } catch (error: unknown) {
     if (error instanceof SearchInputError) return NextResponse.json({ error: error.message }, { status: error.status });
