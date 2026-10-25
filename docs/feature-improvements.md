@@ -30,7 +30,7 @@ Checked items are implemented and verified in this workspace. Unchecked items ar
 - [x] Add responsive campaign navigation with a collapsible desktop sidebar, mobile drawer, and scrollable World contents pane without a visible scrollbar.
 - [x] Visible category navigation, breadcrumbs and reader search for public worlds and articles. [Details](reader-navigation-and-discovery.md)
 - [x] Owner-scoped author search of article bodies, with filters, pagination and category paths. [Details](search-improvements.md)
-- [x] **Article revision history and recovery** - Server-side article revisions with full content snapshots, restore functionality, concurrent edit detection via versioning, and owner-only access. [Details](article-revisions.md) (Milestone 4 completed October 15, 2026)
+- [x] **Article revision history and recovery** - Server-side snapshots of the documented saved fields, restore functionality, concurrent edit detection via versioning, and owner-only access. Placement, hierarchy and relationship fields outside the snapshot contract remain current on restore. [Details](article-revisions.md) (Milestone 4 completed October 15, 2026)
 
 ## 1. World themes and backgrounds — completed
 
@@ -63,7 +63,7 @@ Done when large-world search finds body text and paginates reliably, with no cro
 
 ## 4. Article history and recovery — completed
 
-- [x] Add server-side article revisions with retention limits and recorded save times.
+- [x] Add server-side article revisions with recorded save times.
 - [x] Provide revision preview and explicit restore, saving the current version before restoring an older one.
 - [x] Detect edits from another tab/session before overwriting newer server content.
 - [x] Keep revision access owner-only and distinguish local recovery drafts from saved revisions.
@@ -72,22 +72,20 @@ Done when owners can inspect and recover prior saved content, and conflicting ed
 
 **Implementation details:**
 
-- Added `ArticleRevision` model to Prisma schema with full content snapshots (title, slug, excerpt, content, metadata, tags, publication state)
+- Added `ArticleRevision` model to Prisma schema with snapshots of the fields listed in [Article revision history](article-revisions.md), including publication state and optional cover/portrait placement values
 - Added `version` field to `Article` model for optimistic concurrency control
 - Updated `POST /api/articles` to create initial revision on article creation
 - Updated `PATCH /api/articles/[id]` to create revision before each save (snapshots previous state)
 - Added `GET /api/articles/[id]/revisions` to list all revisions with timestamps and user info
 - Added `POST /api/articles/[id]/revisions` to restore to a specific revision (auto-backs up current version)
-- Revision tracking preserves full content state at each save point
+- Revision tracking preserves its documented saved-field contract at each save point; template, category, canon state, ordering, hierarchy and other relations are not restored
 - Version-based concurrent edit detection prevents silent overwrites
 - All revision endpoints enforce owner-only access via world ownership check
 - Local localStorage drafts remain separate from server-side revisions
 
-**Verification:**
+**Historical verification (October 15, 2026; not a current suite result):**
 - Build successful with no TypeScript errors
 - All 56 tests pass (8 skipped, 0 failed)
-- Development server running on `http://localhost:3001`
-- Login working with seeded user (`lorekeeper@worldforge.dev` / `WorldForge123!`)
 - Revisions API tested and working
 - Restore functionality tested and working
 
@@ -111,7 +109,7 @@ Done when a GM can prepare a linked encounter/session using their campaign's edi
 - **Plot Arc templates** include key encounters and sessions run, plus previous/next arc linking
 - **Session Report templates** include linked encounters, plot arcs, and key locations, plus recap and next session hooks
 - Edition-specific encounter threat/difficulty labels (PF2e: Trivial/Low/Moderate/Severe/Extreme; D&D 2014: Easy/Medium/Hard/Deadly)
-- All 60 tests pass, including new tests for session preparation linking fields
+- Historical verification at milestone completion: 60 tests passed, including session preparation linking coverage; this is not a current suite result.
 
 ## 6. Advanced presentation
 
@@ -124,13 +122,14 @@ Done when optional custom styling remains confined to a world's reader presentat
 **Implementation details:**
 
 - Added `customCss` field to `WorldAppearance` interface
-- Custom CSS validation rejects dangerous patterns: `@import`, `@font-face`, `position: fixed`, `position: sticky`, high `z-index` values
-- Balanced braces check ensures valid CSS syntax
-- `scopedCustomCss()` function wraps all selectors with `.wf-reader` scope prefix
+- PostCSS parses and validates syntax; a selector parser scopes each selector, including mixed lists and nested supported rules, to `.wf-reader`
+- Nested selectors retain reader scope through nested rules and supported at-rules, including mixed selector lists; functional pseudos containing `&` and implicit or explicit sibling escapes fail closed
+- Only nested `@media`, `@supports`, `@container` and `@starting-style` rules are accepted; unsupported global at-rules (including `@layer` and keyframes) fail closed
+- CSS is limited to 20,000 characters and rejects fixed/sticky positioning, positive `z-index`, and URL-valued custom properties
 - Custom CSS is only applied in `WorldPresentation` component with `.wf-reader` class on reader pages
 - Author UI includes collapsible "Custom CSS (Advanced)" section with textarea editor
 - Reset button clears custom CSS; full appearance reset also clears it
-- All 60 tests pass including new custom CSS validation tests
+- Historical verification at milestone completion: 60 tests passed, including custom CSS validation coverage; this is not a current suite result.
 
 ## 7. Library and maintenance improvements
 
@@ -177,7 +176,7 @@ Done when owners can identify asset dependencies and recover or move a complete 
 - Full documentation at `docs/backup-restore.md`
 - Covers SQLite backup using `.backup` command
 - Asset backup using tar archives
-- Complete backup script with manifest
+- Backup examples for Compose and local installs, with a manifest in the Compose archive
 - Restore procedure with verification steps
 - Per-world export/import for live backups
 

@@ -1,20 +1,20 @@
 # Article revision history and recovery
 
-The article revision system provides server-side version tracking for all article content in WorldForge. Every save operation creates a revision snapshot that preserves the full state of the article at that point in time.
+The article revision system provides server-side version tracking for selected article fields. Saves create snapshots of the fields listed below; they do not capture the article's full placement, hierarchy, or relationship state.
 
 ## Overview
 
 Revision history allows GMs to:
 
-- View full content history for any article with timestamps and user tracking
+- View saved-field history for any article with timestamps and user tracking
 - Compare previous versions to see what changed
-- Restore to any prior state safely (with automatic backup of current version)
+- Restore the saved fields from any retained revision (with an automatic snapshot of the current saved fields)
 - Track who made changes and when
 - Prevent silent overwrites through concurrent edit detection
 
 ## Database Schema
 
-The `ArticleRevision` model stores:
+The `ArticleRevision` model stores the following core fields (the schema also includes optional cover and portrait URLs and their descriptions):
 
 ```prisma
 model ArticleRevision {

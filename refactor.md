@@ -2,7 +2,7 @@
 
 Audit basis: repository revision `1be1903`.
 
-Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a, R05, R06, R07, R08, R09, R10, R13, R14 and R16 are complete. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
+Status: audit and implementation complete; R01–R21 (including R01a, R03a and R04a) are complete. Validation results are recorded in the task entries.
 
 ## 1. Executive summary
 
@@ -319,9 +319,9 @@ Effort is relative: **Small** is a bounded change; **Medium** spans several rela
 | R16 Extract workspace feature controllers | P2 | High | Large | R05–R07, R13, R15 | Complete |
 | R17 Bound search and reader work | P2 | Medium | Medium | R09, R13 | Complete |
 | R18 Clarify configuration and operations | P2 | Medium | Medium | R01 | **Complete** |
-| R19 Enforce CSS presentation scope | P2 | Medium | Medium | R01 | Not started |
-| R20 Align documented and product guarantees | P2 | Low | Small | Alongside owning tasks | Not started |
-| R21 Remove verified obsolete paths | P3 | Low | Small | R13, R16 | Not started |
+| R19 Enforce CSS presentation scope | P2 | Medium | Medium | R01 | **Complete** |
+| R20 Align documented and product guarantees | P2 | Low | Small | Alongside owning tasks | **Complete** |
+| R21 Remove verified obsolete paths | P3 | Low | Small | R13, R16 | **Complete** |
 
 ### R01 — Establish a trustworthy, isolated regression baseline
 
@@ -652,6 +652,22 @@ Validation used dedicated temporary SQLite databases and asset directories, matc
 
 **Rollback:** Retain stored CSS. Roll back the transformer independently; avoid destructive normalization of saved styles.
 
+**Implementation (2026-10-25):** Replaced regex rewriting in `world-appearance.ts` with PostCSS parsing and selector-AST transformation. Every style selector is scoped individually, including selectors inside supported nested `@media`, `@supports`, `@container` and `@starting-style` rules. Unsupported/global at-rules (including `@layer` and keyframes), parse errors, CSS over 20,000 characters, fixed/sticky positioning, positive `z-index`, and URL-valued custom properties are rejected. Invalid legacy CSS is omitted at render time. Added direct parser dependencies and updated [world appearance](docs/world-appearance.md) and [feature improvement](docs/feature-improvements.md) documentation.
+
+**Validation (2026-10-25):** `node --import tsx --test tests/world-appearance.test.tsx` passed 5/5. Coverage includes mixed selectors, quoted commas and attribute values, sibling combinators with comments, native nested CSS, nested media/supports, unsupported at-rules, malformed syntax and obfuscated unsafe declarations. No browser appearance comparison or production build was run for this focused change.
+
+**Scope escape follow-up (2026-10-25):** Nested-scope validation now carries reader-subject state through supported at-rules and nested rules. It rejects sibling escapes through `@media`/`@supports`, compound nesting, functional `:is(&)` nesting, and another nesting level. The focused CSS test passed 5/5, focused ESLint, TypeScript and `git diff --check` passed. No production build or full application browser comparison was run.
+
+**Functional branch containment follow-up (2026-10-25):** Fail closed on functional pseudos that contain `&` anywhere in their nested selector branches. This prevents an unanchored alternative (including alternatives nested inside another functional pseudo) from matching outside the reader. Added regression cases for both alternative orders and nested `:where(:is(...))`.
+
+**Nested scope follow-up (2026-10-25):** Functional-selector containment now runs at every rule depth, leading `+` and `~` are treated as implicit nesting escapes, and reader-subject state propagates if any selector-list branch retains the reader element. Regression cases cover functional selectors beneath descendants and both reported mixed-list forms.
+
+**Ancestor and compound selector follow-up (2026-10-25):** Sibling escape analysis now inspects the compound immediately before `+`/`~`, so ancestor-qualified nesting (`body &`) remains recognized as the reader subject through nested rules and at-rules. Already-scoped detection accepts reader-root compounds with classes, attributes, or pseudos while still re-scoping sibling selectors. Regression cases cover the reported Chromium fixtures and compound reader selectors.
+
+**Compound reader-root validation follow-up (2026-10-25):** Validator scope tracking now recognizes any selector-list branch beginning with `.wf-reader` and retaining that subject through its compound (including class, attribute, and pseudo selectors). It stops tracking branches that have already crossed a sibling combinator. Added direct, implicit, media-wrapped, and additional-nesting escape regressions for compound roots.
+
+**Reader descendant distinction (2026-10-25):** Root tracking now requires a compound selector with no combinator. `.wf-reader h1` and `.wf-reader > h1` remain contained but are treated as descendant subjects, so nested sibling selectors on those elements continue to work, including inside media rules and descendant-only selector lists.
+
 ### R20 — Align documented and user-visible guarantees
 
 **Problem/files/evidence:** F21; revision, stock, backup, performance, migration and recovery documentation; GM secret labels.
@@ -661,6 +677,10 @@ Validation used dedicated temporary SQLite databases and asset directories, matc
 **Validation and acceptance:** Every present-tense guarantee links to current behavior or executable validation. Documentation distinguishes shipped, provisional, pending-review and planned functionality.
 
 **Rollback:** Revert descriptions only when behavior also reverts. Never restore operational instructions known to risk inconsistent backups.
+
+**Implementation (2026-10-25):** Corrected the GM notebook secret action to say **Mark revealed (GM only)** and clarified in the permissions guide that this state is owner-side tracking; player projections omit secrets regardless of that flag. Revision documentation now describes its exact saved-field contract, including fields that remain unchanged on restore, and removes the unsupported retention-limit claim. Historical feature verification is labeled as historical and obsolete seeded credentials were removed. Backup/restore guidance now calls the Compose and local instructions examples rather than a complete script, packages the local database snapshot, matching assets and manifest into one archive, and explicitly requires downtime for restore. Older installation notes now point to committed migrations and consistent backup procedures instead of workspace-specific `/tmp` database paths or `prisma db push`. README and stock-art docs already identify the feature as pending release review and excluded from production builds.
+
+**Validation (2026-10-25):** Cross-checked the secret label against the owner-only API and player projection, revision restore contract against `docs/article-revisions.md`, migration commands against `CONTRIBUTING.md`, and backup steps against `docs/backup-restore.md`. `git diff --check` passed. No test suite or build was run for this documentation and copy change.
 
 ### R21 — Remove verified obsolete code and dependencies
 
@@ -672,13 +692,17 @@ Validation used dedicated temporary SQLite databases and asset directories, matc
 
 **Rollback:** Ordinary source/dependency revert. Keep this cleanup separate from authorization behavior changes.
 
+**Implementation (2026-10-25):** Removed the unreferenced `PlayerSidebar` and `effective-policy` module after repository-wide caller checks. Removed the two temporary `debug-auth` HTTP tests and their runner registrations; maintained auth/publication coverage and the production-auth smoke exercise the same session and authenticated API behavior. Removed the unreferenced `tests/manual-test.mjs`, which wrote to whichever database was configured, printed a raw session token, targeted a hardcoded local server, and left fixture rows behind. Kept `auth:setup`, which is the documented account bootstrap and recovery command, and retained dependencies because each was still referenced directly or by the default development/build tooling. No tautological verification helper or other obsolete dependency was confirmed. No authorization behavior changed.
+
+**Validation (2026-10-25):** TypeScript, the production build, `git diff --check`, and all **180** tests in the non-database unit category passed. The focused auth/publication and player-access HTTP suites passed **13/13** against an isolated temporary SQLite database, asset directory and matching dev server. ESLint completed with zero errors and eight warnings. No test touched configured user storage. The full HTTP suite was not run because R21 only changes the auth paths covered by those focused suites; the full-suite setup is documented in `CONTRIBUTING.md`.
+
 ### Recommended implementation order
 
 1. **Safety foundation complete:** R01, R01a and R02 are implemented and validated.
 2. **Focused correctness/security:** R03, its R03a public image authorization follow-up, R04, R04a and R05 are complete; continue with R06–R08 and R15.
 3. **Shared contracts and durable operations:** R09–R14.
 4. **Architectural extraction and measured optimization:** R16–R19.
-5. **Documentation throughout; optional cleanup last:** R20 and R21.
+5. **Documentation and cleanup:** R20 and R21 are complete.
 
 Quick wins are cleanup containment, imported visibility compatibility, truthful labels/documentation and—after asset safety is established—correct UUID validation.
 
@@ -855,4 +879,4 @@ WorldForge's core technology and several existing safeguards should remain. The 
 
 The recommended sequence is to establish reliable tests, contain destructive cleanup, repair data and rendering contracts, centralize complete operations, and then simplify UI coordination and measured performance bottlenecks.
 
-That approach improves correctness, recovery and maintainability while keeping the application recognizable and deployable throughout. **R01, R01a, R02, R03, R03a, R04, R04a, R05, R06, R07 and R08 are complete.**
+That approach improves correctness, recovery and maintainability while keeping the application recognizable and deployable throughout. **R01–R21, including R01a, R03a and R04a, are complete.**

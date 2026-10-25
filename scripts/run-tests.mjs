@@ -10,8 +10,6 @@ const files = readdirSync(path.join(root, "tests"))
   .sort();
 
 const httpFiles = new Set([
-  "debug-auth.test.tsx",
-  "debug-auth2.test.tsx",
   "world-backup-restore.test.tsx",
   "world-switch.test.tsx",
 ]);

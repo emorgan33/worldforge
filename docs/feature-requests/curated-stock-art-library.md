@@ -158,7 +158,7 @@ Do not silently redefine archived-image access while adding stock. Characterize 
 
 ### Schema and format evolution
 
-Use an additive Prisma migration for provenance, category image references, placement alt, and article revision image fields. Existing rows retain null/default values; no artwork, rights claims, or publication grants are backfilled. Regenerate Prisma and restart the application after migration. Follow `CONTRIBUTING.md`, not the older `db push` instructions in the image-library milestone.
+Use an additive Prisma migration for provenance, category image references, placement alt, and article revision image fields. Existing rows retain null/default values; no artwork, rights claims, or publication grants are backfilled. Apply committed migrations with `pnpm db:deploy`, then regenerate Prisma and restart the application as needed. See `CONTRIBUTING.md` for the current workflow.
 
 Introduce `formatVersion: 3` for portable worlds with provenance and the new placement fields. Keep v1/v2 imports supported. New exports include image bytes, distributable evidence, provenance snapshots, alt text, category image references, and revision placement fields. Remap world asset IDs everywhere while retaining catalog identity as provenance, not a dependency on a global catalog.
 

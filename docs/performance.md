@@ -150,11 +150,11 @@ Before: Used `window.setTimeout`/`window.clearTimeout`, which bypasses standard 
 
 After: Uses standard `setTimeout`/`clearTimeout`.
 
-## Verification
+## Historical verification record
 
 R17 is complete. Author article-list, broad and selective campaign search, public backlinks, and public asset authorization measurements above 2,000 articles are recorded above. Indexed query paths bound response projections while legacy references retain complete parsing fallbacks. Campaign search scans fixed 2,000-row rowid ranges and retains only the next 41 candidates for exact JavaScript ranking and cursor paging. A follow-up isolated benchmark reproduced broad search at 35.6 ms / 3 queries and selective search at 2.1 ms. The broad-search latency and transfer trade-offs are documented above, and the R17 work log is in `refactor.md`.
 
 - ✅ Build passes (TypeScript compilation)
-- ✅ All 60 tests pass (21 skipped integration tests)
+- ✅ At the time of this performance work, 60 tests passed (21 server-dependent integration tests were skipped); this is not a current suite result.
 - ✅ Prisma migration applied successfully
 - ✅ Database schema in sync with new indexes

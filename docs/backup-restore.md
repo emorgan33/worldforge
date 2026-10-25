@@ -42,15 +42,18 @@ in the archive. Store copies outside the host that runs WorldForge. If the
 backup command fails, leave the service stopped until the copy is complete or
 remove the partial directory and start it again. For local non-Compose installs,
 stop the server service first, resolve `DATABASE_URL` to `DATABASE_FILE`, and
-archive a SQLite snapshot with the complete `WORLDFORGE_ASSET_DIR`:
+archive the SQLite snapshot and the complete `WORLDFORGE_ASSET_DIR` together:
 
 ```bash
 set -euo pipefail
-backup_dir="$PWD/backups/$(date -u +%Y%m%dT%H%M%SZ)"
-mkdir -p "$backup_dir/assets"
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+backup_dir="$PWD/backups/$stamp"
+mkdir -p "$backup_dir"
 sqlite3 "$DATABASE_FILE" ".backup '$backup_dir/worldforge.db'"
 test "$(sqlite3 "$backup_dir/worldforge.db" 'PRAGMA integrity_check;')" = ok
 tar -czf "$backup_dir/assets.tar.gz" -C "$WORLDFORGE_ASSET_DIR" .
+printf 'Stopped local backup %s\n' "$stamp" > "$backup_dir/manifest.txt"
+tar -czf "$PWD/backups/worldforge-$stamp.tar.gz" -C "$PWD/backups" "$stamp"
 ```
 
 ## Restoring a Compose backup
@@ -185,7 +188,7 @@ After any restore, verify:
 ## Known Limitations
 
 - **Asset cleanup**: Purging an archived world queues its image files for removal. If the filesystem is temporarily unavailable, the durable cleanup jobs are retried on a later trash visit.
-- **Concurrent Access**: During restore, ensure no users are accessing the system to prevent data inconsistency.
+- **Restore downtime**: Stop the application before replacing either the database or asset directory, and restart only after both matching components are restored.
 - **Large Worlds**: Portable JSON exports and imports are limited to 60 MiB. Oversized exports fail explicitly; use the SQLite-plus-assets workflow. For a legacy-compatible world, `?format=v1&includeAssets=false` permits a partial export plus a separate asset copy. Formats 2, 3 and 4 reject filtering flags. Formats 1–3 predate era and stable annotation-order preservation; use format 4 when those details matter.
 
 ## Table-access system data

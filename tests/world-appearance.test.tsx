@@ -30,23 +30,61 @@ test("custom CSS validation rejects dangerous patterns", () => {
   assert.throws(() => validateAppearance({ ...DEFAULT_APPEARANCE, customCss: ".class { color: red" }));
 });
 
-test("scoped custom CSS wraps selectors with .wf-reader prefix", () => {
-  // Basic selector gets scoped
+test("scoped custom CSS structurally scopes selectors and nested rules", () => {
   assert.equal(scopedCustomCss("h1 { color: blue; }"), ".wf-reader h1 { color: blue; }");
-  
-  // Multiple selectors get scoped
-  assert.equal(scopedCustomCss("h1, h2 { font-size: 2em; }"), ".wf-reader h1, .wf-reader h2 { font-size: 2em; }");
-  
-  // Already scoped selectors stay as-is
+  assert.equal(scopedCustomCss("h1, h2 { font-size: 2em; }"), ".wf-reader h1,.wf-reader h2 { font-size: 2em; }");
   assert.equal(scopedCustomCss(".wf-reader h1 { color: red; }"), ".wf-reader h1 { color: red; }");
-  
-  // CSS variables and @-rules stay as-is
-  assert.equal(scopedCustomCss("--my-color: red;"), "--my-color: red;");
-  assert.equal(scopedCustomCss("@media (min-width: 768px) { h1 { font-size: 2em; } }"), "@media (min-width: 768px) { h1 { font-size: 2em; } }");
-  
-  // Empty or whitespace-only returns empty
+  assert.equal(scopedCustomCss(".wf-reader:not(.missing) { color: red; }"), ".wf-reader:not(.missing) { color: red; }");
+  assert.equal(scopedCustomCss(".wf-reader.special { color: red; }"), ".wf-reader.special { color: red; }");
+  assert.equal(scopedCustomCss('.wf-reader[data-theme="midnight"] h1 { color: red; }'), '.wf-reader[data-theme="midnight"] h1 { color: red; }');
+  assert.equal(scopedCustomCss(".wf-reader h1 { & + h2 { color: red; } }"), ".wf-reader h1 { & + h2 { color: red; } }");
+  assert.equal(scopedCustomCss(".wf-reader > h1 { & + h2 { color: red; } }"), ".wf-reader > h1 { & + h2 { color: red; } }");
+  assert.equal(scopedCustomCss(".wf-reader h1, .wf-reader h2 { & + h3 { color: red; } }"), ".wf-reader h1, .wf-reader h2 { & + h3 { color: red; } }");
+  assert.equal(scopedCustomCss(".wf-reader h1 { @media all { & + h2 { color: red; } } }"), ".wf-reader h1 { @media all { & + h2 { color: red; } } }");
+  assert.equal(scopedCustomCss(".wf-reader  + .outside { color: red; }"), ".wf-reader .wf-reader  + .outside { color: red; }");
+  assert.equal(scopedCustomCss(".wf-reader /*comment*/ + .outside { color: red; }"), ".wf-reader .wf-reader  + .outside { color: red; }");
+  assert.equal(scopedCustomCss('a[data-label="one,two"], :is(h1, h2) { color: red; }'), '.wf-reader a[data-label="one,two"],.wf-reader :is(h1, h2) { color: red; }');
+  assert.equal(scopedCustomCss('[data-label=".wf-reader  quoted"] { color: red; }'), '.wf-reader [data-label=".wf-reader  quoted"] { color: red; }');
+  assert.equal(scopedCustomCss("/* lead */ h1 { color: red; }"), "/* lead */ .wf-reader h1 { color: red; }");
+  assert.equal(scopedCustomCss("@media (min-width: 768px) { h1, h2 { font-size: 2em; } }"), "@media (min-width: 768px) { .wf-reader h1,.wf-reader h2 { font-size: 2em; } }");
+  assert.equal(scopedCustomCss("@supports (display: grid) { @media (width > 40rem) { main { display: grid; } } }"), "@supports (display: grid) { @media (width > 40rem) { .wf-reader main { display: grid; } } }");
+  assert.equal(scopedCustomCss(".wf-reader { h1 { color: red; } }"), ".wf-reader { h1 { color: red; } }");
+  assert.equal(scopedCustomCss(".wf-reader { @media (min-width: 40rem) { h1 { color: red; } } }"), ".wf-reader { @media (min-width: 40rem) { h1 { color: red; } } }");
+  assert.equal(scopedCustomCss(".wf-reader { & + .outside { color: red; } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader:not(.missing) { & + .outside { color: red; } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader.special { ~ .outside { color: red; } }"), "");
+  assert.equal(scopedCustomCss('.wf-reader[data-theme="midnight"] { @media all { + .outside { color: red; } } }'), "");
+  assert.equal(scopedCustomCss(".wf-reader.special { & { ~ .outside { color: red; } } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { body & + .outside { color: red; } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { body > & + .outside { color: red; } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { body & { & + .outside { color: red; } } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { @media all { body & + .outside { color: red; } } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { @media all { & + .outside { color: red; } } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { @supports (display: grid) { & + .outside { color: red; } } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { &.wf-reader + .outside { color: red; } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { :is(&) + .outside { color: red; } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { :is(&, .outside) { color: red; } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { :is(.outside, &) { color: red; } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { :where(:is(&, .outside)) { color: red; } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { h1 { :is(&, .outside) { color: red; } } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { h1 { :is(body:has(&)) { color: red; } } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { + .outside { color: red; } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { ~ .outside { color: red; } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader, h1 { & + .outside { color: red; } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { &, h1 { & + .outside { color: red; } } }"), "");
+  assert.equal(scopedCustomCss(".wf-reader { & { & + .outside { color: red; } } }"), "");
   assert.equal(scopedCustomCss(""), "");
   assert.equal(scopedCustomCss("   "), "");
+  assert.equal(scopedCustomCss("@keyframes flash { from { opacity: 0; } to { opacity: 1; } }"), "");
+  assert.equal(scopedCustomCss("@layer reset { h1 { color: red; } }"), "");
+  assert.equal(scopedCustomCss("@unknown rule { h1 { color: red; } }"), "");
+});
+
+test("custom CSS parser rejects malformed syntax and obfuscated unsafe declarations", () => {
+  assert.throws(() => validateAppearance({ ...DEFAULT_APPEARANCE, customCss: "h1 { color: red" }));
+  assert.throws(() => validateAppearance({ ...DEFAULT_APPEARANCE, customCss: "h1 { position/**/: fixed; }" }));
+  assert.throws(() => validateAppearance({ ...DEFAULT_APPEARANCE, customCss: "h1 { p\\6fsition: fixed; }" }));
+  assert.throws(() => validateAppearance({ ...DEFAULT_APPEARANCE, customCss: "h1 { z-index: 900; }" }));
 });
 
 test("all theme text and custom accent colors meet reading-surface contrast", () => {
