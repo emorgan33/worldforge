@@ -23,12 +23,32 @@ function stableImportId(requestId: string, part: string) {
   return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
 }
 
-export async function executeWorldTransfer(decoded: DecodedWorldTransfer, ownerId: string, identity?: { requestId: string; recover: boolean }): Promise<WorldTransferImportResult> {
+export async function executeWorldTransfer(decoded: DecodedWorldTransfer, ownerId: string, identity?: { requestId: string; payloadHash: string; recover: boolean }): Promise<WorldTransferImportResult> {
   // Constructing the canonical view here ensures common identity and content
   // fields are available independently of the source manifest discriminator.
   const canonical = toCanonicalWorldTransfer(decoded);
   const importIdentity = identity ? { worldId: stableImportId(identity.requestId, "world"), assetId: (sourceId: string) => stableImportId(identity.requestId, `asset:${sourceId}`) } : undefined;
   if (identity?.recover && importIdentity) {
+    const priorWorld = await prisma.world.findFirst({ where: { id: importIdentity.worldId, ownerId }, select: { id: true, creationRequestId: true, creationPayloadHash: true } });
+    if (priorWorld) {
+      // The import may have committed before both outcome writes failed. Never
+      // delete a deterministic world during replay: it may contain user edits.
+      if (priorWorld.creationRequestId !== identity.requestId || priorWorld.creationPayloadHash !== identity.payloadHash) {
+        throw new Error("The interrupted import left a partial world. It was preserved, but completion could not be verified; contact an administrator before retrying.");
+      }
+      const [categories, articles, assets, statblocks, secrets, timelines, variableCollections] = await Promise.all([
+        prisma.category.count({ where: { worldId: priorWorld.id } }),
+        prisma.article.count({ where: { worldId: priorWorld.id } }),
+        prisma.imageAsset.count({ where: { worldId: priorWorld.id } }),
+        prisma.rpgBlock.count({ where: { worldId: priorWorld.id } }),
+        prisma.secret.count({ where: { worldId: priorWorld.id } }),
+        prisma.timeline.count({ where: { worldId: priorWorld.id } }),
+        prisma.variableCollection.count({ where: { worldId: priorWorld.id } }),
+      ]);
+      return { success: true, worldId: priorWorld.id, warnings: ["The import outcome was recovered from its existing world after a storage interruption."], imported: {
+        categories, articles, assets, statblocks, secrets, timelines, variableCollections,
+      } };
+    }
     await prisma.world.deleteMany({ where: { id: importIdentity.worldId, ownerId } });
     for (const asset of canonical.assets ?? []) await removeAssetFile(importIdentity.assetId(asset.id));
     await prisma.assetCleanupJob.deleteMany({ where: { assetId: { in: (canonical.assets ?? []).map(asset => importIdentity.assetId(asset.id)) } } });
@@ -40,14 +60,14 @@ export async function executeWorldTransfer(decoded: DecodedWorldTransfer, ownerI
     if (decoded.bundle.assets?.some(asset => "provenance" in asset)) {
       return { success: false, error: "Format 1 cannot preserve image provenance. Import a format 4 bundle instead.", status: 400 };
     }
-    return { success: true, ...await importWorldV1(decoded.bundle, ownerId, importIdentity) };
+    return { success: true, ...await importWorldV1(decoded.bundle, ownerId, importIdentity ? { ...importIdentity, completionRequestId: identity?.requestId, completionPayloadHash: identity?.payloadHash } : undefined) };
   }
 
   const result = await importWorldV2(
     decoded.bundle,
     ownerId,
     async slug => !!(await prisma.world.findUnique({ where: { slug }, select: { id: true } })),
-    importIdentity,
+    importIdentity ? { ...importIdentity, completionRequestId: identity?.requestId, completionPayloadHash: identity?.payloadHash } : undefined,
   );
   if (!result.success) return { success: false, error: result.error || "Failed to import world", status: 500 };
   if (!result.worldId) return { success: false, error: "Import completed without a world identifier", status: 500 };
@@ -55,7 +75,7 @@ export async function executeWorldTransfer(decoded: DecodedWorldTransfer, ownerI
 }
 
 /** Decode an untrusted object and execute it, returning a transport-neutral error. */
-export async function importWorldTransfer(value: unknown, ownerId: string, identity?: { requestId: string; recover: boolean }): Promise<WorldTransferImportResult> {
+export async function importWorldTransfer(value: unknown, ownerId: string, identity?: { requestId: string; payloadHash: string; recover: boolean }): Promise<WorldTransferImportResult> {
   if (!isWorldTransferShape(value)) return { success: false, error: "Import file is malformed or exceeds supported section limits", status: 400 };
   const decoded = decodeWorldTransfer(value);
   return decoded ? executeWorldTransfer(decoded, ownerId, identity) : { success: false, error: "Unsupported export format version", status: 400 };

@@ -23,6 +23,7 @@ export const POST = withAuthor({ target: "account" }, async (request: Request, _
   const ownerId = user.id;
   let leaseTimer: ReturnType<typeof setInterval> | undefined;
   let executionSucceeded = false;
+  let executionResult: Awaited<ReturnType<typeof importWorldTransfer>> | undefined;
   let recoveryAttempt = false;
   try {
     const suppliedKey = requestKey(request);
@@ -69,7 +70,7 @@ export const POST = withAuthor({ target: "account" }, async (request: Request, _
     activeRecordId = record.id;
     const runningStatus = recovering ? "RECOVERING" : "RUNNING";
     leaseTimer = setInterval(() => { void prisma.worldTransferImport.update({ where: { id: record!.id }, data: { status: runningStatus } }).catch(() => {}); }, 30_000);
-    const result = await importWorldTransfer(body, ownerId, { requestId: record.id, recover: !!recovering });
+    const result = await importWorldTransfer(body, ownerId, { requestId: record.id, payloadHash, recover: !!recovering });
     if (!result.success) {
       clearInterval(leaseTimer);
       await prisma.worldTransferImport.update({ where: { id: record.id }, data: { status: "FAILED", error: result.error } });
@@ -78,6 +79,7 @@ export const POST = withAuthor({ target: "account" }, async (request: Request, _
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
     executionSucceeded = true;
+    executionResult = result;
     clearInterval(leaseTimer);
     await prisma.worldTransferImport.update({ where: { id: record.id }, data: { status: "COMPLETED", resultJson: JSON.stringify(result) } });
     activeImports.delete(record.id);
@@ -89,7 +91,9 @@ export const POST = withAuthor({ target: "account" }, async (request: Request, _
       const recoveryRequired = recoveryAttempt || executionSucceeded || (error instanceof AggregateError && /rollback cleanup was incomplete/i.test(error.message));
       await prisma.worldTransferImport.updateMany({
         where: { id: activeRecordId, status: { in: ["RUNNING", "RECOVERING"] } },
-        data: { status: recoveryRequired ? "RECOVERY_REQUIRED" : "FAILED", error: error instanceof Error ? error.message.slice(0, 500) : "Import failed" },
+        data: executionSucceeded && executionResult?.success
+          ? { status: "COMPLETED", resultJson: JSON.stringify(executionResult), error: null }
+          : { status: recoveryRequired ? "RECOVERY_REQUIRED" : "FAILED", error: error instanceof Error ? error.message.slice(0, 500) : "Import failed" },
       }).catch(() => {});
       activeImports.delete(activeRecordId);
     }

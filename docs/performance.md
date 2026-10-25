@@ -102,25 +102,21 @@ The list benchmark returned the full article set and reduced serialized bytes by
 
 ## Phase 4: Algorithmic Improvements (LOW Impact)
 
-### Improved CSS Scoping Regex
+### Parsed CSS Scoping
 **File:** `src/lib/world-appearance.ts`
 
-Before: Used `split(",")` on CSS selectors, which incorrectly split attribute selectors containing commas (e.g., `[data-value="a,b"]`).
+Before: Selector scoping used regex rewriting, which could miss nested rules and mishandle selector syntax.
 
-After: Custom `splitSelectors()` function that tracks parenthesis depth and only splits on commas outside attribute selectors.
+After: PostCSS parses the stylesheet and `postcss-selector-parser` scopes selector nodes. Nested scopes are validated before styling, and malformed persisted CSS fails closed.
 
 ## Phase 5: Caching & Eager Loading (HIGH Impact)
 
-### Aggressive Image Caching
+### Image Cache Policy
 **File:** `src/app/api/assets/[id]/file/route.ts`
 
-Before: All images served with `Cache-Control: private, no-store` — every page load required a fresh round-trip for every image (covers, banners, article images, backgrounds).
+Image responses currently use `no-store` for both anonymous reader-visible and private owner-only assets. The one-year cache constants are named for the earlier policy but their values deliberately disable storage.
 
-After: Images are immutable per ID (file content never changes for a given asset ID), so they now serve with:
-- `public, max-age=31536000, immutable` for reader-visible images
-- `private, max-age=31536000, immutable` for owner-only images
-
-This eliminates redundant image downloads on subsequent page loads.
+This avoids retaining image bytes in browser or shared caches under the current authorization and asset lifecycle rules. Revisit caching only with a policy that accounts for publication changes and access revocation.
 
 ### Optimized Article Relations (Reverted — Required by Type)
 **File:** `src/app/api/articles/[id]/route.ts`

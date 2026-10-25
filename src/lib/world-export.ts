@@ -432,7 +432,7 @@ export async function importWorldV2(
   data: WorldExportV2 | WorldExportV3 | WorldExportV4,
   ownerUserId: string,
   existingSlugCheck: (slug: string) => Promise<boolean>,
-  identity?: { worldId: string; assetId(sourceId: string): string }
+  identity?: { worldId: string; assetId(sourceId: string): string; completionRequestId?: string; completionPayloadHash?: string }
 ): Promise<ImportV2Result> {
   const warnings: string[] = [];
   const articleIdMap = new Map((data.articles || []).map((article) => [article.id, randomUUID()]));
@@ -531,17 +531,17 @@ export async function importWorldV2(
     }
   }
 
+  const remapUrls = (content: string | null | undefined) => remapWorldAssetUrls(content ?? null, assetUrlMap, assetId => warnings.push(`Removed reference to unavailable asset "${assetId}"`));
   // Restore category illustrations only after asset remapping is known.
   for (const cat of data.categories || []) {
     if (!cat.iconImage) continue;
     const id = categoryIdMap.get(cat.id);
     if (!id) continue;
-    const remapped = assetUrlMap.get(cat.iconImage) ?? null;
+    const remapped = remapUrls(cat.iconImage);
     if (remapped) await prisma.category.update({ where: { id }, data: { iconImage: remapped } });
-    else warnings.push(`Category "${cat.name}" illustration referenced an unavailable image and was cleared`);
+    else if (cat.iconImage) warnings.push(`Category "${cat.name}" illustration referenced an unavailable image and was cleared`);
   }
 
-  const remapUrls = (content: string | null) => remapWorldAssetUrls(content, assetUrlMap, assetId => warnings.push(`Removed reference to unavailable asset "${assetId}"`));
   function remapArticleHtml(html: string | null): string | null {
     const articleRemapped = remapUrls(html)?.replace(/data-article-id=(['"])([^'"]+)\1/gi, (_match, quote: string, sourceId: string) => {
       const targetId = articleIdMap.get(sourceId);
@@ -604,8 +604,8 @@ export async function importWorldV2(
         metadata: remapUrls(remapArticleMetadata(article.metadata, articleIdMap, statblockIdMap, (key, sourceId, kind) => warnings.push(`Removed metadata ${kind} reference "${sourceId}" from ${key}`))),
         tags: article.tags,
         publicationStatus: "DRAFT", visibility: "PRIVATE", state: "DRAFT",
-        coverImage: article.coverImage ? assetUrlMap.get(article.coverImage) ?? null : null,
-        portraitImage: article.portraitImage ? assetUrlMap.get(article.portraitImage) ?? null : null,
+        coverImage: remapUrls(article.coverImage),
+        portraitImage: remapUrls(article.portraitImage),
         coverImageAlt: article.coverImageAlt ?? null,
         portraitImageAlt: article.portraitImageAlt ?? null,
         parentId: null,
@@ -666,9 +666,9 @@ export async function importWorldV2(
       visibility: revision.visibility === "PUBLIC" ? "PUBLIC" : "PRIVATE", state: revision.state, userId: ownerUserId,
       savedAt: new Date(revision.savedAt), articleVersionAtSave: revision.articleVersionAtSave,
       createdAt: new Date(revision.createdAt),
-      coverImage: revision.coverImage ? assetUrlMap.get(revision.coverImage) ?? null : null,
+      coverImage: remapUrls(revision.coverImage),
       coverImageAlt: revision.coverImageAlt ?? null,
-      portraitImage: revision.portraitImage ? assetUrlMap.get(revision.portraitImage) ?? null : null,
+      portraitImage: remapUrls(revision.portraitImage),
       portraitImageAlt: revision.portraitImageAlt ?? null,
     } });
   }
@@ -710,8 +710,8 @@ export async function importWorldV2(
     variableCollectionsImported++;
   }
 
-  const coverImageUrl = data.world.coverImage ? assetUrlMap.get(data.world.coverImage) ?? null : null;
-  const bannerImageUrl = data.world.bannerImage ? assetUrlMap.get(data.world.bannerImage) ?? null : null;
+  const coverImageUrl = remapUrls(data.world.coverImage);
+  const bannerImageUrl = remapUrls(data.world.bannerImage);
   if (coverImageUrl || bannerImageUrl) {
     await prisma.world.update({ where: { id: newWorldId }, data: { coverImage: coverImageUrl, bannerImage: bannerImageUrl } });
   }
@@ -852,6 +852,10 @@ export async function importWorldV2(
         });
       }
     }
+  }
+
+  if (identity?.completionRequestId && identity.completionPayloadHash) {
+    await prisma.world.update({ where: { id: newWorldId }, data: { creationRequestId: identity.completionRequestId, creationPayloadHash: identity.completionPayloadHash } });
   }
 
   return {

@@ -11,7 +11,7 @@ export interface WorldTransferExecutionResult {
   imported: { categories: number; articles: number; assets: number; statblocks: number; secrets: number; timelines: number; variableCollections: number };
 }
 
-export async function importWorldV1(v1Body: WorldExportV1, ownerId: string, identity?: { worldId: string; assetId(sourceId: string): string }): Promise<WorldTransferExecutionResult> {
+export async function importWorldV1(v1Body: WorldExportV1, ownerId: string, identity?: { worldId: string; assetId(sourceId: string): string; completionRequestId?: string; completionPayloadHash?: string }): Promise<WorldTransferExecutionResult> {
   const warnings: string[] = [];
 let slug = v1Body.world.slug;
   let slugSuffix = 0;
@@ -105,6 +105,9 @@ let slug = v1Body.world.slug;
     await prisma.map.create({ data: { id: randomUUID(), worldId: newWorldId, title: map.title, description: map.description, imageUrl: remapUrls(map.imageUrl) || "", width: map.width, height: map.height, defaultZoom: map.defaultZoom, layers: { create: (map.layers || []).map(layer => ({ id: layerIds.get(layer.id)!, name: layer.name, order: layer.order, isVisible: layer.isVisible, imageUrl: remapUrls(layer.imageUrl) })) }, markerGroups: { create: (map.groups || []).map(group => ({ id: groupIds.get(group.id)!, name: group.name, color: group.color, icon: group.icon })) }, markers: { create: (map.pins || []).map(pin => ({ id: randomUUID(), layerId: pin.layerId ? layerIds.get(pin.layerId) ?? null : null, groupId: pin.groupId ? groupIds.get(pin.groupId) ?? null : null, title: pin.title, description: pin.description, x: pin.x, y: pin.y, articleId: pin.articleId ? articleIdMap.get(pin.articleId) ?? null : null, icon: pin.icon, color: pin.color })) } } });
   }
 
+  if (identity?.completionRequestId && identity.completionPayloadHash) {
+    await prisma.world.update({ where: { id: newWorldId }, data: { creationRequestId: identity.completionRequestId, creationPayloadHash: identity.completionPayloadHash } });
+  }
   return { worldId: newWorldId, warnings: warnings.length > 0 ? warnings : undefined, imported: { categories: v1Body.categories?.length || 0, articles: articlesImported, assets: assetsImported, statblocks: statblocksImported, secrets: secretsImported, timelines: timelinesImported, variableCollections: variableCollectionsImported } };
   } catch (error) {
     const cleanupErrors: unknown[] = [];

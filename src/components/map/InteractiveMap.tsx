@@ -78,6 +78,8 @@ export interface MapElementData {
   kind: string;
   geometry: string;
   style?: string | null;
+  order?: number;
+  createdAt?: string | Date;
 }
 
 export interface MapData {
@@ -102,7 +104,7 @@ type Pending = { kind: "pin" | "label"; x: number; y: number };
 type Draft =
   | { kind: "LINE" | "CIRCLE" | "RECT"; x1: number; y1: number; x2: number; y2: number }
   | { kind: "PATH"; points: { x: number; y: number }[] };
-type DraftStroke = { id: number; mapId: string; geometry: Draft; erase: boolean; style: string; layerId: string | null; status: "drawing" | "saving" | "failed" };
+type DraftStroke = { id: number; mapId: string; order: number; geometry: Draft; erase: boolean; style: string; layerId: string | null; status: "drawing" | "saving" | "failed" };
 type Selection = { type: "marker"; id: string } | { type: "element"; id: string } | null;
 
 const COLOR_SWATCHES = ["#eab308", "#ef4444", "#f97316", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#f8fafc", "#111827"];
@@ -560,6 +562,13 @@ export function InteractiveMap({
   const map = maps.find((item) => item.id === selectedMapId) ?? maps[0] ?? null;
   const visibleDrafts = useMemo(() => map ? drafts.filter((draft) => draft.mapId === map.id) : [], [drafts, map]);
 
+  function nextElementOrder(mapId: string) {
+    const target = maps.find((item) => item.id === mapId);
+    const persistedMax = Math.max(-1, ...(target?.elements ?? []).map((element) => element.order ?? -1));
+    const draftMax = Math.max(-1, ...drafts.filter((draft) => draft.mapId === mapId).map((draft) => draft.order));
+    return Math.min(Math.max(persistedMax, draftMax) + 1, 2_147_483_647);
+  }
+
   const dirty = !!pending || drafts.length > 0 || panelDirty || renameOpen || newMapOpen;
   useWorldGuard({ dirty, busy: mutating }, "map", onGuardChange);
 
@@ -629,7 +638,7 @@ export function InteractiveMap({
     const geometry: Draft = tool === "freehand" || erase
       ? { kind: "PATH", points: [point] }
       : { kind: tool === "line" ? "LINE" : tool === "rect" ? "RECT" : "CIRCLE", x1: point.x, y1: point.y, x2: point.x, y2: point.y };
-    setDrafts((current) => [...current, { id, mapId: map?.id ?? "", geometry, erase, style, layerId: pendingLayerId || null, status: "drawing" }]);
+    setDrafts((current) => [...current, { id, mapId: map?.id ?? "", order: nextElementOrder(map?.id ?? ""), geometry, erase, style, layerId: pendingLayerId || null, status: "drawing" }]);
   }
 
   function handleMouseMove(event: React.PointerEvent<HTMLDivElement>) {
@@ -662,7 +671,7 @@ export function InteractiveMap({
       ? { points: stroke.geometry.points.length === 1 ? [stroke.geometry.points[0], { x: clampPercent(stroke.geometry.points[0].x + 0.05), y: stroke.geometry.points[0].y }] : stroke.geometry.points }
       : { x1: stroke.geometry.x1, y1: stroke.geometry.y1, x2: stroke.geometry.x2, y2: stroke.geometry.y2 };
     try {
-      await mutate({ action: "createElement", mapId: stroke.mapId, kind: stroke.geometry.kind, geometry: JSON.stringify(geometry), style: stroke.style, layerId: stroke.layerId });
+      await mutate({ action: "createElement", mapId: stroke.mapId, kind: stroke.geometry.kind, geometry: JSON.stringify(geometry), style: stroke.style, layerId: stroke.layerId, order: stroke.order });
       setDrafts((current) => current.filter((item) => item.id !== stroke.id));
     } catch {
       setDrafts((current) => current.map((item) => item.id === stroke.id ? { ...item, status: "failed" } : item));
@@ -690,7 +699,7 @@ export function InteractiveMap({
         await mutate({ action: "createMarker", mapId: map.id, title: pendingTitle.trim(), description: pendingDesc, x: pending.x, y: pending.y, color: drawColor, icon: pendingIcon, layerId: pendingLayerId || null });
       } else {
         if (!pendingText.trim()) return;
-        await mutate({ action: "createElement", mapId: map.id, kind: "LABEL", geometry: JSON.stringify({ x: pending.x, y: pending.y, text: pendingText.trim() }), style: JSON.stringify({ color: drawColor, fontSize }), layerId: pendingLayerId || null });
+        await mutate({ action: "createElement", mapId: map.id, kind: "LABEL", geometry: JSON.stringify({ x: pending.x, y: pending.y, text: pendingText.trim() }), style: JSON.stringify({ color: drawColor, fontSize }), layerId: pendingLayerId || null, order: nextElementOrder(map.id) });
       }
       clearPending();
     } catch { /* error already surfaced */ }
@@ -743,17 +752,32 @@ export function InteractiveMap({
       if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
-      for (const element of visibleElements) {
-        if (element.kind === "LABEL") continue;
-        const style = strokeStyle(element);
-        const isErase = !!style.erase;
-        ctx.globalCompositeOperation = isErase ? "destination-out" : "source-over";
-        paintStroke(ctx, cssWidth, cssHeight, element.kind, parseJson(element.geometry, {}), isErase ? { ...style, color: "#000" } : style, "#eab308");
-      }
-      for (const draft of visibleDrafts) {
-        const style = parseJson<StrokeStyle>(draft.style, {});
-        ctx.globalCompositeOperation = draft.erase ? "destination-out" : "source-over";
-        paintDraft(ctx, cssWidth, cssHeight, draft.geometry, draft.erase ? { ...style, color: "#000" } : style, style.color ?? "#eab308");
+      const paintQueue = [
+        ...visibleElements.filter((element) => element.kind !== "LABEL").map((element, index) => ({ type: "saved" as const, order: element.order ?? 0, index, id: element.id, element })),
+        ...visibleDrafts.map((draft, index) => ({ type: "draft" as const, order: draft.order, index, id: String(draft.id), draft })),
+      ].sort((a, b) => {
+        const byOrder = a.order - b.order;
+        if (byOrder) return byOrder;
+        if (a.type === "saved" && b.type === "saved") {
+          const aTime = a.element.createdAt ? new Date(a.element.createdAt).getTime() : Number.NaN;
+          const bTime = b.element.createdAt ? new Date(b.element.createdAt).getTime() : Number.NaN;
+          if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) return aTime - bTime;
+          return a.index - b.index;
+        }
+        if (a.type !== b.type) return a.type === "saved" ? -1 : 1;
+        return a.index - b.index;
+      });
+      for (const item of paintQueue) {
+        if (item.type === "saved") {
+          const style = strokeStyle(item.element);
+          const isErase = !!style.erase;
+          ctx.globalCompositeOperation = isErase ? "destination-out" : "source-over";
+          paintStroke(ctx, cssWidth, cssHeight, item.element.kind, parseJson(item.element.geometry, {}), isErase ? { ...style, color: "#000" } : style, "#eab308");
+        } else {
+          const style = parseJson<StrokeStyle>(item.draft.style, {});
+          ctx.globalCompositeOperation = item.draft.erase ? "destination-out" : "source-over";
+          paintDraft(ctx, cssWidth, cssHeight, item.draft.geometry, item.draft.erase ? { ...style, color: "#000" } : style, style.color ?? "#eab308");
+        }
       }
       ctx.globalCompositeOperation = "source-over";
     };

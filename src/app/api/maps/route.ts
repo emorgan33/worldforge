@@ -149,12 +149,16 @@ async function createElement(body: Record<string, unknown>) {
   const layerId = nullableId(body.layerId);
   if (layerId && !(await prisma.mapLayer.findFirst({ where: { id: layerId, mapId } }))) throw new MapError("Layer not found on this map.");
   const lastElement = await prisma.mapElement.findFirst({ where: { mapId }, orderBy: [{ order: "desc" }, { createdAt: "desc" }, { id: "desc" }], select: { order: true } });
+  const requestedOrder = body.order;
+  const order = typeof requestedOrder === "number" && Number.isInteger(requestedOrder) && requestedOrder >= 0 && requestedOrder <= 2_147_483_647
+    ? requestedOrder
+    : (lastElement?.order ?? -1) + 1;
   const element = await prisma.mapElement.create({
     data: {
       mapId, layerId, kind,
       geometry: parseMapGeometry(kind, body.geometry),
       style: parseMapStyle(kind, body.style),
-      order: (lastElement?.order ?? -1) + 1,
+      order,
     },
     include: { layer: true },
   });

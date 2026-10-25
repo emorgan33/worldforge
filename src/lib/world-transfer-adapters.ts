@@ -33,11 +33,13 @@ export function toCanonicalWorldTransfer(decoded: DecodedWorldTransfer): Canonic
 /** Remap embedded asset URLs and clear references absent from the bundle. */
 export function remapWorldAssetUrls(content: string | null, assetUrlMap: ReadonlyMap<string, string>, warn: (sourceAssetId: string) => void): string | null {
   if (!content) return content;
-  let remapped = content;
-  for (const [sourceUrl, targetUrl] of assetUrlMap) remapped = remapped.split(sourceUrl).join(targetUrl);
-  const available = new Set(assetUrlMap.values());
-  return remapped.replace(/\/api\/assets\/([0-9a-f-]{36})\/file/gi, (match, sourceAssetId: string) => {
-    if (available.has(match)) return match;
+  return content.replace(/(?:https?:\/\/[^\s"'<>]+)?\/api\/assets\/([0-9a-f-]{36})\/file/gi, (match, sourceAssetId: string) => {
+    const target = assetUrlMap.get(`/api/assets/${sourceAssetId.toLowerCase()}/file`)
+      ?? [...assetUrlMap].find(([source]) => source.toLowerCase() === `/api/assets/${sourceAssetId.toLowerCase()}/file`)?.[1];
+    if (target) return target;
+    // Preserve external image URLs. Only a recognized WorldForge asset path
+    // is world-local and therefore eligible for clearing when it is absent.
+    if (/^https?:\/\//i.test(match)) return match;
     warn(sourceAssetId);
     return "";
   });

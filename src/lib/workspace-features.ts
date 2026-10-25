@@ -25,7 +25,13 @@ export async function saveWorkspaceMapMutation(
     body: JSON.stringify({ worldId, ...mutation }),
   });
   const result = await readWorkspaceJson(response, isRecord, "Unable to update the map.");
-  const refreshed = await fetcher(`/api/maps?worldId=${encodeURIComponent(worldId)}`);
-  if (!refreshed.ok) return { result };
-  return { result, maps: await readWorkspaceJson(refreshed, isArray, "Unable to refresh maps.") };
+  // The mutation is already committed. A failed follow-up read must not turn
+  // that success into a retryable write failure (which can duplicate strokes).
+  try {
+    const refreshed = await fetcher(`/api/maps?worldId=${encodeURIComponent(worldId)}`);
+    if (!refreshed.ok) return { result };
+    return { result, maps: await readWorkspaceJson(refreshed, isArray, "Unable to refresh maps.") };
+  } catch {
+    return { result };
+  }
 }

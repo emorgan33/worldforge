@@ -7,10 +7,18 @@ import {
   readWorldTransferJson,
   toCanonicalWorldTransfer,
   worldTransferLimitError,
+  remapWorldAssetUrls,
 } from "@/lib/world-transfer-adapters";
 import { importWorldTransfer } from "@/lib/world-transfer-execution";
 
 const base = { world: { id: "source", slug: "test", title: "Test", description: null, genre: "Fantasy", system: "DND_5E" }, categories: [], articles: [], assets: [] };
+
+test("remaps absolute library image URLs and preserves external placements", () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const urls = new Map([[`/api/assets/${id}/file`, "/api/assets/22222222-2222-4222-8222-222222222222/file"]]);
+  const input = `https://old.example/api/assets/${id}/file|https://images.example/cover.webp`;
+  assert.equal(remapWorldAssetUrls(input, urls, () => "unexpected"), "/api/assets/22222222-2222-4222-8222-222222222222/file|https://images.example/cover.webp");
+});
 
 test("decodes all supported manifest versions and preserves accurate discriminators", () => {
   const v1 = decodeWorldTransfer({ ...base, version: 1 });

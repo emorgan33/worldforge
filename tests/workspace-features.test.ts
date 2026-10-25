@@ -28,3 +28,13 @@ test("workspace map mutation selects the route method and refreshes the same wor
   assert.equal(calls[0].init?.method, "DELETE");
   assert.equal(calls[1].url, "/api/maps?worldId=world%201");
 });
+
+test("a committed map mutation stays successful when its follow-up refresh fails", async () => {
+  let calls = 0;
+  const fetcher = (async () => {
+    calls++;
+    if (calls === 1) return Response.json({ id: "element-1" }, { status: 201 });
+    throw new Error("connection reset");
+  }) as typeof fetch;
+  assert.deepEqual(await saveWorkspaceMapMutation("world-1", { action: "createElement" }, fetcher), { result: { id: "element-1" } });
+});

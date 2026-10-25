@@ -604,6 +604,8 @@ Validation used dedicated temporary SQLite databases and asset directories, matc
 
 **Follow-up (2026-10-25):** Upload now checks the selected image's leave guard before starting, so accepting a file cannot replace dirty details without confirmation. The New map library reports combined dirty/busy state to its Hide library control; it blocks hiding during a save and confirms before unmounting dirty details.
 
+**Correctness follow-up (2026-10-25):** If import execution succeeds but both completion writes fail, replay recognizes the deterministic world and preserves it rather than deleting it; the result is reconstructed for the replay response. Format 4 import remaps placements by asset path across relative and absolute server URLs, preserves external URLs, and applies that behavior to world, article, revision, category, map, and layer placements. Drawing requests carry a bounded, stable gesture sequence within Prisma's `Int` range so delayed writes and Retry preserve order. A successful map mutation remains successful when its best-effort refresh fails. Regression coverage covers absolute/external image remapping and refresh connection loss. The performance guide reflects `no-store` image responses and PostCSS-based CSS scoping. Validation was not rerun in this follow-up.
+
 **Follow-up (2026-10-25):** New map Cancel and Close now use the same image-library dirty/busy check as Hide library. Successful permanent deletion reports a clean guard before removing the selected detail form, preventing the deleted form's dirty state from being restored afterward.
 
 **Follow-up (2026-10-25):** Create map checks the same library guard before calling the mutation and is disabled while an image save is pending.
