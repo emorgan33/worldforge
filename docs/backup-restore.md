@@ -1,92 +1,106 @@
 # Backup and Restore Guide
 
-Updated: October 15, 2026.
+Updated: October 25, 2026.
 
 WorldForge stores two types of data that must be backed up together:
 
 1. **SQLite Database** (`data/*.db`) - All world metadata, articles, categories, users, sessions, etc.
 2. **Asset Files** (`data/assets/`) - Uploaded images in WebP format
 
-## Backing Up
+## Backing up a self-hosted Compose installation
 
-### 1. Database Backup
+The database and asset directory form one recovery point. Stop the application
+before copying either one; never copy a live SQLite database with `cp`, and do
+not restore one component without the matching other component. The Compose
+named volume survives container replacement.
 
-```bash
-# Create a timestamped backup of the SQLite database
-cp data/worldforge.db "data/worldforge-$(date +%Y%m%d-%H%M%S).db"
-
-# Or create a compressed backup
-sqlite3 data/worldforge.db ".backup 'data/worldforge-backup.db'" && gzip data/worldforge-backup.db
-```
-
-The `.backup` command creates a consistent snapshot even if the database is being written to.
-
-### 2. Asset Backup
+From the directory containing `docker-compose.yml`:
 
 ```bash
-# Create a timestamped archive of the assets directory
-tar -czf "data/assets-$(date +%Y%m%d-%H%M%S).tar.gz" -C data assets
+set -euo pipefail
+mkdir -p backups
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+container=$(docker compose ps -q worldforge)
+test -n "$container"
+docker compose stop worldforge
+mkdir -p "backups/$stamp/assets"
+docker run --rm --volumes-from "$container" \
+  -v "$PWD/backups/$stamp:/backup" \
+  --entrypoint sh worldforge:local -c \
+  'sqlite3 /data/worldforge.db ".backup /backup/worldforge.db" && test "$(sqlite3 /backup/worldforge.db "PRAGMA integrity_check;")" = ok'
+docker cp "$container:/data/assets/." "backups/$stamp/assets/"
+printf 'WorldForge stopped backup %s\n' "$stamp" > "backups/$stamp/manifest.txt"
+tar -czf "backups/worldforge-$stamp.tar.gz" -C backups "$stamp"
+docker compose start worldforge
 ```
 
-### 3. Complete Backup Script
+SQLite's `.backup` command opens the stopped database through SQLite, allowing
+hot-journal recovery and producing a consistent snapshot instead of copying a
+possibly incomplete main file. The command checks the snapshot's integrity
+before the assets are added. Keep the database, assets, and manifest together
+in the archive. Store copies outside the host that runs WorldForge. If the
+backup command fails, leave the service stopped until the copy is complete or
+remove the partial directory and start it again. For local non-Compose installs,
+stop the server service first, resolve `DATABASE_URL` to `DATABASE_FILE`, and
+archive a SQLite snapshot with the complete `WORLDFORGE_ASSET_DIR`:
 
 ```bash
-#!/bin/bash
-BACKUP_DIR="./backups"
-mkdir -p "$BACKUP_DIR"
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-
-# Backup database
-cp data/worldforge.db "$BACKUP_DIR/worldforge-$TIMESTAMP.db"
-
-# Backup assets
-tar -czf "$BACKUP_DIR/assets-$TIMESTAMP.tar.gz" -C data assets
-
-# Create manifest
-cat > "$BACKUP_DIR/manifest-$TIMESTAMP.txt" << EOF
-WorldForge Backup - $TIMESTAMP
-Database: worldforge-$TIMESTAMP.db
-Assets: assets-$TIMESTAMP.tar.gz
-Asset count: $(find data/assets -name "*.webp" | wc -l)
-EOF
-
-echo "Backup complete: $BACKUP_DIR/"
+set -euo pipefail
+backup_dir="$PWD/backups/$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$backup_dir/assets"
+sqlite3 "$DATABASE_FILE" ".backup '$backup_dir/worldforge.db'"
+test "$(sqlite3 "$backup_dir/worldforge.db" 'PRAGMA integrity_check;')" = ok
+tar -czf "$backup_dir/assets.tar.gz" -C "$WORLDFORGE_ASSET_DIR" .
 ```
 
-## Restoring from Backup
+## Restoring a Compose backup
 
-### 1. Stop the Server
+Stop the service and extract the selected archive. Preserve a separate copy of
+the current volume before replacing it. The helper container mounts the same
+named volume while the app is stopped, replaces both matching components, and
+clears stale assets:
 
 ```bash
-# Stop the running WorldForge server
-# The exact command depends on your deployment method
+set -euo pipefail
+docker compose stop worldforge
+mkdir -p restore-work
+tar -xzf backups/worldforge-TIMESTAMP.tar.gz -C restore-work
+container=$(docker compose ps -aq worldforge | head -n 1)
+docker run --rm --volumes-from "$container" \
+  -v "$PWD/restore-work/TIMESTAMP:/restore:ro" \
+  --entrypoint sh worldforge:local -c \
+  'sqlite3 /restore/worldforge.db "PRAGMA integrity_check;" | grep -qx ok && cp /restore/worldforge.db /data/worldforge.db.restore && rm -f /data/worldforge.db-journal /data/worldforge.db-wal /data/worldforge.db-shm && mv /data/worldforge.db.restore /data/worldforge.db && rm -rf /data/assets && mkdir -p /data/assets && cp -a /restore/assets/. /data/assets/'
+docker compose start worldforge
 ```
 
-### 2. Restore Database
+If the image tag differs from `worldforge:local`, substitute the image used by
+the Compose service. The integrity check runs on the staged backup before it
+replaces the database. The command removes stale rollback journals and WAL/SHM
+files before atomically replacing the main database file, so a leftover journal
+cannot replay over the restored copy. Startup applies pending Prisma migrations;
+check the logs and verify the restored worlds and images before reopening access.
+
+For a local install, resolve `DATABASE_FILE` and `WORLDFORGE_ASSET_DIR`, then
+stop the process. This stages the checked database beside the live file so the
+final rename is atomic, removes stale recovery sidecars, and replaces the asset
+directory from the same recovery set:
 
 ```bash
-# Option A: Direct copy (simple but requires server stop)
-cp backups/worldforge-TIMESTAMP.db data/worldforge.db
-
-# Option B: Using sqlite3 (can be done while server is running with caution)
-sqlite3 data/worldforge.db ".restore backups/worldforge-TIMESTAMP.db"
+set -euo pipefail
+restored_db="${DATABASE_FILE}.restore"
+test "$(sqlite3 backup/worldforge.db 'PRAGMA integrity_check;')" = ok
+cp backup/worldforge.db "$restored_db"
+test "$(sqlite3 "$restored_db" 'PRAGMA integrity_check;')" = ok
+rm -f "${DATABASE_FILE}-journal" "${DATABASE_FILE}-wal" "${DATABASE_FILE}-shm"
+mv "$restored_db" "$DATABASE_FILE"
+mkdir -p "$WORLDFORGE_ASSET_DIR"
+find "$WORLDFORGE_ASSET_DIR" -mindepth 1 -delete
+tar -xzf backup/assets.tar.gz -C "$WORLDFORGE_ASSET_DIR"
 ```
 
-### 3. Restore Assets
-
-```bash
-# Remove current assets and restore from backup
-rm -rf data/assets
-tar -xzf backups/assets-TIMESTAMP.tar.gz -C data
-```
-
-### 4. Restart the Server
-
-```bash
-# Restart WorldForge
-pnpm run start
-# or your deployment-specific restart command
-```
+Restart the app only after both components have been restored. Do not use
+SQLite `.restore` against a live application or combine assets from one point
+in time with a database from another.
 
 ## World Export/Import (Per-World Backup)
 

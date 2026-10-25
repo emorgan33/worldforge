@@ -5,7 +5,7 @@ ENV PNPM_HOME="/pnpm" \
     PATH="/pnpm:$PATH" \
     CI="true"
 RUN apt-get update -y \
-    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && apt-get install -y --no-install-recommends openssl ca-certificates sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 WORKDIR /app

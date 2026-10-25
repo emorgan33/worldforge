@@ -91,6 +91,10 @@ docker compose up -d --build
 ```
 
 Open http://localhost:3033. The container applies database migrations on start.
+Set `WORLDFORGE_HOST_PORT` to change the host-side port and set
+`WORLDFORGE_ORIGIN` to the URL used in the browser. See the
+[deployment configuration guide](docs/deployment-configuration.md) and
+[backup and restore guide](docs/backup-restore.md) for operational details.
 
 Generate a one-time setup link for the first GM account, then open the printed
 `/setup#token=...` URL in your browser to set an email and password. On an empty
