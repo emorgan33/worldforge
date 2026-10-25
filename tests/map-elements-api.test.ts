@@ -106,11 +106,30 @@ test("map elements validate, persist, update, delete and stay owner-scoped", { s
   assert.deepEqual(JSON.parse(updatedBody.geometry), { x1: 15, y1: 25, x2: 55, y2: 65 });
   assert.equal(updatedBody.layerId, null);
 
+  const clamped = await send(owned, "/api/maps", {
+    action: "updateElement", worldId: world.id, mapId: map.id, id: rect.id,
+    geometry: JSON.stringify({ x1: -5, y1: 25, x2: 105, y2: 65 }),
+  }, "PATCH");
+  assert.equal(clamped.status, 200);
+  assert.deepEqual(JSON.parse((await clamped.json()).geometry), { x1: 0, y1: 25, x2: 100, y2: 65 });
+
+  const incompatibleKindChange = await send(owned, "/api/maps", {
+    action: "updateElement", worldId: world.id, mapId: map.id, id: rect.id,
+    kind: "LABEL",
+  }, "PATCH");
+  assert.equal(incompatibleKindChange.status, 400);
+
+  const incompatibleStyleChange = await send(owned, "/api/maps", {
+    action: "updateElement", worldId: world.id, mapId: map.id, id: rect.id,
+    kind: "RECT", style: JSON.stringify({ erase: true, strokeWidth: 16 }),
+  }, "PATCH");
+  assert.equal(incompatibleStyleChange.status, 400);
+
   const invalidUpdate = await send(owned, "/api/maps", {
     action: "updateElement", worldId: world.id, mapId: map.id, id: rect.id, geometry: JSON.stringify({ x1: 15, y1: 25 }),
   }, "PATCH");
   assert.equal(invalidUpdate.status, 400);
-  assert.deepEqual(JSON.parse((await db.mapElement.findUniqueOrThrow({ where: { id: rect.id } })).geometry), { x1: 15, y1: 25, x2: 55, y2: 65 });
+  assert.deepEqual(JSON.parse((await db.mapElement.findUniqueOrThrow({ where: { id: rect.id } })).geometry), { x1: 0, y1: 25, x2: 100, y2: 65 });
 
   const listResponse = await owned(`${origin}/api/maps?worldId=${world.id}`);
   assert.equal(listResponse.status, 200);

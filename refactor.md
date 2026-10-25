@@ -315,7 +315,7 @@ Effort is relative: **Small** is a bounded change; **Medium** spans several rela
 | R12 Make world import retryable | P1 | High | Large | R10 | **Complete** |
 | R13 Consolidate identity and authorization | P1 | High | Large | R01, production baseline | **Complete** |
 | R14 Make access/session operations atomic | P1 | High | Medium | R13 | **Complete** |
-| R15 Establish cartography lifecycle contracts | P1 | Medium | Medium | R01 | Not started |
+| R15 Establish cartography lifecycle contracts | P1 | Medium | Medium | R01 | **Complete** |
 | R16 Extract workspace feature controllers | P2 | High | Large | R05–R07, R13, R15 | Not started |
 | R17 Bound search and reader work | P2 | Medium | Medium | R09, R13 | Not started |
 | R18 Clarify configuration and operations | P2 | Medium | Medium | R01 | Not started |
@@ -583,6 +583,10 @@ Validation used dedicated temporary SQLite databases and asset directories, matc
 **Validation and acceptance:** A slow previous save cannot erase the next stroke. Failures retain recoverable drawing state. Every kind, eraser style, layer rule and percentage coordinate remains compatible. Add actual canvas/pointer tests.
 
 **Rollback:** Preserve existing geometry JSON. Revert UI extraction independently; do not change annotation kinds or eraser semantics.
+
+**Implementation (2026-10-24):** Added `src/lib/map-elements.ts` as the shared geometry/style contract. Map API create and update use it, including validating retained geometry and style when an annotation kind changes. Coordinates are clamped to the stored 0–100 percentage range; labels, paths, stroke widths, colors, font sizes, and the PATH-only eraser style have bounded validation. World import applies the same contract after ID/layer remapping while preserving named CSS colors and unknown style properties from existing backups. The editor stores in-progress and failed strokes as identity-keyed drafts, so overlapping saves retain independent ink. Failed strokes stay visible, are guarded against navigation, and have explicit retry/discard controls. Drawing continues while writes are pending; map switching stays disabled until drafts resolve. Added API/model regressions and Playwright pointer/canvas cases for both completion orders, failure recovery, navigation guarding, retry and discard. Updated [interactive maps](docs/interactive-maps.md) with these persistence and format rules.
+
+**Validation (2026-10-24):** Focused model/render and transfer checks passed **11/11**, including a format 4 backup round-trip with legacy named color `red`. The map-element API regression passed **1/1**. Playwright pointer/canvas checks passed **3/3** against a dedicated temporary SQLite database, asset directory, and dev server; they cover overlapping saves with a failed earlier stroke, retained canvas ink, navigation confirmation, retry, discard, blocked map transitions, and a one-click eraser stroke. `pnpm exec tsc --noEmit --incremental false` passed. Focused ESLint reported zero errors and one existing unused-variable warning in `src/lib/world-export.ts:702`; `git diff --check` passed.
 
 ### R16 — Extract workspace controllers while preserving navigation behavior
 

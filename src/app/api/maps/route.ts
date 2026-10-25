@@ -4,12 +4,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { isImageReference } from "@/lib/assets";
 import { assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
+import { MapElementContractError, parseMapGeometry, parseMapStyle } from "@/lib/map-elements";
 
 class MapError extends Error {
   constructor(message: string, public status = 400) { super(message); }
 }
 function failure(error: unknown) {
   if (error instanceof ImageReferenceError) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error instanceof MapElementContractError) return NextResponse.json({ error: error.message }, { status: 400 });
   if (error instanceof MapError) return NextResponse.json({ error: error.message }, { status: error.status });
   if (error instanceof AccessError) return NextResponse.json({ error: error.message }, { status: error.status });
   console.error("Map request failed:", error);
@@ -46,49 +48,6 @@ function positiveInt(value: unknown, label: string, fallback: number) {
   const n = Number(value);
   if (!Number.isInteger(n) || n <= 0 || n > 1_000_000) throw new MapError(`${label} must be a positive integer.`);
   return n;
-}
-
-// Only drawings are validated here; labels carry a text payload instead of
-// coordinates. Geometry is stored as a JSON string of percentage coordinates.
-function parseGeometry(kind: string, geometry: unknown): string {
-  if (typeof geometry !== "string" || !geometry.trim() || geometry.length > 1_000_000) throw new MapError("Geometry is required.");
-  let parsed: unknown;
-  try { parsed = JSON.parse(geometry); }
-  catch { throw new MapError("Geometry must be valid JSON."); }
-  if (kind === "LABEL") {
-    const g = parsed as { x?: unknown; y?: unknown; text?: unknown };
-    if (!g || typeof g !== "object" || typeof g.text !== "string" || !g.text.trim() || g.text.length > 2000) throw new MapError("Labels need text.");
-    numberPercent(g.x, "Label x"); numberPercent(g.y, "Label y");
-  } else if (kind === "LINE") {
-    const g = parsed as { x1?: unknown; y1?: unknown; x2?: unknown; y2?: unknown };
-    if (!g || typeof g !== "object") throw new MapError("Line geometry is invalid.");
-    numberPercent(g.x1, "Line x1"); numberPercent(g.y1, "Line y1");
-    numberPercent(g.x2, "Line x2"); numberPercent(g.y2, "Line y2");
-  } else if (kind === "CIRCLE" || kind === "RECT") {
-    const label = kind === "CIRCLE" ? "Circle" : "Rectangle";
-    const g = parsed as { x1?: unknown; y1?: unknown; x2?: unknown; y2?: unknown };
-    if (!g || typeof g !== "object") throw new MapError(`${label} geometry is invalid.`);
-    numberPercent(g.x1, `${label} x1`); numberPercent(g.y1, `${label} y1`);
-    numberPercent(g.x2, `${label} x2`); numberPercent(g.y2, `${label} y2`);
-  } else if (kind === "PATH") {
-    const g = parsed as { points?: unknown };
-    const points = g?.points;
-    if (!Array.isArray(points) || points.length < 2) throw new MapError("Paths need at least two points.");
-    for (const point of points) {
-      const p = point as { x?: unknown; y?: unknown };
-      if (!p || typeof p !== "object") throw new MapError("Path points are invalid.");
-      numberPercent(p.x, "Point x"); numberPercent(p.y, "Point y");
-    }
-  } else {
-    throw new MapError("Unknown annotation kind.");
-  }
-  return JSON.stringify(parsed);
-}
-function parseStyle(style: unknown): string | null {
-  if (style === undefined || style === null || style === "") return null;
-  if (typeof style !== "string" || style.length > 10_000) throw new MapError("Style is too large.");
-  try { JSON.parse(style); } catch { throw new MapError("Style must be valid JSON."); }
-  return style;
 }
 
 const mapInclude = {
@@ -193,8 +152,8 @@ async function createElement(body: Record<string, unknown>) {
   const element = await prisma.mapElement.create({
     data: {
       mapId, layerId, kind,
-      geometry: parseGeometry(kind, body.geometry),
-      style: parseStyle(body.style),
+      geometry: parseMapGeometry(kind, body.geometry),
+      style: parseMapStyle(kind, body.style),
       order: (lastElement?.order ?? -1) + 1,
     },
     include: { layer: true },
@@ -293,9 +252,12 @@ async function updateElement(body: Record<string, unknown>) {
   const existing = await prisma.mapElement.findFirst({ where: { id, mapId } });
   if (!existing) throw new MapError("Annotation not found on this map.", 404);
   const data: Prisma.MapElementUpdateInput = {};
-  if (body.kind !== undefined) data.kind = requiredString(body.kind, "Annotation kind", 20).toUpperCase();
-  if (body.geometry !== undefined) data.geometry = parseGeometry(typeof body.kind === "string" ? body.kind.toUpperCase() : existing.kind, body.geometry);
-  if (body.style !== undefined) data.style = parseStyle(body.style);
+  const kind = body.kind === undefined ? existing.kind : requiredString(body.kind, "Annotation kind", 20).toUpperCase();
+  const geometry = body.geometry === undefined ? existing.geometry : body.geometry;
+  const style = body.style === undefined ? existing.style : body.style;
+  data.kind = kind;
+  data.geometry = parseMapGeometry(kind, geometry);
+  data.style = parseMapStyle(kind, style);
   if (body.layerId !== undefined) {
     const layerId = nullableId(body.layerId);
     if (layerId && !(await prisma.mapLayer.findFirst({ where: { id: layerId, mapId } }))) throw new MapError("Layer not found on this map.");

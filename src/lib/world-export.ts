@@ -8,6 +8,7 @@ import { collectJsonReferences } from "@/lib/article-links";
 import { remapArticleMetadata } from "@/lib/metadata-references";
 import { remapWorldAssetUrls } from "@/lib/world-transfer-adapters";
 import type { JSONContent } from "@tiptap/core";
+import { normalizeMapGeometry, normalizeMapStyle } from "./map-elements";
 
 // ---------------------------------------------------------------------------
 // v1 Manifest (re-exported for type checking)
@@ -816,7 +817,18 @@ export async function importWorldV2(
     const elements = (map.elements || []).map((element, index) => {
       if (element.layerId && !layerIdMap.has(element.layerId) && allLayerIds.has(element.layerId)) warnings.push(`Skipped cross-map layer reference for a "${element.kind.toLowerCase()}" annotation`);
       const order = "order" in element && typeof element.order === "number" && Number.isSafeInteger(element.order) && element.order >= 0 ? element.order : index;
-      return { id: randomUUID(), layerId: element.layerId ? layerIdMap.get(element.layerId) ?? null : null, kind: element.kind, geometry: element.geometry, style: element.style, order };
+      return {
+        id: randomUUID(),
+        layerId: element.layerId ? layerIdMap.get(element.layerId) ?? null : null,
+        kind: element.kind,
+        geometry: JSON.stringify(normalizeMapGeometry(element.kind, JSON.parse(element.geometry))),
+        style: (() => {
+          const parsedStyle = element.style ? JSON.parse(element.style) : null;
+          const normalizedStyle = normalizeMapStyle(element.kind, parsedStyle);
+          return normalizedStyle ? JSON.stringify(normalizedStyle) : null;
+        })(),
+        order,
+      };
     });
     await prisma.map.create({ data: {
       id: mapId, worldId: newWorldId, title: map.title, description: map.description,

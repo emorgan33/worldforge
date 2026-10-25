@@ -102,6 +102,7 @@ type Pending = { kind: "pin" | "label"; x: number; y: number };
 type Draft =
   | { kind: "LINE" | "CIRCLE" | "RECT"; x1: number; y1: number; x2: number; y2: number }
   | { kind: "PATH"; points: { x: number; y: number }[] };
+type DraftStroke = { id: number; mapId: string; geometry: Draft; erase: boolean; style: string; layerId: string | null; status: "drawing" | "saving" | "failed" };
 type Selection = { type: "marker"; id: string } | { type: "element"; id: string } | null;
 
 const COLOR_SWATCHES = ["#eab308", "#ef4444", "#f97316", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#f8fafc", "#111827"];
@@ -521,23 +522,27 @@ export function InteractiveMap({
   const [pendingText, setPendingText] = useState("");
   const [pendingLayerId, setPendingLayerId] = useState("");
   const [pendingIcon, setPendingIcon] = useState("map-pin");
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [drafts, setDrafts] = useState<DraftStroke[]>([]);
   const [selection, setSelection] = useState<Selection>(null);
   const [panelDirty, setPanelDirty] = useState(false);
-  const [mutating, setMutating] = useState(false);
+  const [pendingWrites, setPendingWrites] = useState(0);
+  const mutating = pendingWrites > 0;
   const [error, setError] = useState("");
   const imageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const erasing = useRef(false);
+  const draftIdentity = useRef(0);
+  const activeDraftIdentity = useRef<number | null>(null);
 
   const map = maps.find((item) => item.id === selectedMapId) ?? maps[0] ?? null;
+  const visibleDrafts = useMemo(() => map ? drafts.filter((draft) => draft.mapId === map.id) : [], [drafts, map]);
 
-  const dirty = !!pending || panelDirty || renameOpen || newMapOpen;
+  const dirty = !!pending || drafts.length > 0 || panelDirty || renameOpen || newMapOpen;
   useWorldGuard({ dirty, busy: mutating }, "map", onGuardChange);
 
   const mutate = useCallback(async (mutation: MapMutation) => {
-    setMutating(true);
+    setPendingWrites((count) => count + 1);
     setError("");
     try {
       return await onMutate(mutation);
@@ -546,7 +551,7 @@ export function InteractiveMap({
       setError(message);
       throw err;
     } finally {
-      setMutating(false);
+      setPendingWrites((count) => Math.max(0, count - 1));
     }
   }, [onMutate]);
 
@@ -556,15 +561,15 @@ export function InteractiveMap({
     return percentFromEvent(rect, clientX, clientY);
   }, []);
 
-  function clearTransient() {
+  function clearPending() {
     setPending(null);
     setPendingTitle("");
     setPendingDesc("");
     setPendingText("");
-    setDraft(null);
-    drawing.current = false;
-    erasing.current = false;
-    setEraserPos(null);
+  }
+
+  function discardDraft(id: number) {
+    setDrafts((current) => current.filter((draft) => draft.id !== id));
   }
 
   function handleSurfaceClick(event: React.MouseEvent<HTMLDivElement>) {
@@ -585,27 +590,37 @@ export function InteractiveMap({
     setPendingIcon("map-pin");
   }
 
-  function handleMouseDown(event: React.MouseEvent<HTMLDivElement>) {
+  function handleMouseDown(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
     if (tool !== "line" && tool !== "circle" && tool !== "rect" && tool !== "freehand" && tool !== "erase") return;
     if (!imageRef.current?.contains(event.target as Node)) return;
     event.preventDefault();
+    if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId);
     const point = getPercent(event.clientX, event.clientY);
+    const id = ++draftIdentity.current;
+    const erase = tool === "erase";
+    const style = JSON.stringify(erase ? { erase: true, strokeWidth: eraserSize } : { color: drawColor, strokeWidth });
     drawing.current = true;
-    erasing.current = tool === "erase";
+    activeDraftIdentity.current = id;
+    erasing.current = erase;
     setSelection(null);
-    if (tool === "freehand" || tool === "erase") setDraft({ kind: "PATH", points: [point] });
-    else setDraft({ kind: tool === "line" ? "LINE" : tool === "rect" ? "RECT" : "CIRCLE", x1: point.x, y1: point.y, x2: point.x, y2: point.y });
+    const geometry: Draft = tool === "freehand" || erase
+      ? { kind: "PATH", points: [point] }
+      : { kind: tool === "line" ? "LINE" : tool === "rect" ? "RECT" : "CIRCLE", x1: point.x, y1: point.y, x2: point.x, y2: point.y };
+    setDrafts((current) => [...current, { id, mapId: map?.id ?? "", geometry, erase, style, layerId: pendingLayerId || null, status: "drawing" }]);
   }
 
-  function handleMouseMove(event: React.MouseEvent<HTMLDivElement>) {
+  function handleMouseMove(event: React.PointerEvent<HTMLDivElement>) {
     if (tool === "erase") setEraserPos(getPercent(event.clientX, event.clientY));
+    const activeId = activeDraftIdentity.current;
+    const draft = drafts.find((item) => item.id === activeId)?.geometry;
     if (!drawing.current || !draft) return;
     const point = getPercent(event.clientX, event.clientY);
     if (draft.kind === "PATH") {
       const last = draft.points[draft.points.length - 1];
       if (last && Math.hypot(point.x - last.x, point.y - last.y) < 0.15) return;
-      setDraft({ kind: "PATH", points: [...draft.points, point] });
+      const geometry: Draft = { kind: "PATH", points: [...draft.points, point] };
+      setDrafts((current) => current.map((item) => item.id === activeId ? { ...item, geometry } : item));
     } else {
       const rect = imageRef.current?.getBoundingClientRect();
       if (event.shiftKey && rect?.width && rect?.height) {
@@ -615,26 +630,33 @@ export function InteractiveMap({
         point.x = clampPercent(draft.x1 + ((size * (dxPx < 0 ? -1 : 1)) / rect.width) * 100);
         point.y = clampPercent(draft.y1 + ((size * (dyPx < 0 ? -1 : 1)) / rect.height) * 100);
       }
-      setDraft({ ...draft, x2: point.x, y2: point.y });
+      const geometry: Draft = { ...draft, x2: point.x, y2: point.y };
+      setDrafts((current) => current.map((item) => item.id === activeId ? { ...item, geometry } : item));
+    }
+  }
+
+  async function saveDraftStroke(stroke: DraftStroke) {
+    const geometry = stroke.geometry.kind === "PATH"
+      ? { points: stroke.geometry.points.length === 1 ? [stroke.geometry.points[0], { x: clampPercent(stroke.geometry.points[0].x + 0.05), y: stroke.geometry.points[0].y }] : stroke.geometry.points }
+      : { x1: stroke.geometry.x1, y1: stroke.geometry.y1, x2: stroke.geometry.x2, y2: stroke.geometry.y2 };
+    try {
+      await mutate({ action: "createElement", mapId: stroke.mapId, kind: stroke.geometry.kind, geometry: JSON.stringify(geometry), style: stroke.style, layerId: stroke.layerId });
+      setDrafts((current) => current.filter((item) => item.id !== stroke.id));
+    } catch {
+      setDrafts((current) => current.map((item) => item.id === stroke.id ? { ...item, status: "failed" } : item));
     }
   }
 
   async function handleMouseUp() {
-    if (!drawing.current || !draft || !map) { drawing.current = false; erasing.current = false; return; }
+    if (!drawing.current || !map) { drawing.current = false; erasing.current = false; return; }
     drawing.current = false;
-    const hole = erasing.current;
+    const submittedDraftIdentity = activeDraftIdentity.current;
+    activeDraftIdentity.current = null;
     erasing.current = false;
-    const style = JSON.stringify(hole ? { erase: true, strokeWidth: eraserSize } : { color: drawColor, strokeWidth });
-    try {
-      if (draft.kind === "PATH") {
-        const points = draft.points.length === 1 ? [draft.points[0], { x: clampPercent(draft.points[0].x + 0.05), y: draft.points[0].y }] : draft.points;
-        if (points.length < 2) { setDraft(null); return; }
-        await mutate({ action: "createElement", mapId: map.id, kind: "PATH", geometry: JSON.stringify({ points }), style, layerId: pendingLayerId || null });
-      } else {
-        await mutate({ action: "createElement", mapId: map.id, kind: draft.kind, geometry: JSON.stringify({ x1: draft.x1, y1: draft.y1, x2: draft.x2, y2: draft.y2 }), style, layerId: pendingLayerId || null });
-      }
-    } catch { /* error already surfaced */ }
-    setDraft(null);
+    const stroke = drafts.find((item) => item.id === submittedDraftIdentity);
+    if (!stroke) return;
+    setDrafts((current) => current.map((item) => item.id === stroke.id ? { ...item, status: "saving" } : item));
+    await saveDraftStroke({ ...stroke, status: "saving" });
   }
 
   async function savePending(event: React.FormEvent) {
@@ -648,11 +670,12 @@ export function InteractiveMap({
         if (!pendingText.trim()) return;
         await mutate({ action: "createElement", mapId: map.id, kind: "LABEL", geometry: JSON.stringify({ x: pending.x, y: pending.y, text: pendingText.trim() }), style: JSON.stringify({ color: drawColor, fontSize }), layerId: pendingLayerId || null });
       }
-      clearTransient();
+      clearPending();
     } catch { /* error already surfaced */ }
   }
 
   async function createMap(input: { title: string; description?: string; imageUrl: string; width?: number; height?: number }) {
+    if (drafts.length > 0) throw new Error("Retry or discard unsaved drawings before switching maps.");
     const created = await mutate({ action: "createMap", title: input.title, description: input.description ?? null, imageUrl: input.imageUrl, width: input.width, height: input.height });
     if (typeof created.id === "string") setSelectedMapId(created.id);
     setNewMapOpen(false);
@@ -667,6 +690,7 @@ export function InteractiveMap({
 
   async function deleteMap() {
     if (!map) return;
+    if (drafts.length > 0) return;
     if (!window.confirm(`Delete map “${map.title}”? This cannot be undone.`)) return;
     await mutate({ action: "deleteMap", id: map.id });
     setSelection(null);
@@ -704,14 +728,10 @@ export function InteractiveMap({
         ctx.globalCompositeOperation = isErase ? "destination-out" : "source-over";
         paintStroke(ctx, cssWidth, cssHeight, element.kind, parseJson(element.geometry, {}), isErase ? { ...style, color: "#000" } : style, "#eab308");
       }
-      if (draft && (erasing.current || tool === "erase")) {
-        if (draft.kind === "PATH") {
-          ctx.globalCompositeOperation = "destination-out";
-          paintDraft(ctx, cssWidth, cssHeight, draft, { erase: true, strokeWidth: eraserSize, color: "#000" }, "#000");
-        }
-      } else if (draft) {
-        ctx.globalCompositeOperation = "source-over";
-        paintDraft(ctx, cssWidth, cssHeight, draft, { color: drawColor, strokeWidth }, drawColor);
+      for (const draft of visibleDrafts) {
+        const style = parseJson<StrokeStyle>(draft.style, {});
+        ctx.globalCompositeOperation = draft.erase ? "destination-out" : "source-over";
+        paintDraft(ctx, cssWidth, cssHeight, draft.geometry, draft.erase ? { ...style, color: "#000" } : style, style.color ?? "#eab308");
       }
       ctx.globalCompositeOperation = "source-over";
     };
@@ -719,20 +739,20 @@ export function InteractiveMap({
     const observer = new ResizeObserver(redraw);
     observer.observe(wrap);
     return () => observer.disconnect();
-  }, [visibleElements, draft, drawColor, strokeWidth, eraserSize, tool]);
+  }, [visibleElements, visibleDrafts]);
 
   const cursor = tool === "select" ? "cursor-grab" : tool === "erase" ? "" : "cursor-crosshair";
 
   return (
     <div className="relative flex h-[720px] w-full select-none flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl">
       <div className="z-20 flex flex-wrap items-center gap-2 border-b border-zinc-800 bg-zinc-900/80 px-3 py-2">
-        <select aria-label="Choose map" value={map?.id ?? ""} onChange={(e) => { setSelectedMapId(e.target.value); setSelection(null); clearTransient(); }} className="max-w-[220px] rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100">
+        <select aria-label="Choose map" value={map?.id ?? ""} disabled={drafts.length > 0} onChange={(e) => { if (drafts.length > 0) return; setSelectedMapId(e.target.value); setSelection(null); clearPending(); }} className="max-w-[220px] rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 disabled:opacity-50">
           {maps.length === 0 && <option value="">No maps</option>}
           {maps.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
         </select>
-        <button type="button" onClick={() => setNewMapOpen(true)} className={btnClass}><Plus className="h-3.5 w-3.5" />New map</button>
+        <button type="button" disabled={drafts.length > 0} title={drafts.length > 0 ? "Resolve unsaved drawings before switching maps" : undefined} onClick={() => setNewMapOpen(true)} className={`${btnClass} disabled:cursor-not-allowed disabled:opacity-50`}><Plus className="h-3.5 w-3.5" />New map</button>
         {map && <button type="button" onClick={() => { setRenameTitle(map.title); setRenameOpen(true); }} className={btnClass}>Rename</button>}
-        {map && <button type="button" onClick={() => void deleteMap()} className={`${btnClass} text-red-300`}><Trash2 className="h-3.5 w-3.5" />Delete</button>}
+        {map && <button type="button" disabled={drafts.length > 0} onClick={() => void deleteMap()} className={`${btnClass} text-red-300 disabled:cursor-not-allowed disabled:opacity-50`}><Trash2 className="h-3.5 w-3.5" />Delete</button>}
         <div className="mx-1 h-6 w-px bg-zinc-800" />
         {([
           ["select", MousePointer2, "Select"],
@@ -747,7 +767,7 @@ export function InteractiveMap({
           <button
             key={id}
             type="button"
-            onClick={() => { setTool(id); clearTransient(); if (id !== "select") setSelection(null); }}
+            onClick={() => { setTool(id); clearPending(); if (id !== "select") setSelection(null); }}
             title={id === "circle" ? "Circle (hold Shift for a perfect circle)" : id === "rect" ? "Rectangle (hold Shift for a square)" : label}
             className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs ${tool === id ? "border-amber-400 bg-amber-500 text-black" : "border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-800"}`}
           >
@@ -791,6 +811,16 @@ export function InteractiveMap({
 
       {error && <p role="alert" className="border-b border-red-900 bg-red-950/40 px-4 py-2 text-xs text-red-200">{error}</p>}
 
+      {drafts.length > 0 && <div aria-label="Drawing saves" className="flex flex-wrap items-center gap-2 border-b border-zinc-800 bg-zinc-950 px-3 py-2">
+        {drafts.map((draft) => <div key={draft.id} className="flex items-center gap-2 rounded border border-zinc-800 px-2 py-1 text-xs">
+          <span>{draft.status === "failed" ? "Drawing save failed" : draft.status === "saving" ? "Saving drawing…" : "Drawing…"}</span>
+          {draft.status === "failed" && <>
+            <button type="button" onClick={() => { setDrafts((current) => current.map((item) => item.id === draft.id ? { ...item, status: "saving" } : item)); void saveDraftStroke(draft); }} className="font-semibold text-amber-300 hover:text-amber-200">Retry</button>
+            <button type="button" onClick={() => discardDraft(draft.id)} className="text-zinc-400 hover:text-zinc-200">Discard</button>
+          </>}
+        </div>)}
+      </div>}
+
       {!map ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
           <MapPin className="h-8 w-8 text-zinc-600" />
@@ -802,15 +832,17 @@ export function InteractiveMap({
         <div
           className={`relative flex flex-1 items-center justify-center overflow-hidden bg-zinc-950 ${cursor}`}
           style={tool === "erase" ? { cursor: ERASER_CURSOR } : undefined}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={() => void handleMouseUp()}
-          onMouseLeave={() => { setEraserPos(null); if (drawing.current) void handleMouseUp(); }}
+          onPointerDown={handleMouseDown}
+          onPointerMove={handleMouseMove}
+          onPointerUp={() => void handleMouseUp()}
+          onPointerCancel={() => { if (drawing.current) void handleMouseUp(); }}
+          onPointerLeave={() => { setEraserPos(null); if (drawing.current) void handleMouseUp(); }}
           onClick={handleSurfaceClick}
         >
           <div style={{ transform: `scale(${zoom})`, transition: "transform 0.15s ease-out" }} className="flex h-full w-full items-center justify-center">
             <div
               ref={imageRef}
+              data-testid="map-surface"
               data-map-surface="true"
               className="relative max-h-[92%] w-[min(92%,1100px)] overflow-hidden rounded-lg border border-zinc-700/60 shadow-2xl"
               style={{ aspectRatio: `${map.width} / ${map.height}` }}
@@ -880,7 +912,7 @@ export function InteractiveMap({
         <div className="absolute bottom-4 left-4 z-30 w-80 rounded-xl border border-amber-500/50 bg-zinc-900 p-4 text-zinc-200 shadow-2xl">
           <div className="mb-2 flex items-center justify-between border-b border-zinc-800 pb-2">
             <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">{pending.kind === "pin" ? "New pin" : "New label"}</h4>
-            <button type="button" onClick={clearTransient} className="text-zinc-500 hover:text-zinc-200"><X className="h-4 w-4" /></button>
+            <button type="button" onClick={clearPending} className="text-zinc-500 hover:text-zinc-200"><X className="h-4 w-4" /></button>
           </div>
           <form onSubmit={(e) => void savePending(e)} className="space-y-3">
             {pending.kind === "pin" ? (
