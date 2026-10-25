@@ -34,6 +34,7 @@ model User {
   issuedPreviews  PreviewSession[]   @relation("PreviewIssuer")
   foundryPreviews FoundryPreview[]
   foundryRuns     FoundryImportRun[]
+  worldTransferImports WorldTransferImport[]
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 }
@@ -329,6 +330,7 @@ model MapElement {
   kind      String    // LABEL | LINE | CIRCLE | RECT | PATH
   geometry  String    // Serialized JSON: percentages 0-100 relative to map size
   style     String?   // Serialized JSON: color, strokeWidth, fontSize, erase flag
+  order     Int       @default(0)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -436,6 +438,23 @@ model FoundryImportRun {
 
   @@unique([worldId, authorId, idempotencyKey])
   @@index([worldId, authorId, createdAt])
+}
+
+model WorldTransferImport {
+  id             String   @id @default(uuid())
+  ownerId        String
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  requestKey     String
+  payloadHash    String
+  payloadJson    String
+  status         String   @default("PENDING")
+  resultJson     String?
+  error          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([ownerId, requestKey])
+  @@index([ownerId, status, updatedAt])
 }
 
 model FoundryImportOutcome {

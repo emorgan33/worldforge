@@ -6,6 +6,7 @@ import {
   isWorldTransferShape,
   readWorldTransferJson,
   toCanonicalWorldTransfer,
+  worldTransferLimitError,
 } from "@/lib/world-transfer-adapters";
 import { importWorldTransfer } from "@/lib/world-transfer-execution";
 
@@ -15,15 +16,17 @@ test("decodes all supported manifest versions and preserves accurate discriminat
   const v1 = decodeWorldTransfer({ ...base, version: 1 });
   const v2 = decodeWorldTransfer({ ...base, formatVersion: 2 });
   const v3 = decodeWorldTransfer({ ...base, formatVersion: 3 });
+  const v4 = decodeWorldTransfer({ ...base, formatVersion: 4 });
   assert.equal(v1?.version, 1);
   assert.equal(v2 && "formatVersion" in v2.bundle ? v2.bundle.formatVersion : null, 2);
   assert.equal(v3 && "formatVersion" in v3.bundle ? v3.bundle.formatVersion : null, 3);
+  assert.equal(v4 && "formatVersion" in v4.bundle ? v4.bundle.formatVersion : null, 4);
   assert.equal(toCanonicalWorldTransfer(v3!).sourceVersion, 3);
-  assert.equal(decodeWorldTransfer({ ...base, formatVersion: 4 }), null);
+  assert.equal(decodeWorldTransfer({ ...base, formatVersion: 5 }), null);
 });
 
 test("dispatches unsupported and v1-incompatible bundles as client errors before persistence", async () => {
-  const unsupported = await importWorldTransfer({ ...base, formatVersion: 4 }, "owner");
+  const unsupported = await importWorldTransfer({ ...base, formatVersion: 5 }, "owner");
   assert.equal(unsupported.success, false);
   if (!unsupported.success) {
     assert.equal(unsupported.status, 400);
@@ -40,8 +43,12 @@ test("dispatches unsupported and v1-incompatible bundles as client errors before
 
 test("applies shared section limits before version dispatch", () => {
   assert.equal(isWorldTransferShape({ ...base, formatVersion: 3 }), true);
+  assert.equal(isWorldTransferShape({ ...base, formatVersion: 4 }), true);
   assert.equal(isWorldTransferShape({ ...base, articles: new Array(10001) }), false);
   assert.equal(isWorldTransferShape({ ...base, world: { ...base.world, title: "x".repeat(201) } }), false);
+  const oversizedAudit = { ...base, formatVersion: 4, auditEvents: new Array(10001).fill({ action: "test" }) };
+  assert.equal(isWorldTransferShape(oversizedAudit), false);
+  assert.match(worldTransferLimitError(oversizedAudit) ?? "", /auditEvents.*10,000 item import limit/);
 });
 
 test("reads valid JSON and rejects oversized declared or streamed bodies", async () => {

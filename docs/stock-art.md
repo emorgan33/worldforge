@@ -208,10 +208,10 @@ while a placement appears in the public reader projection; publication and
 visibility revocation removes both the credit and the response from
 `/api/assets/[id]/file`.
 
-## Portable export/import (format 3)
+## Portable export/import (format 4)
 
 Image bytes leave the server only through world export. `src/lib/world-export.ts`
-builds format 3, `GET /api/worlds/[id]/export` defaults to it, and the Manage
+builds format 4, `GET /api/worlds/[id]/export` defaults to it, and the Manage
 worlds export button uses the default. Format 3 extends format 2 with image
 `source`, `displayRestricted`/`restrictionReason`/`restrictionDate`, the
 provenance snapshot list, per-placement alt text (`World.coverImageAlt` /
@@ -219,16 +219,16 @@ provenance snapshot list, per-placement alt text (`World.coverImageAlt` /
 snapshots) and `Category.iconImage`, on top of the existing bytes, members,
 audience policies and audit sections.
 
-Format 3 is defined as the complete owner backup. It rejects the filtering flags
+Format 4 is defined as the complete owner backup. It rejects the filtering flags
 `includeAssets` and `includePrivate` with a `400` rather than silently ignoring
 them, so a partial export is never mistaken for a complete backup.
 
 Legacy formats stay available for worlds that can be represented losslessly:
-`?format=v1` supports filtering. Format 2, like format 3, is a complete backup
-and rejects `includeAssets`/`includePrivate` flags explicitly. Both keep their older shapes, but
+`?format=v1` supports filtering. Formats 2 and 3, like format 4, are complete
+backups and reject `includeAssets`/`includePrivate` flags explicitly. They keep their older shapes, but
 `worldNeedsV3()` refuses a legacy export when the world has provenance,
 restrictions or placement data that the legacy shape would drop, with guidance to
-use format 3. The guard checks placement data in retained revisions as well as
+use format 4. The guard checks placement data in retained revisions as well as
 current content, including explicit decorative empty descriptions.
 
 On import, provenance is validated before any write: entry id, version, digest

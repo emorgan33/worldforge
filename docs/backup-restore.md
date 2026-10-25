@@ -92,6 +92,27 @@ pnpm run start
 
 For backing up individual worlds without stopping the server, use the built-in export/import feature:
 
+World imports accept an optional `Idempotency-Key` UUID. The author interface creates
+and retains this key before sending the bundle. If the response is lost, it
+queries the saved outcome or resends the same bundle and key; the server returns
+the original result instead of creating another world. A key is bound to a
+SHA-256 digest of the parsed bundle, so using it with different content returns
+`409 Conflict`. Import request records are stored in SQLite and are removed
+when their owner account is deleted.
+
+If the server stops during an import, retry the same key and bundle after its
+15-minute recovery lease expires. The server refreshes the lease while an import
+is active, reuses deterministic IDs for that request, removes its partial world
+and staged asset files, then runs the import again. Keep the request key with
+the selected backup until the import completes. Import requests and their saved
+outcomes are part of the SQLite backup. Requests without a key remain available
+for legacy clients, but cannot be replayed safely after losing the response.
+
+Definitive validation failures release the author interface's pending key so a
+corrected backup can start with a new request. If rollback or completion is
+uncertain, the request remains available for recovery with the same key and
+bundle.
+
 ### Exporting a World
 
 1. Sign in to WorldForge
@@ -100,7 +121,7 @@ For backing up individual worlds without stopping the server, use the built-in e
 4. Click "Export World"
 
 The export creates a JSON file containing all world data with embedded images.
-It uses format 3, the complete owner backup (see below).
+It uses format 4, the complete owner backup (see below).
 
 ### Importing a World
 
@@ -151,7 +172,7 @@ After any restore, verify:
 
 - **Asset cleanup**: Purging an archived world queues its image files for removal. If the filesystem is temporarily unavailable, the durable cleanup jobs are retried on a later trash visit.
 - **Concurrent Access**: During restore, ensure no users are accessing the system to prevent data inconsistency.
-- **Large Worlds**: Worlds with many articles or large images may produce large export files. For a legacy-compatible world, `?format=v1&includeAssets=false` permits a partial export plus a separate asset copy. Formats 2 and 3 reject filtering flags; for complete portable backups, include the image bytes or use the SQLite-plus-assets workflow.
+- **Large Worlds**: Portable JSON exports and imports are limited to 60 MiB. Oversized exports fail explicitly; use the SQLite-plus-assets workflow. For a legacy-compatible world, `?format=v1&includeAssets=false` permits a partial export plus a separate asset copy. Formats 2, 3 and 4 reject filtering flags. Formats 1–3 predate era and stable annotation-order preservation; use format 4 when those details matter.
 
 ## Table-access system data
 
@@ -166,10 +187,24 @@ The world export format has been extended with versioned manifests to support th
 - Maps, layers, pins, groups and archived images
 - Audit history as imported historical records
 
+### World Export/Import v4
+
+`GET /api/worlds/[id]/export` defaults to **format 4**, the complete owner
+backup, and the Manage worlds export button uses it. Format 4 adds timeline eras
+and event-to-era references, plus explicit map annotation ordering. Drawing
+order is captured from the map's explicit element sequence (creation time and
+ID provide deterministic ordering for legacy rows) and restored as that
+sequence, preserving ink/erase/ink compositing.
+
+Format 4 rejects `includeAssets` and `includePrivate` filters. Export and import
+share a 60 MiB JSON byte limit. Oversized exports return an explicit error
+directing operators to the SQLite-plus-assets backup workflow; imports enforce
+the same limit while reading the request body. Per-asset and per-section limits
+also remain in force.
+
 ### World Export/Import v3
 
-`GET /api/worlds/[id]/export` defaults to **format 3**, the complete owner
-backup, and the Manage worlds export button uses it. Format 3 adds to format 2:
+Format 3 remains importable as a complete owner backup. It adds to format 2:
 
 - Image provenance snapshots and acquisition source (`UPLOADED` / `STOCK` /
   `IMPORTED`), preserving exact credits across a restore.
@@ -185,7 +220,7 @@ partial file. The legacy formats remain available for worlds that can be capture
 losslessly: `?format=v1` supports filtering; `?format=v2` is a complete backup
 and rejects `includeAssets`/`includePrivate` flags explicitly. The
 server refuses a legacy export of a world that has provenance, restrictions or
-placement data the legacy shape would drop (including retained revision fields), with guidance to use format 3.
+placement data the legacy shape would drop (including retained revision fields), with guidance to use format 4.
 
 On import, provenance is validated before any write and any catalog id is marked
 `IMPORTED_DECLARATION` — an imported entry is never treated as a rights review.
@@ -226,6 +261,9 @@ restriction state.
 - Password hashes
 - Auth sessions and preview tokens
 - Plaintext secret credentials
+- Campaign notebooks and notebook entries. These remain local private prep data
+  and are not part of portable world bundles; use the database-plus-assets
+  backup to preserve them.
 
 ### Import behavior
 

@@ -98,7 +98,7 @@ const mapInclude = {
     orderBy: { createdAt: "asc" as const },
     include: { article: { select: { id: true, title: true, template: true, excerpt: true, portraitImage: true } } },
   },
-  elements: { orderBy: { createdAt: "asc" as const } },
+  elements: { orderBy: [{ order: "asc" as const }, { createdAt: "asc" as const }, { id: "asc" as const }] },
 } satisfies Prisma.MapInclude;
 
 async function getHandler(req: NextRequest) {
@@ -189,11 +189,13 @@ async function createElement(body: Record<string, unknown>) {
   const kind = requiredString(body.kind, "Annotation kind", 20).toUpperCase();
   const layerId = nullableId(body.layerId);
   if (layerId && !(await prisma.mapLayer.findFirst({ where: { id: layerId, mapId } }))) throw new MapError("Layer not found on this map.");
+  const lastElement = await prisma.mapElement.findFirst({ where: { mapId }, orderBy: [{ order: "desc" }, { createdAt: "desc" }, { id: "desc" }], select: { order: true } });
   const element = await prisma.mapElement.create({
     data: {
       mapId, layerId, kind,
       geometry: parseGeometry(kind, body.geometry),
       style: parseStyle(body.style),
+      order: (lastElement?.order ?? -1) + 1,
     },
     include: { layer: true },
   });

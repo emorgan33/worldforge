@@ -16,15 +16,21 @@ export const GET = withAuthor(async (request: Request, { params }: { params: Pro
   try {
     const { id } = await params;
     const url = new URL(request.url);
-    const format = url.searchParams.get("format") ?? "v3";
-    if (format !== "v1" && format !== "v2" && format !== "v3") return NextResponse.json({ error: "Unsupported export format" }, { status: 400 });
+    const format = url.searchParams.get("format") ?? "v4";
+    if (format !== "v1" && format !== "v2" && format !== "v3" && format !== "v4") return NextResponse.json({ error: "Unsupported export format" }, { status: 400 });
+
+    if (format === "v4") {
+      if (url.searchParams.has("includeAssets") || url.searchParams.has("includePrivate")) return NextResponse.json({ error: "Format 4 is a complete backup and does not support filtering flags." }, { status: 400 });
+      const data = await exportWorldTransfer(id, 4, "", { includeAssets: true, includePrivate: true });
+      return NextResponse.json(data, { headers: { "Content-Disposition": `attachment; filename="${data.world.slug}-export-v4.json"`, "Accept-Version": "4" } });
+    }
 
     if (format === "v3") {
       if (url.searchParams.has("includeAssets") || url.searchParams.has("includePrivate")) {
         return NextResponse.json({ error: "Format 3 is a complete backup and does not support includeAssets/includePrivate filters. Request format=v1 for a filtered export when the world supports legacy export." }, { status: 400 });
       }
       const data = await exportWorldTransfer(id, 3, "", { includeAssets: true, includePrivate: true });
-      return NextResponse.json(data, { headers: { "Content-Disposition": `attachment; filename="${data.world.slug}-export.json"`, "Accept-Version": "3" } });
+      return NextResponse.json(data, { headers: { "Content-Disposition": `attachment; filename="${data.world.slug}-export-v3.json"`, "Accept-Version": "3" } });
     }
 
     if (format === "v2" && (url.searchParams.has("includeAssets") || url.searchParams.has("includePrivate"))) {

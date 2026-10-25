@@ -37,6 +37,29 @@ before(async () => {
   ownerId = (await db.user.create({ data: { name: `Roundtrip ${stamp}`, email: `roundtrip-${stamp}@example.invalid` } })).id;
   sourceId = (await db.world.create({ data: { ownerId, title: `Roundtrip ${stamp}`, slug: `roundtrip-${stamp}` } })).id;
 });
+
+test("v4 roundtrip preserves timeline eras and ordered ink/erase/ink drawings", async () => {
+  const era = await db.era.create({ data: { timeline: { create: { worldId: sourceId, title: `Era timeline ${stamp}` } }, name: "Dawn", startYear: 1, endYear: 9, order: 2, color: "#123456" } });
+  await db.historyEvent.create({ data: { timelineId: era.timelineId, eraId: era.id, title: "First light", dateDisplay: "1", numericDate: 1, description: "Begins" } });
+  const map = await db.map.create({ data: { worldId: sourceId, title: `Ordered map ${stamp}`, imageUrl: "https://example.invalid/map.webp" } });
+  const sameTime = new Date("2020-01-01T00:00:00.000Z");
+  await db.mapElement.createMany({ data: [
+    { mapId: map.id, kind: "PATH", geometry: "{\"points\":[]}", style: "{\"color\":\"red\"}", order: 0, createdAt: sameTime },
+    { mapId: map.id, kind: "PATH", geometry: "{\"points\":[]}", style: "{\"erase\":true}", order: 1, createdAt: sameTime },
+    { mapId: map.id, kind: "PATH", geometry: "{\"points\":[]}", style: "{\"color\":\"blue\"}", order: 2, createdAt: sameTime },
+  ] });
+  const bundle = await exportService.exportWorldV4(sourceId);
+  assert.equal(bundle.timelines.find(item => item.id === era.timelineId)?.eras[0].name, "Dawn");
+  assert.equal(bundle.timelines.find(item => item.id === era.timelineId)?.events[0].eraId, era.id);
+  assert.deepEqual(bundle.maps?.find(item => item.id === map.id)?.elements.map(element => element.style), ["{\"color\":\"red\"}", "{\"erase\":true}", "{\"color\":\"blue\"}"]);
+  const restored = await exportService.importWorldV2(bundle, ownerId, async slug => !!await db.world.findUnique({ where: { slug } }));
+  assert.equal(restored.success, true);
+  const restoredTimeline = await db.timeline.findFirstOrThrow({ where: { worldId: restored.worldId, title: `Era timeline ${stamp}` }, include: { eras: true, events: true } });
+  assert.equal(restoredTimeline.eras[0].name, "Dawn");
+  assert.equal(restoredTimeline.events[0].eraId, restoredTimeline.eras[0].id);
+  const restoredMap = await db.map.findFirstOrThrow({ where: { worldId: restored.worldId, title: `Ordered map ${stamp}` }, include: { elements: { orderBy: { order: "asc" } } } });
+  assert.deepEqual(restoredMap.elements.map(element => element.style), ["{\"color\":\"red\"}", "{\"erase\":true}", "{\"color\":\"blue\"}"]);
+});
 after(async () => {
   if (!db) { if (tempDir) await rm(tempDir, { recursive: true, force: true }); return; }
   const worlds = sourceId ? await db.world.findMany({

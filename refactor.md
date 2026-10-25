@@ -311,8 +311,8 @@ Effort is relative: **Small** is a bounded change; **Medium** spans several rela
 | R08 Repair imported publication compatibility | P1 | Low | Small | R01 | **Complete** |
 | R09 Define metadata reference contracts | P1 | High | Medium | R08 | **Complete** |
 | R10 Extract transfer format adapters | P2 | Medium | Medium | R08, R09 | Complete |
-| R11 Close backup fidelity and capacity gaps | P1 | High | Large | R10 | Not started |
-| R12 Make world import retryable | P1 | High | Large | R10 | Not started |
+| R11 Close backup fidelity and capacity gaps | P1 | High | Large | R10 | **Complete** |
+| R12 Make world import retryable | P1 | High | Large | R10 | **Complete** |
 | R13 Consolidate identity and authorization | P1 | High | Large | R01, production baseline | Not started |
 | R14 Make access/session operations atomic | P1 | High | Medium | R13 | Not started |
 | R15 Establish cartography lifecycle contracts | P1 | Medium | Medium | R01 | Not started |
@@ -524,9 +524,9 @@ Validation used dedicated temporary SQLite databases and asset directories, matc
 
 **Problem/files/evidence:** F11; transfer contracts, timeline export/import, map ordering and total-size handling.
 
-**Changes and benefit:** Add timeline eras and event-era remapping. Define stable drawing order across export/import, including tied timestamps. Apply a consistent documented capacity contract to both export and import. Decide separately whether dormant notebook data belongs in portable bundles. Preserve documented Foundry exclusions.
+**Changes and benefit:** Format 4 adds timeline eras and event-era remapping. Map drawings use explicit sequence order, with creation time and ID as deterministic fallbacks for legacy rows, preserving ink/erase/ink semantics across restore. Export and import enforce the same 60 MiB byte limit, 10,000-item section limits and per-asset limit. Oversized exports report the exceeded limit and recovery guidance. Dormant campaign notebook data remains excluded from portable bundles and is documented as retained only in the database-plus-assets backup. Existing Foundry exclusions remain documented.
 
-**Validation and acceptance:** Roundtrip eras and ink→erase→ink sequences without semantic loss. Every successfully exported supported-size bundle is accepted by the importer. Unsupported size/capabilities produce explicit errors. Older formats remain importable.
+**Validation and acceptance:** Format 4 roundtrips eras and stable map drawing order without semantic loss. Export enforces the importer's byte, section and per-asset limits and reports actionable errors; import applies the same limits. Unsupported format/capability requests produce explicit errors. Formats 1–3 remain importable.
 
 **Rollback:** Use explicit version/capability handling where older readers would silently drop additions. Keep old-format fixtures and full-volume recovery available.
 
@@ -535,6 +535,10 @@ Validation used dedicated temporary SQLite databases and asset directories, matc
 **Problem/files/evidence:** F12; import route, transfer executor and `WorldManagement.tsx`.
 
 **Changes and benefit:** Record durable request identity and payload identity before execution. Distinguish pending, completed and failed outcomes. Reconcile uncertain results after a lost response. Define recovery for interrupted imports and staged files.
+
+**Implementation status (2026-10-24):** Added the owner-scoped `WorldTransferImport` request record and migration. `POST /api/worlds/import` accepts an idempotency UUID, stores the canonical payload digest and request JSON before execution, returns the saved result for completed replays, rejects key reuse with different content, and exposes `GET /api/worlds/import` status lookup. A record reloaded after an insert race is rechecked for payload identity and completion before any claim. Imports use request-derived world and asset UUIDs. A refreshed 15-minute recovery lease prevents concurrent retries from duplicating active work; after a process interruption, replaying the same key and bundle removes the partial world and its deterministic asset files before rerunning. Execution failures are persisted as `FAILED`, while incomplete rollback or an uncertain completed import is marked `RECOVERY_REQUIRED`. The world management UI persists the key before sending, recovers saved outcomes after lost responses, and clears/replaces keys after definitive failures or changed backup content. Backup documentation now describes request retention in SQLite. Legacy clients without a key continue to work but cannot replay safely.
+
+**Validation:** 25 focused transfer tests passed: 14 world export/import HTTP tests against a dedicated temporary SQLite database and assets directory, plus 11 transfer adapter and roundtrip tests. The new HTTP coverage verifies completed replay/content conflicts preserve the world and failure states are durable. TypeScript passed. Focused ESLint reported zero errors and one unused-variable warning in the existing R11 timeline import change at `src/lib/world-export.ts:701`. `git diff --check` passed. The full suite was not run.
 
 **Validation and acceptance:** Replaying the same request creates one world. Reusing the key for different content conflicts. Dropped responses and process interruption can be reconciled without duplicate worlds or untracked files.
 

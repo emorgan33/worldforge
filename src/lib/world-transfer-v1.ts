@@ -11,14 +11,14 @@ export interface WorldTransferExecutionResult {
   imported: { categories: number; articles: number; assets: number; statblocks: number; secrets: number; timelines: number; variableCollections: number };
 }
 
-export async function importWorldV1(v1Body: WorldExportV1, ownerId: string): Promise<WorldTransferExecutionResult> {
+export async function importWorldV1(v1Body: WorldExportV1, ownerId: string, identity?: { worldId: string; assetId(sourceId: string): string }): Promise<WorldTransferExecutionResult> {
   const warnings: string[] = [];
 let slug = v1Body.world.slug;
   let slugSuffix = 0;
   while (await prisma.world.findUnique({ where: { slug }, select: { id: true } })) { slugSuffix++; slug = `${v1Body.world.slug}-${slugSuffix}`; }
   if (slugSuffix > 0) warnings.push(`World slug "${v1Body.world.slug}" was taken; renamed to "${slug}"`);
 
-  const newWorldId = randomUUID();
+  const newWorldId = identity?.worldId ?? randomUUID();
   const createdAssetFiles: string[] = [];
   try {
   await prisma.world.create({
@@ -45,7 +45,7 @@ let slug = v1Body.world.slug;
     try {
       if (typeof asset.data !== "string" || asset.data.length > 14 * 1024 * 1024 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(asset.data)) throw new Error("Invalid or oversized image data");
       const normalized = await normalizeImage(Buffer.from(asset.data, "base64"));
-      const newId = randomUUID();
+      const newId = identity?.assetId(asset.id) ?? randomUUID();
       writingAssetId = newId;
       await writeAsset(newId, normalized.data); assetFileWritten = true; createdAssetFiles.push(newId);
       await prisma.imageAsset.create({ data: { id: newId, worldId: newWorldId, title: asset.title, originalName: asset.originalName, alt: asset.alt, mimeType: "image/webp", byteSize: normalized.data.length, width: normalized.width, height: normalized.height, sha256: normalized.sha256, archived: asset.archived === true } });

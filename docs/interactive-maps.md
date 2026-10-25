@@ -40,7 +40,7 @@ The drawing tools paint on a transparent canvas over the map:
 
 Line, circle, rectangle, and freehand share **Color** and **Stroke** controls. Colors come from a popover with preset swatches and a custom color input.
 
-Drawings and eraser strokes are stored in chronological order and redrawn in that order, so ink added after an erasure remains visible. Erasing is non-destructive in storage: it records an erase stroke instead of deleting the original annotation.
+Drawings and eraser strokes are stored with an explicit per-map sequence and redrawn in that order, so ink added after an erasure remains visible. Legacy annotations with tied/default sequence values use creation time and ID as deterministic tie-breakers. Erasing is non-destructive in storage: it records an erase stroke instead of deleting the original annotation. Format 4 world backups preserve this ordering.
 
 ## Persistence and portability
 

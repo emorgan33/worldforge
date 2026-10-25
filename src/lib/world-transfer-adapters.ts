@@ -1,14 +1,15 @@
-import type { WorldExportV1, WorldExportV2, WorldExportV3 } from "@/lib/world-export";
+import type { WorldExportV1, WorldExportV2, WorldExportV3, WorldExportV4 } from "@/lib/world-export";
 
 /** Versioned wire manifests after envelope decoding. */
 export type DecodedWorldTransfer =
   | { version: 1; bundle: WorldExportV1 }
   | { version: 2; bundle: WorldExportV2 }
-  | { version: 3; bundle: WorldExportV3 };
+  | { version: 3; bundle: WorldExportV3 }
+  | { version: 4; bundle: WorldExportV4 };
 
 /** Stable, version-neutral view used by execution adapters. */
 export interface CanonicalWorldTransfer {
-  sourceVersion: 1 | 2 | 3;
+  sourceVersion: 1 | 2 | 3 | 4;
   sourceWorld: { id: string; slug: string; title: string; description: string | null; genre: string; system: string };
   categories: readonly { id: string; parentId: string | null; name: string; icon: string; order: number }[];
   articles: readonly { id: string; categoryId: string | null; title: string; slug: string }[];
@@ -47,6 +48,26 @@ export function remapWorldReferenceId(sourceId: string | null, idMap: ReadonlyMa
 }
 
 export const MAX_WORLD_TRANSFER_BYTES = 60 * 1024 * 1024;
+export const MAX_WORLD_TRANSFER_SECTION_ITEMS = 10_000;
+export const MAX_WORLD_TRANSFER_ASSET_BASE64_CHARS = 14 * 1024 * 1024;
+
+/** Return the first shared importer limit exceeded by a bundle. */
+export function worldTransferLimitError(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "Import bundle must be a JSON object";
+  const bundle = value as Record<string, unknown>;
+  const sections = ["categories", "articles", "articleRevisions", "assets", "statblocks", "secrets", "timelines", "variableCollections", "members", "audiencePolicies", "audienceGrants", "auditEvents", "sessions", "sessionEntityLinks", "maps"];
+  for (const key of sections) {
+    const section = bundle[key];
+    if (section !== undefined && (!Array.isArray(section) || section.length > MAX_WORLD_TRANSFER_SECTION_ITEMS)) {
+      return `The ${key} section exceeds the ${MAX_WORLD_TRANSFER_SECTION_ITEMS.toLocaleString()} item import limit`;
+    }
+  }
+  if (Array.isArray(bundle.assets)) {
+    const oversized = bundle.assets.findIndex(asset => !asset || typeof asset !== "object" || typeof (asset as { data?: unknown }).data !== "string" || (asset as { data: string }).data.length > MAX_WORLD_TRANSFER_ASSET_BASE64_CHARS);
+    if (oversized >= 0) return `Asset ${oversized + 1} exceeds the per-asset import limit`;
+  }
+  return null;
+}
 
 /** Read JSON within the import endpoint's documented byte limit. */
 export async function readWorldTransferJson(request: Request): Promise<unknown> {
@@ -81,11 +102,7 @@ export function isWorldTransferShape(value: unknown): value is Record<string, un
   const bundle = value as Record<string, unknown>;
   const world = bundle.world as Record<string, unknown> | null;
   if (!world || typeof world !== "object" || typeof world.title !== "string" || typeof world.slug !== "string" || world.title.length > 200 || world.slug.length > 120) return false;
-  for (const key of ["categories", "articles", "articleRevisions", "assets", "statblocks", "secrets", "timelines", "variableCollections", "members", "audiencePolicies", "audienceGrants", "auditEvents", "sessions", "sessionEntityLinks", "maps"]) {
-    const section = bundle[key];
-    if (section !== undefined && (!Array.isArray(section) || section.length > 10000)) return false;
-  }
-  if (Array.isArray(bundle.assets) && bundle.assets.some((asset) => !asset || typeof asset !== "object" || typeof (asset as { data?: unknown }).data !== "string" || (asset as { data: string }).data.length > 14 * 1024 * 1024)) return false;
+  if (worldTransferLimitError(bundle)) return false;
   return true;
 }
 
@@ -93,6 +110,7 @@ export function isWorldTransferShape(value: unknown): value is Record<string, un
 export function decodeWorldTransfer(value: Record<string, unknown>): DecodedWorldTransfer | null {
   if (value.formatVersion === 2) return { version: 2, bundle: value as unknown as WorldExportV2 };
   if (value.formatVersion === 3) return { version: 3, bundle: value as unknown as WorldExportV3 };
+  if (value.formatVersion === 4) return { version: 4, bundle: value as unknown as WorldExportV4 };
   if (value.version === 1) return { version: 1, bundle: value as unknown as WorldExportV1 };
   return null;
 }
