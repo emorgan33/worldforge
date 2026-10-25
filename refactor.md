@@ -2,7 +2,7 @@
 
 Audit basis: repository revision `1be1903`.
 
-Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a, R05, R06, R07, R08, R09, R10, R13 and R14 are complete. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
+Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a, R05, R06, R07, R08, R09, R10, R13, R14 and R16 are complete. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
 
 ## 1. Executive summary
 
@@ -316,7 +316,7 @@ Effort is relative: **Small** is a bounded change; **Medium** spans several rela
 | R13 Consolidate identity and authorization | P1 | High | Large | R01, production baseline | **Complete** |
 | R14 Make access/session operations atomic | P1 | High | Medium | R13 | **Complete** |
 | R15 Establish cartography lifecycle contracts | P1 | Medium | Medium | R01 | **Complete** |
-| R16 Extract workspace feature controllers | P2 | High | Large | R05–R07, R13, R15 | Not started |
+| R16 Extract workspace feature controllers | P2 | High | Large | R05–R07, R13, R15 | Complete |
 | R17 Bound search and reader work | P2 | Medium | Medium | R09, R13 | Not started |
 | R18 Clarify configuration and operations | P2 | Medium | Medium | R01 | Not started |
 | R19 Enforce CSS presentation scope | P2 | Medium | Medium | R01 | Not started |
@@ -597,6 +597,22 @@ Validation used dedicated temporary SQLite databases and asset directories, matc
 **Validation and acceptance:** Drive the real mounted workspace through reversed responses, failed destination loads, dirty-form cancellation, busy writes, late callbacks and repeated Back/Forward. No cross-world state mixing; failed transitions retain mounted forms.
 
 **Rollback:** Keep the existing composition component during extraction. Revert one controller at a time; avoid adding a new state framework in this task.
+
+**Implementation (2026-10-24):** Extracted world snapshot loading to `src/lib/workspace-snapshot.ts`, world history bookkeeping to `src/lib/workspace-history.ts`, article detail loading and save/refresh behavior to `src/lib/workspace-articles.ts`, and variable/map writes to `src/lib/workspace-features.ts`. `src/lib/workspace-client.ts` provides typed HTTP errors and runtime response decoding. The author workspace retains the transition composition and uses these feature boundaries with epoch checks. Asset detail selection, search, filters and Back now consult the shared guard before discarding an open form. A successful world snapshot updates the mounted world ID synchronously before composing its URL, keeping the initial replace and later push decisions correct.
+
+**Follow-up (2026-10-24):** Closed the two remaining asset guard gaps. Every embedded `AssetLibrary` now confirms before switching away from dirty image details; pending upload and detail saves report busy state synchronously, block navigation, and update selection only if the saved image is still selected when the response arrives. Browser coverage exercises the article image picker, New map library, and a delayed asset save while switching selection.
+
+**Follow-up (2026-10-25):** Upload now checks the selected image's leave guard before starting, so accepting a file cannot replace dirty details without confirmation. The New map library reports combined dirty/busy state to its Hide library control; it blocks hiding during a save and confirms before unmounting dirty details.
+
+**Follow-up (2026-10-25):** New map Cancel and Close now use the same image-library dirty/busy check as Hide library. Successful permanent deletion reports a clean guard before removing the selected detail form, preventing the deleted form's dirty state from being restored afterward.
+
+**Follow-up (2026-10-25):** Create map checks the same library guard before calling the mutation and is disabled while an image save is pending.
+
+**Validation (2026-10-24):** The full browser suite passed **28/28**, including article saves, interactive maps, and workspace transitions. TypeScript, focused ESLint, and `git diff --check` passed. The isolated Node suite reported **291 passed, 1 skipped, 1 failed**; the pre-existing `asset GET without an owned world is concealed as not found` HTTP test received `ECONNRESET`. The user later confirmed it passes when run individually, pointing to an ordering or connection issue. All other tests passed.
+
+**Additional validation (2026-10-25):** `pnpm test:unit` passed **177/177**. The affected article-save and interactive-map browser files passed **12/12**; after a follow-up adjustment to guard cleanup reporting, the upload-confirmation and New map Hide library dirty/busy scenarios passed again **2/2**. TypeScript, focused ESLint, and `git diff --check` passed.
+
+**Latest guard validation (2026-10-25):** Upload, deletion, Hide library, Cancel/Close, and Create map guard scenarios passed **5/5**. TypeScript, focused ESLint, and `git diff --check` passed.
 
 ### R17 — Bound search and reader work with measured changes
 

@@ -5,8 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AssetLibrary } from "@/components/assets/AssetLibrary";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CategoryManager, CategoryAction } from "@/components/organization/CategoryManager";
-import { categoryAncestors, sortOrdered } from "@/lib/category-tree";
-import { getHistoryCompensation, getWorldHistoryIndex, isWorldDatasetSnapshot, readStoredWorldId, resolveWorldSelection, WORLD_HISTORY_INDEX_KEY, writeStoredWorldId } from "@/lib/world-selection";
+import { categoryAncestors } from "@/lib/category-tree";
+import { readStoredWorldId, resolveWorldSelection, writeStoredWorldId } from "@/lib/world-selection";
 import { applyRegistration, evaluateTransition, type GuardRegistration, type GuardRegistry } from "@/lib/navigation-guard";
 import { TreeMove } from "@/components/ArticleTree";
 import { BlockStudio } from "@/components/blocks/BlockStudio";
@@ -19,13 +19,17 @@ import { NewWorldForm } from "@/components/worlds/NewWorldForm";
 import { WorldGuardProvider } from "@/components/worlds/WorldGuard";
 import { ArticleViewer } from "@/components/article/ArticleViewer";
 import { ArticleEditorForm } from "@/components/article/ArticleEditorForm";
-import { ArticleSaveError, isArticleVersion, type ArticleSaveInput, type ArticleSaveOptions, type ArticleSaveResult } from "@/lib/article-save";
+import type { ArticleSaveInput, ArticleSaveOptions, ArticleSaveResult } from "@/lib/article-save";
 import { InteractiveMap, type MapData, type MapMutation } from "@/components/map/InteractiveMap";
 import { TimelineViewer } from "@/components/timeline/TimelineViewer";
 import { VariableManager } from "@/components/variables/VariableManager";
 import { GmNotebook } from "@/components/campaign/GmNotebook";
 import { ShareResource } from "@/components/campaign/ShareResource";
 import { ArticleDetail, ArticleListItem, ArticleTemplateType, VariableCollectionItem } from "@/types";
+import { fetchWorldSnapshot } from "@/lib/workspace-snapshot";
+import { loadWorkspaceArticle, saveWorkspaceArticle } from "@/lib/workspace-articles";
+import { WorkspaceHistoryCoordinator } from "@/lib/workspace-history";
+import { saveWorkspaceMapMutation, saveWorkspaceVariable } from "@/lib/workspace-features";
 import { Globe, LogOut, Menu, Users, X } from "lucide-react";
 
 export default function WorldForgeApp() {
@@ -152,12 +156,8 @@ export default function WorldForgeApp() {
   // load never clears a newer transition's latch.
   const transitionRef = useRef(0);
   const activeLoadController = useRef<AbortController | null>(null);
-  const historyIndex = useRef(0);
-  const pendingHistoryPush = useRef(false);
-  const acceptedHistoryWorld = useRef<{ id: string | null } | null>(null);
-  const historyReturnIndex = useRef<number | null>(null);
-  const suppressedPop = useRef(false);
-  const canceledHistoryDestination = useRef<string | null | undefined>(undefined);
+  const historyCoordinator = useRef<WorkspaceHistoryCoordinator | null>(null);
+  if (historyCoordinator.current == null) historyCoordinator.current = new WorkspaceHistoryCoordinator();
 
   // Prompt-only leave check: busy blocks silently, dirty asks for an explicit
   // discard. It NEVER clears dirty state — callers clear only after a
@@ -210,43 +210,20 @@ export default function WorldForgeApp() {
   // navigation. The index lets a canceled pop traverse back to the entry the
   // user came from instead of replacing the destination entry.
   useEffect(() => {
-    if (getWorldHistoryIndex(window.history.state) === null) {
-      window.history.replaceState({ ...(window.history.state ?? {}), [WORLD_HISTORY_INDEX_KEY]: historyIndex.current }, "");
-    }
-    historyIndex.current = getWorldHistoryIndex(window.history.state) ?? 0;
+    const state = historyCoordinator.current!.initialize(window.history.state);
+    if (state) window.history.replaceState(state, "");
     function onPopState(event: PopStateEvent) {
-      if (suppressedPop.current) { suppressedPop.current = false; return; }
-      const nextIndex = getWorldHistoryIndex(event.state);
-      if (nextIndex === null) return;
-      const previousIndex = historyIndex.current;
-      historyIndex.current = nextIndex;
       const destination = new URL(window.location.href).searchParams.get("world");
-      const destinationIsMounted = destination === worldIdRef.current;
-      if (previousIndex !== nextIndex && worldIdRef.current && !destinationIsMounted && !confirmLeave()) {
-        historyIndex.current = previousIndex;
-        canceledHistoryDestination.current = destination;
-        suppressedPop.current = true;
-        window.history.go(getHistoryCompensation(previousIndex, nextIndex));
-        return;
-      }
-      if (destinationIsMounted) {
-        acceptedHistoryWorld.current = null;
-        historyReturnIndex.current = null;
-      } else if (previousIndex !== nextIndex) {
-        acceptedHistoryWorld.current = { id: destination };
-        historyReturnIndex.current ??= previousIndex;
-      }
+      const result = historyCoordinator.current!.onPop(event.state, destination, worldIdRef.current, confirmLeave);
+      if (result.kind === "cancelled") window.history.go(result.compensation);
     }
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [confirmLeave]);
 
   useEffect(() => {
-    if (pendingHistoryPush.current) {
-      pendingHistoryPush.current = false;
-      historyIndex.current += 1;
-      window.history.replaceState({ ...(window.history.state ?? {}), [WORLD_HISTORY_INDEX_KEY]: historyIndex.current }, "");
-    }
+    const state = historyCoordinator.current!.commitPendingPush(window.history.state);
+    if (state) window.history.replaceState(state, "");
   }, [searchParams]);
 
   const writeUrlForWorld = useCallback((worldId: string | null, options?: { replace?: boolean }) => {
@@ -262,7 +239,7 @@ export default function WorldForgeApp() {
     if (options?.replace) {
       router.replace(target, { scroll: false });
     } else {
-      pendingHistoryPush.current = true;
+      historyCoordinator.current!.markPush();
       router.push(target, { scroll: false });
     }
   }, [pathname, router, searchParams]);
@@ -295,27 +272,16 @@ export default function WorldForgeApp() {
     const controller = new AbortController();
     activeLoadController.current = controller;
     try {
-      const settled = await Promise.allSettled([
-        fetch(`/api/articles?worldId=${target.id}`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("articles"); return res.json(); }),
-        fetch(`/api/variables?worldId=${target.id}`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("variables"); return res.json(); }),
-        fetch(`/api/maps?worldId=${target.id}`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("maps"); return res.json(); }),
-        fetch(`/api/timelines?worldId=${target.id}`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("timelines"); return res.json(); }),
-        fetch(`/api/secrets?worldId=${target.id}`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("secrets"); return res.json(); }),
-        fetch(`/api/statblocks?worldId=${target.id}`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("blocks"); return res.json(); }),
-        fetch(`/api/worlds/${target.id}/sessions`, { signal: controller.signal }).then(async res => { if (!res.ok) throw new Error("sessions"); return res.json(); }),
-      ]);
+      const datasets = await fetchWorldSnapshot(target.id, controller.signal);
       if (loadEpoch.current !== epoch) { controller.abort(); return false; }
-      const failed = settled.find(result => result.status === "rejected");
-      if (failed) throw (failed as PromiseRejectedResult).reason;
-      const [artList, cols, mapList, timeList, secList, blocks, sessionList] =
-        (settled as PromiseFulfilledResult<unknown>[]).map(result => result.value);
-      const datasets = [artList, cols, mapList, timeList, secList, blocks, sessionList];
-      if (!isWorldDatasetSnapshot(datasets)) throw new Error("World data response had an invalid shape.");
+      const [artList, cols, mapList, timeList, secList, blocks, sessionList] = datasets;
+      const replaceHistoryForCommit = replaceHistory || !worldIdRef.current;
       // Commit the new world's complete datasets atomically: reset
       // per-world UI state, then write only this epoch's data.
       setSelectedArticleId(null); setCurrentArticle(null); setSelectedCategoryId(null);
       setEditorCategoryId(null); setEditorDirty(false);
       setGuards(new Map());
+      worldIdRef.current = target.id;
       setWorld(target);
       setArticles(artList as ArticleListItem[]);
       setCollections(cols as VariableCollectionItem[]);
@@ -325,7 +291,7 @@ export default function WorldForgeApp() {
       setRpgBlocks(blocks as RpgBlockItem[]);
       setSessions(sessionList as React.ComponentProps<typeof NextSessionDesk>["sessions"]);
       setWorlds(previous => previous.map(item => item.id === target.id ? target : item));
-      historyReturnIndex.current = null;
+      historyCoordinator.current!.clearReturnIndex();
       setActiveView("home");
       setWorldError("");
       setFailedTarget(null);
@@ -334,7 +300,7 @@ export default function WorldForgeApp() {
       }
       // Successful switches push a history entry so Back returns to the
       // previous world. The initial load replaces to avoid a duplicate entry.
-      writeUrlForWorld(target.id, { replace: replaceHistory || !worldIdRef.current });
+      writeUrlForWorld(target.id, { replace: replaceHistoryForCommit });
       return true;
     } catch (error) {
       if (loadEpoch.current !== epoch || controller.signal.aborted) return false;
@@ -365,10 +331,7 @@ export default function WorldForgeApp() {
     let cancelled = false;
     async function bootstrap() {
       const urlWorldId = searchParams.get("world");
-      if (canceledHistoryDestination.current !== undefined) {
-        if (canceledHistoryDestination.current === urlWorldId) { setIsLoading(false); return; }
-        canceledHistoryDestination.current = undefined;
-      }
+      if (historyCoordinator.current!.shouldSkipCancelledDestination(urlWorldId)) { setIsLoading(false); return; }
       // Already showing exactly what the URL asks for: nothing to do.
       // (Covers the router.replace/push echo after a successful load.)
       if (bootstrapped.current && urlWorldId && urlWorldId === worldIdRef.current) return;
@@ -391,12 +354,12 @@ export default function WorldForgeApp() {
           storedWorldId: actor ? readStoredWorldId(actor, (() => { try { return sessionStorage; } catch { return null; } })()) : null,
         });
         if (unknownUrlId) {
-          if (worldIdRef.current && acceptedHistoryWorld.current?.id !== urlWorldId && !confirmLeave()) {
+          if (worldIdRef.current && !historyCoordinator.current!.acceptedDestinationIs(urlWorldId) && !confirmLeave()) {
             setIsLoading(false);
             bootstrapped.current = true;
             return;
           }
-          acceptedHistoryWorld.current = null;
+          historyCoordinator.current!.clearAcceptedDestination();
           // Explicit URL for a missing/deleted/foreign world: only clear the
           // mounted snapshot after the leave boundary approved the transition.
           ++loadEpoch.current;
@@ -418,19 +381,19 @@ export default function WorldForgeApp() {
           return;
         }
         // Back/Forward to the already-mounted world: no reload needed.
-        if (selectedId === worldIdRef.current) { acceptedHistoryWorld.current = null; setIsLoading(false); bootstrapped.current = true; return; }
+        if (selectedId === worldIdRef.current) { historyCoordinator.current!.clearAcceptedDestination(); setIsLoading(false); bootstrapped.current = true; return; }
         // History-driven selection follows the same guard as a user switch:
         // busy blocks silently and a declined discard keeps the current world
         // and its forms intact; restoring the URL re-runs this effect with the
         // mounted world's params, so no navigation loop occurs.
-        if (worldIdRef.current && acceptedHistoryWorld.current?.id !== urlWorldId && !confirmLeave()) {
+        if (worldIdRef.current && !historyCoordinator.current!.acceptedDestinationIs(urlWorldId) && !confirmLeave()) {
           setIsLoading(false);
           bootstrapped.current = true;
           return;
         }
         const epoch = ++loadEpoch.current;
         bootstrapped.current = true;
-        acceptedHistoryWorld.current = null;
+        historyCoordinator.current!.clearAcceptedDestination();
         const ok = await loadWorld(selectedId, owned, epoch);
         if (ok) clearConfirmedLeave();
         // On failure the destination URL stays (history entries are never
@@ -488,13 +451,13 @@ export default function WorldForgeApp() {
   // fails: restores the URL (history-entry for history-driven failures) and
   // dismisses the error without touching the still-mounted forms.
   const returnToCurrentWorld = useCallback(() => {
-    if (historyReturnIndex.current !== null) {
-      const offset = getHistoryCompensation(historyReturnIndex.current, historyIndex.current);
+    if (historyCoordinator.current!.returnOffset !== null) {
+      const offset = historyCoordinator.current!.returnOffset!;
       if (offset !== 0) {
-        acceptedHistoryWorld.current = { id: worldIdRef.current };
+        // The history controller accepts the mounted destination when its pop arrives.
         history.go(offset);
       } else if (worldIdRef.current) writeUrlForWorld(worldIdRef.current);
-      historyReturnIndex.current = null;
+      historyCoordinator.current!.clearReturnIndex();
     } else if (worldIdRef.current) {
       // A failed directly entered URL has no tracked source entry. Push the
       // mounted world as a new entry so the failed destination stays intact.
@@ -551,23 +514,14 @@ export default function WorldForgeApp() {
     if (!selectedArticleId || !world) return;
     const epoch = loadEpoch.current;
     const worldId = world.id;
-    const articleId = selectedArticleId;
-
-    const controller = new AbortController();
-    async function fetchArticle() {
-      try {
-        const res = await fetch(`/api/articles/${articleId}`, { signal: controller.signal });
-        if (res.ok) {
-          const detail = await res.json();
-          if (loadEpoch.current !== epoch || worldIdRef.current !== worldId) return;
-          setCurrentArticle(detail);
-        }
-      } catch (e) {
-        if (controller.signal.aborted) return;
-        console.error("Failed to load article detail:", e);
-      }
-    }
-    fetchArticle();
+    const controller = loadWorkspaceArticle({
+      articleId: selectedArticleId,
+      worldId,
+      epoch,
+      isCurrent: (candidateEpoch, candidateWorldId) => loadEpoch.current === candidateEpoch && worldIdRef.current === candidateWorldId,
+      setCurrentArticle,
+      onError: error => console.error("Failed to load article detail:", error),
+    });
     return () => controller.abort();
   }, [selectedArticleId, world]);
 
@@ -604,60 +558,29 @@ export default function WorldForgeApp() {
 
   const handleSaveArticle = async (articleData: ArticleSaveInput, options?: ArticleSaveOptions): Promise<ArticleSaveResult> => {
     if (!world) throw new Error("Choose a campaign first.");
-    // No write starts (or resumes) while a world transition is in flight; the
-    // editor keeps its dirty flag and local recovery draft.
-    if (transitionRef.current !== 0) throw new Error("Paused while switching worlds. Your local draft is safe — try saving again.");
-    const writeWorldId = world.id;
     const epoch = loadEpoch.current;
-    setArticleSaving(true);
-    try {
-      const targetId = options?.articleId === null ? undefined : options?.articleId || currentArticle?.id;
-      if (targetId && !isArticleVersion(articleData.expectedVersion)) {
-        throw new ArticleSaveError("This draft has no saved article version. Save it as a new article, or copy your changes and reopen the saved article to apply them.", "ARTICLE_VERSION_REQUIRED");
-      }
-      const response = await fetch(targetId ? `/api/articles/${targetId}` : "/api/articles", {
-        method: targetId ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(articleData),
-      });
-      const saved = await response.json();
-      if (!response.ok) {
-        if (saved.code === "ARTICLE_CONFLICT") throw new ArticleSaveError(saved.error, "ARTICLE_CONFLICT");
-        throw new Error(typeof saved.error === "string" ? saved.error : "Unable to save article. Please try again.");
-      }
-      if (typeof saved.id !== "string" || !isArticleVersion(saved.version)) throw new Error("The server did not confirm the saved article version. Your local draft has been retained.");
-      const result: ArticleSaveResult = { id: saved.id, version: saved.version };
-      // A committed write stays successful even if a subsequent refresh fails.
-      // Late refreshes after a world switch are dropped, never mixed in.
-      const [listResult, detailResult] = await Promise.allSettled([
-        fetch(`/api/articles?worldId=${writeWorldId}`).then(async result => { if (!result.ok) throw new Error(); return result.json(); }),
-        fetch(`/api/articles/${saved.id}`).then(async result => { if (!result.ok) throw new Error(); return result.json(); }),
-      ]);
-      if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return result;
-      setArticles(previous => listResult.status === "fulfilled" && Array.isArray(listResult.value) ? listResult.value : sortOrdered([...previous.filter(article => article.id !== saved.id), saved]));
-      if (options?.autosave) {
-        if (currentArticle?.id === saved.id) setCurrentArticle(detailResult.status === "fulfilled" ? detailResult.value : { ...currentArticle, ...saved });
-        return result;
-      }
-      setCurrentArticle(detailResult.status === "fulfilled" ? detailResult.value : { children: [], inboundMentions: [], outboundMentions: [], secrets: [], ...currentArticle, ...saved });
-      setEditorDirty(false);
-      setSelectedArticleId(saved.id);
-      setActiveView("article");
-      return result;
-    } finally { setArticleSaving(false); }
+    return saveWorkspaceArticle({
+      input: articleData,
+      options,
+      currentArticle,
+      worldId: world.id,
+      epoch,
+      canStart: () => transitionRef.current === 0,
+      isCurrent: (candidateEpoch, candidateWorldId) => loadEpoch.current === candidateEpoch && worldIdRef.current === candidateWorldId,
+      setSaving: setArticleSaving,
+      setArticles,
+      setCurrentArticle,
+      setEditorDirty,
+      setSelectedArticleId,
+      setActiveView,
+    });
   };
 
   const handleUpdateVariable = async (id: string, value: string) => {
     if (!world) throw new Error("Choose a campaign first.");
     const writeWorldId = world.id;
     const epoch = loadEpoch.current;
-    const response = await fetch("/api/variables", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, value }),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(typeof result?.error === "string" ? result.error : "Unable to save this variable. Please try again.");
+    await saveWorkspaceVariable(id, value);
     if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return;
     setCollections(previous => previous.map(collection => ({
       ...collection,
@@ -695,17 +618,9 @@ export default function WorldForgeApp() {
     if (!world) throw new Error("Choose a campaign first.");
     const writeWorldId = world.id;
     const epoch = loadEpoch.current;
-    const method = mutation.action.startsWith("delete") ? "DELETE" : mutation.action.startsWith("create") ? "POST" : "PATCH";
-    const response = await fetch("/api/maps", {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ worldId: writeWorldId, ...mutation }),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error((result as { error?: string }).error || "Unable to update the map.");
-    const resMaps = await fetch(`/api/maps?worldId=${writeWorldId}`);
+    const { result, maps: refreshedMaps } = await saveWorkspaceMapMutation(writeWorldId, { ...mutation });
     if (loadEpoch.current !== epoch || worldIdRef.current !== writeWorldId) return result as Record<string, unknown>;
-    if (resMaps.ok) setMaps(await resMaps.json());
+    if (refreshedMaps) setMaps(refreshedMaps as MapData[]);
     return result as Record<string, unknown>;
   });
 

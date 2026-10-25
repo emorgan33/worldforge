@@ -1,6 +1,6 @@
 # Feature improvement task list
 
-Updated: October 23, 2026.
+Updated: October 25, 2026.
 
 WorldForge is a block-based campaign authoring site focused on **D&D 5e 2014** and **Pathfinder 2e Remaster**. World Anvil informs its authoring and presentation workflows; exact visual parity with its authenticated editor has not been verified. Reference evidence and its limits are recorded in [the reference review](world-anvil-reference-review.md).
 
@@ -190,6 +190,20 @@ Done when owners can identify asset dependencies and recover or move a complete 
 - [x] **Performance optimization** completed October 15, 2026 (see [performance.md](performance.md))
 
 ## Future Enhancements
+
+### Workspace controller extraction (R16) — complete
+
+R16 extracts world snapshot loading, history bookkeeping, article detail/save
+operations, and variable/map mutations into focused client modules. Asset
+detail navigation confirms before discarding edits in every library instance;
+pending image saves block navigation and cannot replace a newer selection when
+they finish. Uploading confirms before replacing dirty image details, and the
+New map library blocks hiding or closing while saving, and confirms before
+discarding edits from Hide library, Cancel, Close, or Create map. Map creation
+is disabled during an image save. Successful image deletion clears the deleted
+form's guard registration.
+The [refactoring roadmap](../refactor.md#r16--extract-workspace-controllers-while-preserving-navigation-behavior)
+records validation counts and the covered transition races.
 
 ### Player-only account flow (completed October 21, 2026)
 

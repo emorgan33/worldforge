@@ -14,6 +14,10 @@ const test = base.extend<{ mapEditor: { page: Page; db: PrismaClient; mapId: str
       ownerId = owner.id;
       const world = await db.world.create({ data: { ownerId, title: "Map browser world", slug: `map-browser-${randomUUID()}` } });
       const map = await db.map.create({ data: { worldId: world.id, title: "Pointer map", imageUrl: "https://example.invalid/map.png", width: 1000, height: 600 } });
+      await Promise.all(["Map library first", "Map library second"].map((title, index) => db.imageAsset.create({ data: {
+        worldId: world.id, title, originalName: `map-library-${index}.webp`, alt: `${title} alt`, mimeType: "image/webp",
+        byteSize: 1, width: 1200 + index, height: 800 + index, sha256: `${index}${"d".repeat(63)}`,
+      } })));
       const token = randomBytes(32).toString("base64url");
       await db.authSession.create({ data: { userId: ownerId, tokenHash: createHash("sha256").update(token).digest("hex"), expiresAt: new Date(Date.now() + 3_600_000) } });
       await context.addCookies([{ name: SESSION_COOKIE, value: token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
@@ -140,4 +144,121 @@ test("a single pointer click with the eraser creates a padded erase stroke", asy
   expect(stroke.kind).toBe("PATH");
   expect(JSON.parse(stroke.style!)).toMatchObject({ erase: true });
   expect(JSON.parse(stroke.geometry).points).toHaveLength(2);
+});
+
+test("the new map embedded library confirms before switching away from dirty image details", async ({ mapEditor }) => {
+  const { page } = mapEditor;
+  await page.getByRole("button", { name: "New map", exact: true }).click();
+  await page.getByRole("button", { name: "View image Map library first" }).click();
+  const detailTitle = page.getByRole("textbox", { name: "Selected image title" });
+  await detailTitle.fill("Unsaved map picker edit");
+
+  let prompt = "";
+  page.once("dialog", async dialog => { prompt = dialog.message(); await dialog.dismiss(); });
+  await page.getByRole("button", { name: "View image Map library second" }).click();
+  expect(prompt).toMatch(/image details/i);
+  await expect(detailTitle).toHaveValue("Unsaved map picker edit");
+  await expect(page.getByRole("heading", { name: "Map library first", exact: true })).toBeVisible();
+});
+
+test("the new map library guards Hide library for dirty details and pending saves", async ({ mapEditor }) => {
+  const { page } = mapEditor;
+  await page.getByRole("button", { name: "New map", exact: true }).click();
+  await page.getByRole("button", { name: "View image Map library first" }).click();
+  const detailTitle = page.getByRole("textbox", { name: "Selected image title" });
+  await detailTitle.fill("Saved map picker edit");
+
+  const saves: Route[] = [];
+  await page.route("**/api/assets", async route => {
+    if (route.request().method() === "PATCH") saves.push(route);
+    else await route.continue();
+  });
+  await page.getByRole("button", { name: "Save image details", exact: true }).click();
+  await expect.poll(() => saves.length).toBe(1);
+  const hideButton = page.getByRole("button", { name: "Hide library", exact: true });
+  await expect(hideButton).toBeDisabled();
+  await saves[0].continue();
+  await expect.poll(() => hideButton.isEnabled()).toBe(true);
+  await expect(detailTitle).toHaveValue("Saved map picker edit");
+
+  await detailTitle.fill("Unsaved map picker edit");
+  let prompt = "";
+  page.once("dialog", async dialog => { prompt = dialog.message(); await dialog.dismiss(); });
+  await hideButton.click();
+  expect(prompt).toMatch(/image changes/i);
+  await expect(detailTitle).toHaveValue("Unsaved map picker edit");
+  await expect(hideButton).toBeVisible();
+
+  page.once("dialog", dialog => dialog.accept());
+  await hideButton.click();
+  await expect(page.getByRole("button", { name: "Choose from library", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View image Map library first" })).toHaveCount(0);
+});
+
+test("the new map Cancel and Close controls guard dirty and busy library state", async ({ mapEditor }) => {
+  const { page } = mapEditor;
+  await page.getByRole("button", { name: "New map", exact: true }).click();
+  await page.getByRole("button", { name: "View image Map library first" }).click();
+  const detailTitle = page.getByRole("textbox", { name: "Selected image title" });
+  await detailTitle.fill("Unsaved map details");
+
+  for (const name of ["Cancel", "Close"]) {
+    let prompt = "";
+    page.once("dialog", async dialog => { prompt = dialog.message(); await dialog.dismiss(); });
+    await page.getByRole("button", { name, exact: true }).click();
+    expect(prompt).toMatch(/image changes/i);
+    await expect(page.getByRole("heading", { name: "New map", exact: true })).toBeVisible();
+    await expect(detailTitle).toHaveValue("Unsaved map details");
+  }
+
+  const saves: Route[] = [];
+  await page.route("**/api/assets", async route => {
+    if (route.request().method() === "PATCH") saves.push(route);
+    else await route.continue();
+  });
+  await page.getByRole("button", { name: "Save image details", exact: true }).click();
+  await expect.poll(() => saves.length).toBe(1);
+  await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Close", exact: true })).toBeDisabled();
+  await saves[0].continue();
+  await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Close", exact: true })).toBeEnabled();
+  await expect(detailTitle).toHaveValue("Unsaved map details");
+});
+
+test("Create map guards dirty image details and disables during a library save", async ({ mapEditor }) => {
+  const { page } = mapEditor;
+  await page.getByRole("button", { name: "New map", exact: true }).click();
+  await page.getByRole("button", { name: "View image Map library first" }).click();
+  await page.getByRole("button", { name: "Use image", exact: true }).click();
+  await page.getByRole("textbox", { name: "Map name" }).fill("Guarded map");
+  const detailTitle = page.getByRole("textbox", { name: "Selected image title" });
+  await detailTitle.fill("Unsaved map image details");
+
+  let creates = 0;
+  await page.route("**/api/maps", async route => {
+    if (route.request().method() === "POST") creates++;
+    await route.continue();
+  });
+  let prompt = "";
+  page.once("dialog", async dialog => { prompt = dialog.message(); await dialog.dismiss(); });
+  await page.getByRole("button", { name: "Create map", exact: true }).click();
+  expect(prompt).toMatch(/image changes/i);
+  expect(creates).toBe(0);
+  await expect(page.getByRole("heading", { name: "New map", exact: true })).toBeVisible();
+
+  const saves: Route[] = [];
+  await page.route("**/api/assets", async route => {
+    if (route.request().method() === "PATCH") saves.push(route);
+    else await route.continue();
+  });
+  await page.getByRole("button", { name: "Save image details", exact: true }).click();
+  await expect.poll(() => saves.length).toBe(1);
+  const createButton = page.getByRole("button", { name: "Create map", exact: true });
+  await expect(createButton).toBeDisabled();
+  await saves[0].continue();
+  await expect(createButton).toBeEnabled();
+  await createButton.click();
+  await expect.poll(() => creates).toBe(1);
+  await expect(page.getByRole("heading", { name: "New map", exact: true })).toHaveCount(0);
 });

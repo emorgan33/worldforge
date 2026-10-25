@@ -1,6 +1,7 @@
 import { randomBytes, createHash, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { test as base, expect, type Page } from "@playwright/test";
+import sharp from "sharp";
 import { SESSION_COOKIE } from "../../src/lib/auth-constants";
 import { ARTICLE_DRAFT_WINDOW_PREFIX, articleDraftKey } from "../../src/lib/article-drafts";
 
@@ -14,6 +15,10 @@ const test = base.extend<{ article: { page: Page; db: PrismaClient; ownerId: str
       ownerId = owner.id;
       const world = await db.world.create({ data: { ownerId, title: "Save browser world", slug: randomUUID() } });
       const article = await db.article.create({ data: { worldId: world.id, title: "Original lore", slug: randomUUID(), contentHtml: "<p>Lore</p>" } });
+      await Promise.all(["Picker first image", "Picker second image"].map((title, index) => db.imageAsset.create({ data: {
+        worldId: world.id, title, originalName: `picker-${index}.webp`, alt: `${title} alt`, mimeType: "image/webp",
+        byteSize: 1, width: 1, height: 1, sha256: `${index}${"c".repeat(63)}`,
+      } })));
       const token = randomBytes(32).toString("base64url");
       await db.authSession.create({ data: { userId: ownerId, tokenHash: createHash("sha256").update(token).digest("hex"), expiresAt: new Date(Date.now() + 3_600_000) } });
       await context.addCookies([{ name: SESSION_COOKIE, value: token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
@@ -34,6 +39,72 @@ const test = base.extend<{ article: { page: Page; db: PrismaClient; ownerId: str
       finally { await db.$disconnect(); }
     }
   },
+});
+
+test("article image picker confirms before switching away from dirty image details", async ({ article }) => {
+  const { page, open } = article;
+  await open(page);
+  await page.getByRole("button", { name: "Browse images for Article cover URL" }).click();
+  const picker = page.getByRole("dialog", { name: "Choose an image" });
+  await picker.getByRole("button", { name: "View image Picker first image" }).click();
+  const detailTitle = picker.getByRole("textbox", { name: "Selected image title" });
+  await detailTitle.fill("Unsaved picker image edit");
+
+  let prompt = "";
+  page.once("dialog", async dialog => { prompt = dialog.message(); await dialog.dismiss(); });
+  await picker.getByRole("button", { name: "View image Picker second image" }).click();
+  expect(prompt).toMatch(/image details/i);
+  await expect(detailTitle).toHaveValue("Unsaved picker image edit");
+  await expect(picker.getByRole("heading", { name: "Picker first image", exact: true })).toBeVisible();
+});
+
+test("article image picker confirms dirty details before uploading another image", async ({ article }) => {
+  const { page, open } = article;
+  await open(page);
+  await page.getByRole("button", { name: "Browse images for Article cover URL" }).click();
+  const picker = page.getByRole("dialog", { name: "Choose an image" });
+  await picker.getByRole("button", { name: "View image Picker first image" }).click();
+  const detailTitle = picker.getByRole("textbox", { name: "Selected image title" });
+  await detailTitle.fill("Unsaved picker image edit");
+  await picker.getByLabel("Upload image").setInputFiles({
+    name: "r16-upload.webp",
+    mimeType: "image/webp",
+    buffer: await sharp({ create: { width: 2, height: 2, channels: 4, background: { r: 120, g: 80, b: 40, alpha: 1 } } }).webp().toBuffer(),
+  });
+  let uploadRequests = 0;
+  await page.route("**/api/assets", async route => {
+    if (route.request().method() === "POST") uploadRequests++;
+    await route.continue();
+  });
+
+  let prompt = "";
+  page.once("dialog", async dialog => { prompt = dialog.message(); await dialog.dismiss(); });
+  await picker.getByRole("button", { name: "Upload", exact: true }).click();
+  expect(prompt).toMatch(/image details/i);
+  expect(uploadRequests).toBe(0);
+  await expect(detailTitle).toHaveValue("Unsaved picker image edit");
+
+  page.once("dialog", dialog => dialog.accept());
+  await picker.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(picker.getByRole("status")).toHaveText("Image uploaded.");
+});
+
+test("deleting a dirty image clears its guard before closing the image picker", async ({ article }) => {
+  const { page, open } = article;
+  await open(page);
+  await page.getByRole("button", { name: "Browse images for Article cover URL" }).click();
+  const picker = page.getByRole("dialog", { name: "Choose an image" });
+  await picker.getByRole("button", { name: "View image Picker first image" }).click();
+  await picker.getByRole("textbox", { name: "Selected image title" }).fill("Unsaved title before delete");
+  await picker.getByRole("button", { name: "Delete image", exact: true }).click();
+  await picker.getByRole("button", { name: "Delete permanently", exact: true }).click();
+  await expect(picker.getByText("Image permanently deleted.", { exact: true })).toBeVisible();
+
+  let prompt: string | null = null;
+  page.once("dialog", async dialog => { prompt = dialog.message(); await dialog.dismiss(); });
+  await picker.getByRole("button", { name: "Close image library", exact: true }).click();
+  await expect(picker).toHaveCount(0);
+  expect(prompt).toBeNull();
 });
 
 test("legacy inherited visibility opens in the editor as private and saves unrelated edits", async ({ article }) => {
