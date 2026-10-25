@@ -195,6 +195,23 @@ bytes change, the provenance chain is retained, both the source and stored
 digests are recorded, and a re-encode warning is added. Placements that referenced
 an unavailable image are cleared with a warning.
 
+### Transfer adapter boundary
+
+The import endpoint applies one bounded JSON transport reader and shared
+section limits, then decodes the manifest version into a version-specific
+`DecodedWorldTransfer`. A `CanonicalWorldTransfer` projection exposes common
+source-world and core content fields for version-neutral operations. The
+transfer execution module dispatches to the v1 or v2/v3 importer; the v1
+import/export implementations are separate from the HTTP routes. Versions 1,
+2, and 3 retain their existing import behavior; version 3 keeps its provenance
+and placement checks. This internal representation does not change the
+serialized formats, the 60 MB request limit, or the rule that imports are
+private.
+
+Legacy v1 import requires a nonempty world title and slug. Versions 2 and 3
+retain their prior behavior and accept empty title or slug strings where the
+database permits them.
+
 ### Withdrawing or restricting stock art
 
 Operator advisories are applied with `pnpm stock-art:advisories` (see

@@ -6,6 +6,7 @@ import { provenanceVerificationOrigin, validateImportedStockSnapshot } from "./s
 import { collectHtmlReferences } from "@/lib/article-mention-index";
 import { collectJsonReferences } from "@/lib/article-links";
 import { remapArticleMetadata } from "@/lib/metadata-references";
+import { remapWorldAssetUrls } from "@/lib/world-transfer-adapters";
 import type { JSONContent } from "@tiptap/core";
 
 // ---------------------------------------------------------------------------
@@ -522,17 +523,7 @@ export async function importWorldV2(
     else warnings.push(`Category "${cat.name}" illustration referenced an unavailable image and was cleared`);
   }
 
-  function remapUrls(c: string | null): string | null {
-    if (!c) return c;
-    let r = c;
-    for (const [o, n] of assetUrlMap) r = r.split(o).join(n);
-    const validAssetUrls = new Set(assetUrlMap.values());
-    return r.replace(/\/api\/assets\/([0-9a-f-]{36})\/file/gi, (match, assetId: string) => {
-      if (validAssetUrls.has(match)) return match;
-      warnings.push(`Removed reference to unavailable asset "${assetId}"`);
-      return "";
-    });
-  }
+  const remapUrls = (content: string | null) => remapWorldAssetUrls(content, assetUrlMap, assetId => warnings.push(`Removed reference to unavailable asset "${assetId}"`));
   function remapArticleHtml(html: string | null): string | null {
     const articleRemapped = remapUrls(html)?.replace(/data-article-id=(['"])([^'"]+)\1/gi, (_match, quote: string, sourceId: string) => {
       const targetId = articleIdMap.get(sourceId);

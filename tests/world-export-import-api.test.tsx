@@ -97,6 +97,29 @@ test("legacy v1 import does not silently discard attached provenance", { skip: !
   assert.match((await response.json()).error, /cannot preserve image provenance/);
 });
 
+test("v2 and v3 retain empty world title compatibility while v1 rejects it", { skip: !origin }, async () => {
+  for (const format of ["v2", "v3"] as const) {
+    const exported = await ownerFetch(`/api/worlds/${worldId}/export?format=${format}`);
+    assert.equal(exported.status, 200);
+    const bundle = await exported.json();
+    bundle.world.title = "";
+    const response = await ownerFetch("/api/worlds/import", { method: "POST", body: JSON.stringify(bundle) });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.success, true);
+    const restored = await db.world.findUnique({ where: { id: result.worldId }, select: { title: true, isPublic: true } });
+    assert.deepEqual(restored, { title: "", isPublic: false });
+    await db.world.delete({ where: { id: result.worldId } });
+  }
+
+  const legacy = await ownerFetch(`/api/worlds/${worldId}/export?format=v1`);
+  const bundle = await legacy.json();
+  bundle.world.title = "";
+  const rejected = await ownerFetch("/api/worlds/import", { method: "POST", body: JSON.stringify(bundle) });
+  assert.equal(rejected.status, 400);
+  assert.match((await rejected.json()).error, /missing world information/i);
+});
+
 test("legacy API refuses a world whose new placement data exists only in history", { skip: !origin }, async () => {
   const article = await db.article.create({ data: { worldId, title: "Historical placement", slug: `historical-${stamp}` } });
   try {

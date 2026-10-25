@@ -2,7 +2,7 @@
 
 Audit basis: repository revision `1be1903`.
 
-Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a, R05, R06, R07 and R08 are complete. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
+Status: audit complete; R01, R01a, R02, R03, R03a, R04, R04a, R05, R06, R07, R08, R09 and R10 are complete. This roadmap does not itself authorize changes; implementation was authorized by the user's explicit request. Validation results are recorded in the task entries.
 
 ## 1. Executive summary
 
@@ -310,7 +310,7 @@ Effort is relative: **Small** is a bounded change; **Medium** spans several rela
 | R07 Unify revision restore and clone lifecycles | P1 | High | Medium | R06 | **Complete** |
 | R08 Repair imported publication compatibility | P1 | Low | Small | R01 | **Complete** |
 | R09 Define metadata reference contracts | P1 | High | Medium | R08 | **Complete** |
-| R10 Extract transfer format adapters | P2 | Medium | Medium | R08, R09 | Not started |
+| R10 Extract transfer format adapters | P2 | Medium | Medium | R08, R09 | Complete |
 | R11 Close backup fidelity and capacity gaps | P1 | High | Large | R10 | Not started |
 | R12 Make world import retryable | P1 | High | Large | R10 | Not started |
 | R13 Consolidate identity and authorization | P1 | High | Large | R01, production baseline | Not started |
@@ -515,6 +515,10 @@ Validation used dedicated temporary SQLite databases and asset directories, matc
 **Validation and acceptance:** Existing supported v1/v2/v3 fixtures produce equivalent results, warnings, privacy defaults and failure behavior. This extraction introduces no format change.
 
 **Rollback:** Revert the extraction as a behavior-preserving commit; no schema or data rollback should be required.
+
+**Implementation and validation (2026-10-24):** Extracted bounded transport reading, common shape limits, accurate v1/v2/v3 manifest decoding, and a version-neutral canonical projection to `world-transfer-adapters.ts`. Import dispatch now lives in `world-transfer-execution.ts`; the v1 persistence, asset handling and rollback implementation lives in `world-transfer-v1.ts`; v1 export projection and asset reads live in `world-transfer-v1-export.ts`. The HTTP routes now handle authentication, request options and response formatting, delegating version-specific execution to the transfer layer. Asset URL and ID remapping helpers are shared; existing metadata remapping from R09 remains shared, while format-specific rich-text remapping stays with the v2/v3 importer. Added focused adapter tests for version decoding, canonical projection, shape limits, declared and streamed byte limits, and unsupported/provenance failure dispatch. Validation passed against isolated temporary SQLite/assets and a matching dev server: adapter tests **4/4**; world export/import API, roundtrip and backup/restore tests **21/21**; TypeScript; focused ESLint; and `git diff --check`. The roundtrip test emitted the expected Prisma uniqueness error while confirming failed provenance writes leave no usable image row. No serialized format changes were made.
+
+**Compatibility follow-up (2026-10-24):** Review found that the shared executor had broadened the nonempty world title/slug check from v1 to v2/v3. Moved that check into the v1 branch to preserve previous behavior. Added an HTTP regression confirming empty-title v2/v3 imports succeed and remain private while v1 returns 400. Validation passed: export/import API tests **12/12** against isolated temporary storage; adapter tests **4/4**; TypeScript; focused ESLint; and `git diff --check`.
 
 ### R11 — Make supported backups faithfully restorable
 
