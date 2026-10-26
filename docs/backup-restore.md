@@ -234,7 +234,10 @@ Format 3 remains importable as a complete owner backup. It adds to format 2:
 Because format 3 is defined as a complete backup, it rejects the `includeAssets`
 and `includePrivate` query flags with `400` rather than silently returning a
 partial file. The legacy formats remain available for worlds that can be captured
-losslessly: `?format=v1` supports filtering; `?format=v2` is a complete backup
+losslessly: `?format=v1&includeAssets=false` can omit asset bytes. Format 1
+rejects `includePrivate=false` because its legacy shape cannot reliably strip
+GM notes and all author-only data; use a complete backup for private content.
+`?format=v2` is a complete backup
 and rejects `includeAssets`/`includePrivate` flags explicitly. The
 server refuses a legacy export of a world that has provenance, restrictions or
 placement data the legacy shape would drop (including retained revision fields), with guidance to use format 4.

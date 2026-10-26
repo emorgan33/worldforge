@@ -224,7 +224,9 @@ Format 4 is defined as the complete owner backup. It rejects the filtering flags
 them, so a partial export is never mistaken for a complete backup.
 
 Legacy formats stay available for worlds that can be represented losslessly:
-`?format=v1` supports filtering. Formats 2 and 3, like format 4, are complete
+`?format=v1` can omit asset bytes with `includeAssets=false`, but rejects
+`includePrivate=false` because the legacy shape cannot safely remove all private
+content. Formats 2 and 3, like format 4, are complete
 backups and reject `includeAssets`/`includePrivate` flags explicitly. They keep their older shapes, but
 `worldNeedsV3()` refuses a legacy export when the world has provenance,
 restrictions or placement data that the legacy shape would drop, with guidance to

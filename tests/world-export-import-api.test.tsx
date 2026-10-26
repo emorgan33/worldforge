@@ -85,7 +85,7 @@ test("v2 refuses filtering flags instead of including omitted private data", { s
   for (const flag of ["includeAssets=false", "includePrivate=false", "includePrivate=true"]) {
     const response = await ownerFetch(`/api/worlds/${worldId}/export?format=v2&${flag}`);
     assert.equal(response.status, 400);
-    assert.match((await response.json()).error, /format=v1/);
+    assert.match((await response.json()).error, /format 1 filtered exports are unavailable/i);
   }
 });
 
@@ -138,19 +138,15 @@ test("world export is private by default regardless of original setting", { skip
   assert.equal(data.world.isPublic, false);
 });
 
-test("world export excludes private content when requested", { skip: !origin }, async () => {
+test("legacy v1 refuses filtered exports that cannot guarantee private content is removed", { skip: !origin }, async () => {
   // Create private article
   await db.article.create({ data: { worldId, slug: `private-${stamp}`, title: "Private", publicationStatus: "DRAFT", visibility: "PRIVATE", contentHtml: "secret" } });
   // Create public article
   await db.article.create({ data: { worldId, slug: `public-${stamp}`, title: "Public", publicationStatus: "PUBLISHED", visibility: "PUBLIC", contentHtml: "visible" } });
   
   const res = await ownerFetch(`/api/worlds/${worldId}/export?format=v1&includePrivate=false`);
-  assert.equal(res.status, 200);
-  const data = await res.json();
-  const articleTitles = data.articles.map((a: { title: string }) => a.title);
-  assert.ok(articleTitles.includes("Public"));
-  assert.ok(!articleTitles.includes("Private"));
-  assert.ok(data.articles.every((a: { publicationStatus: string }) => a.publicationStatus === "DRAFT"));
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /filtered legacy exports are unavailable/i);
 });
 
 test("world import creates new world with remapped IDs", { skip: !origin }, async () => {

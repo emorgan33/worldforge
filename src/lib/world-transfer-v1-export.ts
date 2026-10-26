@@ -9,6 +9,9 @@ export class WorldTransferExportError extends Error {
 
 /** Execute the legacy v1 export projection for an owner. */
 export async function exportWorldV1(worldId: string, ownerId: string, includeAssets: boolean, includePrivate: boolean): Promise<WorldExportV1> {
+  if (!includePrivate) {
+    throw new WorldTransferExportError("Filtered legacy exports are unavailable because format 1 cannot safely remove all private content. Request a complete backup instead.", 400);
+  }
   const world = await prisma.world.findUnique({
     where: { id: worldId },
     select: { id: true, ownerId: true, slug: true, title: true, description: true, genre: true, system: true, isPublic: true, coverImage: true, bannerImage: true, appearance: true },
