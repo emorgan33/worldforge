@@ -82,12 +82,15 @@ test("reader credits and image authorization follow publication and revocation",
   assert.equal((await fetch(`${origin}${assetUrl}`)).status, 200);
 
   // Revocation: taking the article private removes its page, its credit and its
-  // placement image. The asset stays public while the category illustration
-  // still references it, then stops being served once that reference is gone.
+  // placement image. Its category also disappears when no public article
+  // remains in that path.
   assert.equal((await owned(`${origin}/api/articles/${article.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ visibility: "PRIVATE" }) })).status, 200);
   const revokedArticle = await (await fetch(`${origin}/w/${world.slug}/a/${article.slug}`)).text();
   assert(!revokedArticle.includes("Ivan Aivazovsky, Ship by Moonlight, CC0 1.0"), "the revoked credit no longer renders");
-  assert.equal((await fetch(`${origin}${assetUrl}`)).status, 200, "the category illustration still references the asset");
+  assert.equal((await fetch(`${origin}${assetUrl}`)).status, 404, "the hidden category does not authorize image bytes");
+  const hiddenWorld = await (await fetch(`${origin}/w/${world.slug}`)).text();
+  assert(!hiddenWorld.includes("Harbor"));
+  assert(!hiddenWorld.includes("Second creator credit"));
   await db.category.update({ where: { id: category.id }, data: { iconImage: null } });
   assert.equal((await fetch(`${origin}${assetUrl}`)).status, 404, "with no public references the art stops being served to anonymous readers");
   const revokedWorld = await (await fetch(`${origin}/w/${world.slug}`)).text();

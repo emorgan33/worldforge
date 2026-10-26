@@ -82,15 +82,17 @@ test("preview issue and revocation roll back with their audit events", { skip: !
   }
   const issued = await issuePreviewSession(f.world.id, f.playerA.id, f.owner.id);
   const hash = tokenHash(issued.token);
+  await assert.rejects(revokePreviewSession(hash, "another-world", f.owner.id), /Preview session not found/);
+  assert.equal((await f.db.previewSession.findUniqueOrThrow({ where: { tokenHash: hash } })).revokedAt, null);
   for (const [table, op, condition] of [
     ["PreviewSession", "UPDATE", `OLD.tokenHash = '${hash}'`],
     ["AccessAuditEvent", "INSERT", `NEW.worldId = '${f.world.id}' AND NEW.action = 'revoke_preview'`],
   ] as const) {
     const before = await memberState(f.db, f.world.id, f.playerA.id);
-    await withFailure(f.db, failureTrigger(table, op, condition, `revoke ${table}`), () => revokePreviewSession(hash, f.owner.id));
+    await withFailure(f.db, failureTrigger(table, op, condition, `revoke ${table}`), () => revokePreviewSession(hash, f.world.id, f.owner.id));
     assert.deepEqual(await memberState(f.db, f.world.id, f.playerA.id), before, `revoke ${table} failure rolls back`);
   }
-  await revokePreviewSession(hash, f.owner.id);
+  await revokePreviewSession(hash, f.world.id, f.owner.id);
   assert.ok((await f.db.previewSession.findUniqueOrThrow({ where: { tokenHash: hash } })).revokedAt);
 });
 

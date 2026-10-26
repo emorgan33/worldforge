@@ -155,6 +155,12 @@ its visibility and publication status in the editor. Older records with the
 legacy `INHERITED` visibility value are treated as private when saved; no data
 migration is required.
 
+All import formats require route-safe world and article slugs containing only
+letters, digits, underscores, or hyphens, with no duplicate article slugs in
+one bundle. Invalid legacy bundles must be corrected before import. Existing
+world slug collisions receive a numeric suffix; export filenames are sanitized
+independently of stored slugs.
+
 ## Verification
 
 After any restore, verify:

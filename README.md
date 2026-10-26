@@ -142,6 +142,7 @@ Copy `.env.example` to `.env`. Variables:
 | --- | --- | --- |
 | `DATABASE_URL` | yes | SQLite path. Relative paths resolve from `prisma/`, so `file:./dev.db` → `prisma/dev.db`. |
 | `WORLDFORGE_ORIGIN` | production | Public origin used for same-origin/CSRF checks. Must match the browser URL or writes return 403. |
+| `WORLDFORGE_TRUSTED_PROXY` | public HTTPS | Set to `1` only behind a private proxy that overwrites `X-WorldForge-Client-IP`. |
 | `WORLDFORGE_ASSET_DIR` | no | Uploaded-image directory. Defaults to `./data/assets`. |
 
 ## Local development

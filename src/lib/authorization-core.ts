@@ -33,6 +33,7 @@ export async function sessionUser() {
 
 export function sameOrigin(request: Request) {
   const url = new URL(request.url);
+  if (process.env.NODE_ENV === "production" && !process.env.WORLDFORGE_ORIGIN) throw new AccessError("Public origin is not configured.", 500);
   const expected = process.env.WORLDFORGE_ORIGIN || `${url.protocol}//${request.headers.get("host") || url.host}`;
   if (request.headers.get("origin") !== expected || request.headers.get("sec-fetch-site") === "cross-site") {
     throw new AccessError("This request must come from this site.", 403);

@@ -144,10 +144,10 @@ export async function issuePreviewSession(worldId: string, userId: string, actor
   return { token, expiresIn: PREVIEW_EXPIRY_SECONDS };
 }
 
-export async function revokePreviewSession(tokenHash: string, actorId: string) {
+export async function revokePreviewSession(tokenHash: string, worldId: string, actorId: string) {
   await prisma.$transaction(async tx => {
     const session = await tx.previewSession.findUnique({ where: { tokenHash }, select: { worldId: true, userId: true, revokedAt: true } });
-    if (!session || session.revokedAt) throw new AccessError("Preview session not found.", 404);
+    if (!session || session.worldId !== worldId || session.revokedAt) throw new AccessError("Preview session not found.", 404);
     await tx.previewSession.update({ where: { tokenHash }, data: { revokedAt: new Date() } });
     await recordAuditEvent({ worldId: session.worldId, action: "revoke_preview", actorId, afterJson: JSON.stringify({ userId: session.userId }) }, tx);
   });

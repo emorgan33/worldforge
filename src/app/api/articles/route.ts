@@ -8,6 +8,7 @@ import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placeme
 import { prisma } from "@/lib/db";
 import { validateCharacterRows } from "@/lib/character-sheet";
 import { validateMetadataReferences } from "@/lib/metadata-references";
+import { validTransferSlug } from "@/lib/world-transfer-adapters";
 
 const ARTICLE_LIST_PAGE_SIZE = 200;
 
@@ -128,7 +129,9 @@ async function postHandler(req: NextRequest, _context: unknown, { user }: { user
       title
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "");
+        .replace(/(^-|-$)/g, "")
+        .slice(0, 100) || "article";
+    if (!validTransferSlug(generatedSlug) || generatedSlug.length > 100) return NextResponse.json({ error: "Article slug must contain only letters, numbers, underscores or hyphens." }, { status: 400 });
 
     const article = await prisma.$transaction(async tx => {
       if (coverImage !== undefined) await assertImageReference(coverImage, worldId, tx);

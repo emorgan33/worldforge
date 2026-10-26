@@ -28,8 +28,11 @@ export async function issueSession(userId: string, request: Request) {
 
 export async function revokeSession() {
   const jar = await cookies(); const token = jar.get(SESSION_COOKIE)?.value;
+  const previewToken = jar.get("wf_preview")?.value;
   if (token) await prisma.authSession.deleteMany({ where: { tokenHash: tokenHash(token) } });
+  if (previewToken) await prisma.previewSession.updateMany({ where: { tokenHash: tokenHash(previewToken), revokedAt: null }, data: { revokedAt: new Date() } });
   jar.delete(SESSION_COOKIE);
+  jar.delete("wf_preview");
 }
 
 type AuthorDeclaration =

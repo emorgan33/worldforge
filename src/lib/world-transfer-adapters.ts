@@ -53,6 +53,40 @@ export const MAX_WORLD_TRANSFER_BYTES = 60 * 1024 * 1024;
 export const MAX_WORLD_TRANSFER_SECTION_ITEMS = 10_000;
 export const MAX_WORLD_TRANSFER_ASSET_BASE64_CHARS = 14 * 1024 * 1024;
 
+export function validTransferSlug(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 120 && /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(value);
+}
+
+export function worldTransferSlugsValid(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const bundle = value as Record<string, unknown>;
+  if (!validTransferSlug((bundle.world as { slug?: unknown } | null)?.slug)) return false;
+  if (!Array.isArray(bundle.articles)) return false;
+  const slugs = new Set<string>();
+  for (const article of bundle.articles) {
+    const slug = (article as { slug?: unknown } | null)?.slug;
+    if (!validTransferSlug(slug) || slugs.has(slug)) return false;
+    slugs.add(slug);
+  }
+  return bundle.articleRevisions === undefined || Array.isArray(bundle.articleRevisions) && bundle.articleRevisions.every(revision => validTransferSlug((revision as { slug?: unknown } | null)?.slug));
+}
+
+export function importedWorldSlug(base: string, suffix: number): string {
+  if (!suffix) return base;
+  const ending = `-${suffix}`;
+  return `${base.slice(0, 120 - ending.length)}${ending}`;
+}
+
+export function clonedArticleSlug(sourceSlug: string, suffix: number): string {
+  const base = sourceSlug.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "") || "article";
+  const ending = suffix === 0 ? "-copy" : `-copy-${suffix}`;
+  return `${base.slice(0, 120 - ending.length)}${ending}`;
+}
+
+export function exportFilenameSlug(value: string): string {
+  return value.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120) || "world";
+}
+
 /** Return the first shared importer limit exceeded by a bundle. */
 export function worldTransferLimitError(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "Import bundle must be a JSON object";
@@ -103,7 +137,7 @@ export function isWorldTransferShape(value: unknown): value is Record<string, un
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const bundle = value as Record<string, unknown>;
   const world = bundle.world as Record<string, unknown> | null;
-  if (!world || typeof world !== "object" || typeof world.title !== "string" || typeof world.slug !== "string" || world.title.length > 200 || world.slug.length > 120) return false;
+  if (!world || typeof world !== "object" || typeof world.title !== "string" || world.title.length > 200 || !worldTransferSlugsValid(bundle)) return false;
   if (worldTransferLimitError(bundle)) return false;
   return true;
 }

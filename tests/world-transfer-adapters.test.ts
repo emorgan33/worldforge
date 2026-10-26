@@ -8,6 +8,10 @@ import {
   toCanonicalWorldTransfer,
   worldTransferLimitError,
   remapWorldAssetUrls,
+  exportFilenameSlug,
+  importedWorldSlug,
+  clonedArticleSlug,
+  validTransferSlug,
 } from "@/lib/world-transfer-adapters";
 import { importWorldTransfer } from "@/lib/world-transfer-execution";
 
@@ -57,6 +61,25 @@ test("applies shared section limits before version dispatch", () => {
   const oversizedAudit = { ...base, formatVersion: 4, auditEvents: new Array(10001).fill({ action: "test" }) };
   assert.equal(isWorldTransferShape(oversizedAudit), false);
   assert.match(worldTransferLimitError(oversizedAudit) ?? "", /auditEvents.*10,000 item import limit/);
+});
+
+test("all import versions reject unsafe and ambiguous slugs", () => {
+  for (const version of [1, 2, 3, 4]) {
+    const envelope = version === 1 ? { version } : { formatVersion: version };
+    const valid = { ...base, ...envelope, articles: [{ id: "a", slug: "Old_Article-1" }] };
+    assert.equal(isWorldTransferShape(valid), true);
+    for (const slug of ["", "../secret", "bad?query", "bad\r\nheader", 'bad"name', "a".repeat(121)]) {
+      assert.equal(isWorldTransferShape({ ...valid, world: { ...base.world, slug } }), false);
+      assert.equal(isWorldTransferShape({ ...valid, articles: [{ id: "a", slug }] }), false);
+    }
+    assert.equal(isWorldTransferShape({ ...valid, articles: [{ id: "a", slug: "same" }, { id: "b", slug: "same" }] }), false);
+    assert.equal(isWorldTransferShape({ ...valid, articleRevisions: [{ slug: "bad/path" }] }), false);
+  }
+  assert.equal(importedWorldSlug("a".repeat(120), 1).length, 120);
+  assert.equal(clonedArticleSlug("a".repeat(120), 0), `${"a".repeat(115)}-copy`);
+  assert.equal(clonedArticleSlug("a".repeat(120), 2), `${"a".repeat(113)}-copy-2`);
+  assert(validTransferSlug(clonedArticleSlug("a".repeat(120), 2)));
+  assert.equal(exportFilenameSlug('bad/"\r\nname'), "bad-name");
 });
 
 test("reads valid JSON and rejects oversized declared or streamed bodies", async () => {

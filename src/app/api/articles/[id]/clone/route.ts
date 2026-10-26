@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { randomUUID } from "node:crypto";
 import { assertDocumentImageReferences, assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
 import { syncArticleAssetReferences, syncArticleMentions } from "@/lib/article-mention-index";
+import { clonedArticleSlug } from "@/lib/world-transfer-adapters";
 
 export const POST = withAuthor({ target: "resource-param", kind: "articles" }, async (request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   try {
@@ -22,10 +23,10 @@ export const POST = withAuthor({ target: "resource-param", kind: "articles" }, a
 
     // Generate unique slug
     let slugSuffix = 0;
-    let newSlug = `${source.slug}-copy`;
+    let newSlug = clonedArticleSlug(source.slug, slugSuffix);
     while (await prisma.article.findFirst({ where: { slug: newSlug }, select: { id: true } })) {
       slugSuffix++;
-      newSlug = `${source.slug}-copy-${slugSuffix}`;
+      newSlug = clonedArticleSlug(source.slug, slugSuffix);
     }
 
     const newArticle = await prisma.$transaction(async tx => {

@@ -63,7 +63,7 @@ test("oversized asset uploads are rejected by the bounded form reader", { skip: 
   const fetchAsAuthor = await authenticatedAuthorFetch(db, user.id, origin);
   const responsePromise = fetchAsAuthor(`${origin}/api/assets`, {
     method: "POST",
-    headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+    headers: { "Content-Type": `multipart/form-data; boundary=${boundary}`, Connection: "close" },
     body,
     duplex: "half",
   } as RequestInit & { duplex: "half" });

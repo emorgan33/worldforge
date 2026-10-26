@@ -40,7 +40,7 @@
     "lucide-react": "^1.57.0",
     "next": "16.4.1",
     "postcss": "8.5.23",
-    "postcss-selector-parser": "7.1.0",
+    "postcss-selector-parser": "7.1.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "sharp": "0.35.5",
@@ -60,6 +60,11 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "pnpm": {
+    "overrides": {
+      "@prisma/config>deepmerge-ts": "8.0.2"
+    }
   },
   "packageManager": "pnpm@10.14.0"
 }

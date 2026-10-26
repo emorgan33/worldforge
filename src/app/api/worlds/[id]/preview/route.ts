@@ -24,12 +24,12 @@ export const POST = withAuthor({ target: "world-param" }, async (request: NextRe
   return NextResponse.json(result);
 });
 
-export const DELETE = withAuthor({ target: "world-param" }, async (request: NextRequest, _context, { user }) => {
+export const DELETE = withAuthor({ target: "world-param" }, async (request: NextRequest, _context, { user, worldId }) => {
   const body = await request.json();
   const { token } = body;
   if (!token || typeof token !== "string") {
     return NextResponse.json({ error: "token is required" }, { status: 400 });
   }
-  await revokePreviewSession(tokenHash(token), user.id);
+  await revokePreviewSession(tokenHash(token), worldId!, user.id);
   return NextResponse.json({ success: true });
 });

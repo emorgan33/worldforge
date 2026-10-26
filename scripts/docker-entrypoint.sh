@@ -19,11 +19,18 @@ if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
 }
 
 const origin = process.env.WORLDFORGE_ORIGIN;
+if (!origin) fail('WORLDFORGE_ORIGIN is required in the production container.');
 if (origin) {
   let parsed;
   try { parsed = new URL(origin); } catch { fail('WORLDFORGE_ORIGIN must be an absolute http:// or https:// URL.'); }
   if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.origin !== origin) {
     fail('WORLDFORGE_ORIGIN must be canonical and contain only the public scheme, lowercase host, and optional non-default port (for example: https://world.example). Do not include a trailing slash.');
+  }
+  if (parsed.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)) {
+    fail('HTTP origins are allowed only for local deployments; use HTTPS for public hosts.');
+  }
+  if (parsed.protocol === 'https:' && process.env.WORLDFORGE_TRUSTED_PROXY !== '1') {
+    fail('HTTPS deployments must set WORLDFORGE_TRUSTED_PROXY=1 and configure a private, header-sanitizing reverse proxy.');
   }
 }
 NODE

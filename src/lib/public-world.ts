@@ -9,6 +9,7 @@ import { readerCharacterRows } from "./character-sheet";
 import { projectReaderMetadata } from "./metadata-references";
 import { articleImageAssetIds } from "./asset-references";
 import { readerCreditsForAssets } from "./stock-credits";
+import { categoryAncestors } from "./category-tree";
 import type { PrismaClient } from "@prisma/client";
 
 export async function publicWorld(slug: string) {
@@ -22,7 +23,8 @@ export async function publicWorld(slug: string) {
   const assetIds = new Set(assets.map(asset => asset.id));
   const appearance = parseAppearance(world.appearance);
   appearance.backgroundImage = publicImage(appearance.backgroundImage, assetIds) || "";
-  const visibleCategories = categories.map(category => ({ ...category, iconImage: publicImage(category.iconImage, assetIds) }));
+  const visibleCategoryIds = new Set(articles.flatMap(article => categoryAncestors(categories, article.categoryId).map(category => category.id)));
+  const visibleCategories = categories.filter(category => visibleCategoryIds.has(category.id)).map(category => ({ ...category, iconImage: publicImage(category.iconImage, assetIds) }));
   const coverImage = publicImage(world.coverImage, assetIds);
   const decorations = [coverImage, appearance.backgroundImage, ...visibleCategories.map(category => category.iconImage)];
   const credits = await readerCreditsForAssets(world.id, decorations.flatMap(url => { const id = url && localAssetId(url); return id ? [id] : []; }));
@@ -70,8 +72,12 @@ export async function assetIsPublic(id: string, worldId: string, client: PrismaC
   const referencesAsset = (value: string | null) => localAssetId(publicImage(value, ids) || "") === id;
   if ([world.coverImage, world.bannerImage, parseAppearance(world.appearance).backgroundImage].some(referencesAsset)) return true;
 
-  const categories = await client.category.findMany({ where: { worldId, iconImage: { not: null } }, select: { iconImage: true } });
-  if (categories.some(category => referencesAsset(category.iconImage))) return true;
+  const [categories, publicArticles] = await Promise.all([
+    client.category.findMany({ where: { worldId }, select: { id: true, name: true, parentId: true, order: true, iconImage: true } }),
+    client.article.findMany({ where: { worldId, ...publicArticleFilter, categoryId: { not: null } }, select: { categoryId: true } }),
+  ]);
+  const visibleCategoryIds = new Set(publicArticles.flatMap(article => categoryAncestors(categories, article.categoryId).map(category => category.id)));
+  if (categories.some(category => visibleCategoryIds.has(category.id) && referencesAsset(category.iconImage))) return true;
 
   const indexedPlacement = await client.articleAssetReference.findFirst({
     where: { assetId: id, sourceArticle: { worldId, ...publicArticleFilter, assetReferencesIndexed: true } },

@@ -199,6 +199,34 @@ test("clone starts a private lifecycle with a fresh policy, initial revision and
   assert.deepEqual((await f.db.articleMention.findMany({ where: { sourceArticleId: legacy.id } })).map(edge => edge.targetArticleId), [f.target.id]);
 });
 
+test("cloning a maximum-length slug keeps the world export importable", { skip: !origin }, async context => {
+  const f = await fixture(context);
+  const sourceSlug = "s".repeat(120);
+  await f.db.article.update({ where: { id: f.article.id }, data: { slug: sourceSlug } });
+  await f.db.article.create({ data: { worldId: f.world.id, title: "Existing copy slug", slug: `${"s".repeat(115)}-copy` } });
+
+  const cloned = await f.send(f.article.id, "/clone");
+  assert.equal(cloned.status, 201, await cloned.clone().text());
+  const clone = await cloned.json();
+  assert.equal(clone.slug.length, 120);
+  assert.equal(clone.slug, `${"s".repeat(113)}-copy-1`);
+
+  const exported = await f.owned(`${origin}/api/worlds/${f.world.id}/export`);
+  assert.equal(exported.status, 200, await exported.clone().text());
+  const bundle = await exported.json();
+  const imported = await f.owned(`${origin}/api/worlds/import`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(bundle),
+  });
+  assert.equal(imported.status, 200, await imported.clone().text());
+  const result = await imported.json();
+  try {
+    const restoredClone = await f.db.article.findFirstOrThrow({ where: { worldId: result.worldId, slug: clone.slug } });
+    assert.equal(restoredClone.title, clone.title);
+  } finally {
+    await f.db.world.delete({ where: { id: result.worldId } });
+  }
+});
+
 test("clone rolls back article, policy, revision and graph on failure at every dependent write", { skip: !origin }, async context => {
   const f = await fixture(context);
   const state = async () => ({

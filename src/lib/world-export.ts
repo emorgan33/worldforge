@@ -6,7 +6,7 @@ import { provenanceVerificationOrigin, validateImportedStockSnapshot } from "./s
 import { collectHtmlReferences } from "@/lib/article-mention-index";
 import { collectJsonReferences } from "@/lib/article-links";
 import { remapArticleMetadata } from "@/lib/metadata-references";
-import { remapWorldAssetUrls } from "@/lib/world-transfer-adapters";
+import { importedWorldSlug, remapWorldAssetUrls, worldTransferSlugsValid } from "@/lib/world-transfer-adapters";
 import type { JSONContent } from "@tiptap/core";
 import { normalizeMapGeometry, normalizeMapStyle } from "./map-elements";
 
@@ -442,9 +442,10 @@ export async function importWorldV2(
   const collectionIdMap = new Map((data.variableCollections || []).map((collection) => [collection.id, randomUUID()]));
   const variableIdMap = new Map((data.variableCollections || []).flatMap((collection) => collection.variables.map((variable) => [variable.id, randomUUID()] as const)));
   const sessionIdMap = new Map((data.sessions || []).map((session) => [session.id, randomUUID()]));
+  if (!worldTransferSlugsValid(data)) throw new Error("Invalid or duplicate import slug");
   let slug = data.world.slug;
   let slugSuffix = 0;
-  while (await existingSlugCheck(slug)) { slugSuffix++; slug = `${data.world.slug}-${slugSuffix}`; }
+  while (await existingSlugCheck(slug)) { slugSuffix++; slug = importedWorldSlug(data.world.slug, slugSuffix); }
   if (slugSuffix > 0) warnings.push(`World slug "${data.world.slug}" was taken; renamed to "${slug}"`);
 
   const newWorldId = identity?.worldId ?? randomUUID();

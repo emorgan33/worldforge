@@ -3,7 +3,7 @@ import { normalizeImage, removeAssetFile, writeAsset } from "@/lib/asset-storage
 import { randomUUID } from "node:crypto";
 import type { WorldExportV1 } from "@/lib/world-export";
 import { remapArticleMetadata } from "@/lib/metadata-references";
-import { remapWorldAssetUrls, remapWorldReferenceId } from "@/lib/world-transfer-adapters";
+import { importedWorldSlug, remapWorldAssetUrls, remapWorldReferenceId, worldTransferSlugsValid } from "@/lib/world-transfer-adapters";
 
 export interface WorldTransferExecutionResult {
   worldId: string;
@@ -12,10 +12,11 @@ export interface WorldTransferExecutionResult {
 }
 
 export async function importWorldV1(v1Body: WorldExportV1, ownerId: string, identity?: { worldId: string; assetId(sourceId: string): string; completionRequestId?: string; completionPayloadHash?: string }): Promise<WorldTransferExecutionResult> {
+  if (!worldTransferSlugsValid(v1Body)) throw new Error("Invalid or duplicate import slug");
   const warnings: string[] = [];
 let slug = v1Body.world.slug;
   let slugSuffix = 0;
-  while (await prisma.world.findUnique({ where: { slug }, select: { id: true } })) { slugSuffix++; slug = `${v1Body.world.slug}-${slugSuffix}`; }
+  while (await prisma.world.findUnique({ where: { slug }, select: { id: true } })) { slugSuffix++; slug = importedWorldSlug(v1Body.world.slug, slugSuffix); }
   if (slugSuffix > 0) warnings.push(`World slug "${v1Body.world.slug}" was taken; renamed to "${slug}"`);
 
   const newWorldId = identity?.worldId ?? randomUUID();

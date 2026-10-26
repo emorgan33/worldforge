@@ -87,7 +87,8 @@ test("public image bytes match encoded bodies and relative or absolute placement
       const asset = await image();
       const src = absolute ? `${origin}${asset.url}` : asset.url;
       if (placement === "iconImage") {
-        await db.category.create({ data: { worldId: world.id, name: `Illustrated category ${absolute}`, iconImage: src } });
+        const category = await db.category.create({ data: { worldId: world.id, name: `Illustrated category ${absolute}`, iconImage: src } });
+        await article(`illustrated-${absolute}`, { categoryId: category.id });
       } else {
         await db.world.update({ where: { id: world.id }, data: placement === "backgroundImage" ? { appearance: JSON.stringify({ ...DEFAULT_APPEARANCE, backgroundImage: src }) } : { [placement]: src } });
       }
