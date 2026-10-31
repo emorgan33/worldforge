@@ -21,6 +21,7 @@ export default function AdminAuditPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const errorRef = useRef<HTMLParagraphElement>(null);
+  const requestSeq = useRef(0);
 
   const [targetDraft, setTargetDraft] = useState("");
   const [actionDraft, setActionDraft] = useState("");
@@ -32,6 +33,7 @@ export default function AdminAuditPage() {
   }, [error]);
 
   async function load(cursor?: string | null, replace = true, filters = { targetId, action }) {
+    const requestId = ++requestSeq.current;
     if (cursor) setLoadingMore(true);
     else setLoading(true);
     setError("");
@@ -47,6 +49,7 @@ export default function AdminAuditPage() {
       } catch {
         data = {};
       }
+      if (requestId !== requestSeq.current) return;
       if (!response.ok) {
         setError(data.error || "Unable to load audit events.");
         return;
@@ -54,10 +57,13 @@ export default function AdminAuditPage() {
       setEntries((previous) => (replace ? data.entries || [] : [...previous, ...(data.entries || [])]));
       setNextCursor(data.nextCursor ?? null);
     } catch {
+      if (requestId !== requestSeq.current) return;
       setError("Unable to load audit events. Retry the request.");
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (requestId === requestSeq.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   }
 
@@ -101,7 +107,7 @@ export default function AdminAuditPage() {
           />
         </label>
         <div className="flex items-end">
-          <button type="submit" disabled={loading} className="w-full rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">
+          <button type="submit" disabled={loading || loadingMore} className="w-full rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">
             Apply filters
           </button>
         </div>
