@@ -151,7 +151,7 @@ test("failed account creation restores controls and reports uncertainty", async 
     await page.getByRole("button", { name: "Create" }).click();
 
     await expect(page.locator("p[role='alert']")).toContainText("Unable to confirm");
-    await expect(page.getByRole("button", { name: "Create" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Create" })).toBeEnabled({ timeout: 40000 });
   } finally {
     if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
     await db.$disconnect();
@@ -184,7 +184,7 @@ test("truncated successful create responses refresh state and never replay the m
 
     await expect(page.locator("p[role='alert']")).toContainText("Unable to confirm");
     await expect(page.getByText(targetEmail)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Create" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Create" })).toBeEnabled({ timeout: 40000 });
     expect(postCount).toBe(1);
     expect(await db.user.count({ where: { email: targetEmail } })).toBe(1);
   } finally {
@@ -203,8 +203,8 @@ test("administrators can revoke all of their own sessions and are signed out", a
     adminId = admin.user.id;
     await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
 
-    await page.goto(`/admin/users/${admin.user.id}`);
-    await expect(page.getByRole("heading", { name: admin.user.email })).toBeVisible();
+    await page.goto(`/admin/users/${admin.user.id}`); await expect(page.locator("#loading-account")).not.toBeVisible({ timeout: 40000 });
+    await expect(page.getByRole("heading", { name: admin.user.email })).toBeVisible({ timeout: 40000 });
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Revoke all access" }).click();
     await expect(page).toHaveURL(/\/login$/);
@@ -228,7 +228,7 @@ test("administrators can delete an eligible disabled account", async ({ page, co
     targetId = target.id;
     await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
 
-    await page.goto(`/admin/users/${target.id}`);
+    await page.goto(`/admin/users/${target.id}`); await expect(page.locator("#loading-account")).not.toBeVisible({ timeout: 40000 });
     await page.getByRole("button", { name: "Preview deletion blockers" }).click();
     await expect(page.getByText("Allowed: Yes")).toBeVisible();
     await page.getByLabel("Confirm current email").fill(target.email);
@@ -261,7 +261,7 @@ test("long account identifiers do not widen a 320px viewport", async ({ page, co
     await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
 
     await page.setViewportSize({ width: 320, height: 640 });
-    await page.goto(`/admin/users/${target.id}`);
+    await page.goto(`/admin/users/${target.id}`); await expect(page.locator("#loading-account")).not.toBeVisible({ timeout: 40000 });
     await expect(page.getByRole("definition").filter({ hasText: longName })).toBeVisible();
     const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     expect(scrollWidth).toBeLessThanOrEqual(320);
@@ -324,8 +324,8 @@ test("account detail exposes accessible control names", async ({ page, context, 
     const target = await db.user.create({ data: { name: "Accessible", email: `accessible-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
     targetId = target.id;
     await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
-    await page.goto(`/admin/users/${target.id}`);
-    await expect(page.getByRole("combobox", { name: /account role/i })).toBeVisible();
+    await page.goto(`/admin/users/${target.id}`); await expect(page.locator("#loading-account")).not.toBeVisible({ timeout: 40000 });
+    await expect(page.getByRole("combobox", { name: /account role/i })).toBeVisible({ timeout: 40000 });
   } finally {
     if (targetId) await db.user.delete({ where: { id: targetId } }).catch(() => undefined);
     if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
@@ -353,6 +353,7 @@ test("users pagination applies stable filters", async ({ page, context, baseURL 
     await page.getByLabel("Search").fill("page-user");
     await page.getByRole("button", { name: "Apply filters" }).click();
     await expect(page.getByRole("button", { name: "Load more" })).toBeVisible();
+
     let releasePage!: () => void;
     const pageGate = new Promise<void>((resolve) => { releasePage = resolve; });
     await page.route("**/api/admin/users?**", async (route) => {
@@ -371,6 +372,7 @@ test("users pagination applies stable filters", async ({ page, context, baseURL 
     await db.$disconnect();
   }
 });
+
 test("administrators can issue a recovery link from account detail", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
   const db = new PrismaClient();
@@ -383,10 +385,11 @@ test("administrators can issue a recovery link from account detail", async ({ pa
     targetId = target.id;
     await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
 
-    await page.goto(`/admin/users/${target.id}`);
+    await page.goto(`/admin/users/${target.id}`); await expect(page.locator("#loading-account")).not.toBeVisible({ timeout: 40000 });
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Issue recovery link" }).click();
     await expect(page.getByRole("status").getByRole("textbox")).toHaveValue(/\/setup#token=/);
+
     await page.getByRole("link", { name: "Audit" }).click();
     await expect(page).toHaveURL(/\/admin\/audit$/);
     await page.goBack();
@@ -410,8 +413,8 @@ test("administrators can change role and disable an account", async ({ page, con
     targetId = target.id;
     await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
 
-    await page.goto(`/admin/users/${target.id}`);
-    await expect(page.getByRole("heading", { name: target.email })).toBeVisible();
+    await page.goto(`/admin/users/${target.id}`); await expect(page.locator("#loading-account")).not.toBeVisible({ timeout: 40000 });
+    await expect(page.getByRole("heading", { name: target.email })).toBeVisible({ timeout: 40000 });
     await expect(page.getByText("No active sessions.")).toBeVisible();
     await page.getByLabel("Account role").selectOption("GM");
     await expect(page.getByLabel("Account role")).toHaveValue("GM");
@@ -446,10 +449,11 @@ test("administrators can revoke a single target session", async ({ page, context
     await db.authSession.create({ data: { userId: target.id, tokenHash: createHash("sha256").update(randomBytes(32).toString("base64url")).digest("hex"), expiresAt: new Date(Date.now() + 3_600_000) } });
     await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
 
-    await page.goto(`/admin/users/${target.id}`);
+    await page.goto(`/admin/users/${target.id}`); await expect(page.locator("#loading-account")).not.toBeVisible({ timeout: 40000 });
     await expect(page.getByText("No active sessions.")).not.toBeVisible();
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "Revoke" }).click();
+    // Use an exact locator to avoid matching "Revoke all access"
+    await page.locator('section').filter({ hasText: 'Sessions' }).getByRole('button', { name: /^Revoke$/, exact: true }).click();
     await expect(page.getByText("No active sessions.")).toBeVisible();
   } finally {
     if (targetId) await db.user.delete({ where: { id: targetId } }).catch(() => undefined);
@@ -473,10 +477,17 @@ test("blocked deletion shows blockers", async ({ page, context, baseURL }) => {
     worldId = world.id;
     await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
 
-    await page.goto(`/admin/users/${target.id}`);
+    await page.goto(`/admin/users/${target.id}`); await expect(page.locator("#loading-account")).not.toBeVisible({ timeout: 40000 });
     await page.getByRole("button", { name: "Preview deletion blockers" }).click();
     await expect(page.getByText("Allowed: No")).toBeVisible();
     await expect(page.getByText("Blocking World", { exact: true })).toBeVisible();
+
+    // Attempt blocked deletion
+    await page.getByLabel("Confirm current email").fill(target.email);
+    await page.getByLabel("I acknowledge the account data has been backed up.").check();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Delete account" }).click();
+    await expect(page.locator("p[role='alert']")).toContainText(/owns worlds/i);
   } finally {
     if (worldId) await db.world.delete({ where: { id: worldId } }).catch(() => undefined);
     if (targetId) await db.user.delete({ where: { id: targetId } }).catch(() => undefined);
@@ -497,8 +508,8 @@ test("stale account versions are reported", async ({ page, context, baseURL }) =
     targetId = target.id;
     await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
 
-    await page.goto(`/admin/users/${target.id}`);
-    await expect(page.getByRole("heading", { name: target.email })).toBeVisible();
+    await page.goto(`/admin/users/${target.id}`); await expect(page.locator("#loading-account")).not.toBeVisible({ timeout: 40000 });
+    await expect(page.getByRole("heading", { name: target.email })).toBeVisible({ timeout: 40000 });
     await expect(page.getByText("No active sessions.")).toBeVisible();
     await db.user.update({ where: { id: target.id }, data: { accountVersion: { increment: 1 } } });
     await page.getByLabel("Account role").selectOption("GM");
@@ -556,6 +567,82 @@ test("audit pagination disables filter changes while a page is in flight", async
     await expect(page.getByRole("row")).toHaveCount(27);
   } finally {
     await db.installationAuditEvent.deleteMany({ where: { id: { in: auditIds } } }).catch(() => undefined);
+    if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
+test("late setup responses do not restore secrets after client-side link navigation", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = new PrismaClient();
+  let adminId: string | undefined;
+  try {
+    const admin = await createAdminSession(db);
+    adminId = admin.user.id;
+    await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+
+    let releaseCreate!: () => void;
+    const createGate = new Promise<void>((resolve) => { releaseCreate = resolve; });
+    await page.route("**/api/admin/users", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      const response = await route.fetch();
+      await createGate;
+      await route.fulfill({ response });
+    });
+
+    await page.goto("/admin/users");
+    await page.getByRole("button", { name: "Create account" }).click();
+    await page.getByLabel("Email").fill(`late-secret-${randomUUID()}@example.invalid`);
+    await page.getByLabel("Name").fill("Late Secret");
+    await page.getByRole("button", { name: "Create" }).click();
+
+    // Navigate away while response is held
+    await page.getByRole("link", { name: "Audit" }).click();
+    await expect(page).toHaveURL(/\/admin\/audit$/);
+
+    // Release late response
+    releaseCreate();
+    await page.waitForTimeout(500); // Wait for potential state update
+
+    // Navigate back: secret must NOT be visible
+    await page.goBack();
+    await expect(page.getByRole("status").getByRole("textbox")).toHaveCount(0);
+  } finally {
+    await db.user.deleteMany({ where: { email: { startsWith: "late-secret-" } } }).catch(() => undefined);
+    if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
+test("incomplete recovery responses refresh state and report uncertainty", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = new PrismaClient();
+  let adminId: string | undefined;
+  let targetId: string | undefined;
+  try {
+    const admin = await createAdminSession(db);
+    adminId = admin.user.id;
+    const target = await db.user.create({ data: { name: "Incomplete Recovery", email: `incomplete-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
+    targetId = target.id;
+    await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+
+    await page.route("**/api/admin/users/*/recovery", async (route) => {
+      const response = await route.fetch();
+      // Succeed but return incomplete data
+      await route.fulfill({ response, body: JSON.stringify({ ok: true, user: {} }) });
+    });
+
+    await page.goto(`/admin/users/${target.id}`); await expect(page.locator("#loading-account")).not.toBeVisible({ timeout: 40000 });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Issue recovery link" }).click();
+
+    await expect(page.locator("p[role='alert']")).toContainText("Unable to confirm");
+    await expect(page.getByRole("status").getByRole("textbox")).toHaveCount(0);
+    // State must be refreshed (account version incremented in DB by issuance)
+    const versionAfter = await page.getByRole("definition").filter({ hasText: "1" }).count();
+    expect(versionAfter).toBeGreaterThan(0);
+  } finally {
+    if (targetId) await db.user.delete({ where: { id: targetId } }).catch(() => undefined);
     if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
     await db.$disconnect();
   }

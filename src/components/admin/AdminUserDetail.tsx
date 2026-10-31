@@ -48,67 +48,89 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
   const [confirmEmail, setConfirmEmail] = useState("");
   const [backupAcknowledged, setBackupAcknowledged] = useState(false);
   const [setupLink, setSetupLink] = useState<SetupLink | null>(null);
+  const activeMutation = useRef(0);
+  const recoverySeq = useRef(0);
+  const invalidated = useRef(false);
+  const unmounted = useRef(false);
+
+  useEffect(() => {
+    unmounted.current = false;
+    return () => {
+      unmounted.current = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (error) errorRef.current?.focus();
   }, [error]);
 
   useEffect(() => {
-    if (!setupLink) return;
     const clear = () => setSetupLink(null);
+    const invalidate = () => {
+      invalidated.current = true;
+      activeMutation.current += 1;
+      setSetupLink(null);
+    };
     const onPageShow = (event: PageTransitionEvent) => {
-      if (event.persisted) clear();
+      if (event.persisted) invalidate();
     };
     const onClick = (event: MouseEvent) => {
-      if ((event.target as Element | null)?.closest("a[href]")) clear();
+      if ((event.target as Element | null)?.closest("a[href]")) invalidate();
     };
-    window.addEventListener("pagehide", clear);
+    window.addEventListener("pagehide", invalidate);
     window.addEventListener("pageshow", onPageShow);
-    window.addEventListener("popstate", clear);
+    window.addEventListener("popstate", invalidate);
     document.addEventListener("click", onClick, true);
     return () => {
-      window.removeEventListener("pagehide", clear);
+      window.removeEventListener("pagehide", invalidate);
       window.removeEventListener("pageshow", onPageShow);
-      window.removeEventListener("popstate", clear);
+      window.removeEventListener("popstate", invalidate);
       document.removeEventListener("click", onClick, true);
     };
-  }, [setupLink]);
+  }, []);
 
   async function loadDetail() {
-    const response = await fetch(`/api/admin/users/${id}`);
-    let data: Detail & { error?: string } = {} as Detail & { error?: string };
     try {
-      data = await response.json();
+      const response = await fetch(`/api/admin/users/${id}`);
+      let data: Detail & { error?: string } = {} as Detail & { error?: string };
+      try {
+        data = await response.json();
+      } catch {
+        data = {} as Detail & { error?: string };
+      }
+      if (unmounted.current) return false;
+      if (!response.ok) {
+        setError(data.error || "Unable to load account.");
+        return false;
+      }
+      setDetail(data as Detail);
+      setRoleDraft((data as Detail).account.role);
+      return true;
     } catch {
-      data = {} as Detail & { error?: string };
-    }
-    if (!response.ok) {
-      setError(data.error || "Unable to load account.");
+      setError("Unable to load account.");
       return false;
     }
-    setDetail(data as Detail);
-    setRoleDraft((data as Detail).account.role);
-    return true;
   }
 
   async function loadSessions() {
-    const response = await fetch(`/api/admin/users/${id}/sessions`);
     try {
+      const response = await fetch(`/api/admin/users/${id}/sessions`);
       const data = await response.json();
-      if (response.ok) setSessions(data);
+      if (!unmounted.current && response.ok) setSessions(data);
     } catch {
-      // Leave the last known session list in place.
+      // Ignore
     }
   }
 
   async function loadPreview() {
-    const response = await fetch(`/api/admin/users/${id}/deletion-preview`);
     try {
+      const response = await fetch(`/api/admin/users/${id}/deletion-preview`);
       const data = await response.json();
+      if (unmounted.current) return;
       if (response.ok) setPreview(data);
       else setError(data.error || "Unable to load deletion preview.");
     } catch {
-      setError("Unable to load deletion preview.");
+      if (!unmounted.current) setError("Unable to load deletion preview.");
     }
   }
 
@@ -120,6 +142,8 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
   }, [id]);
 
   async function mutate(url: string, method: string, body: unknown, onSuccess?: () => Promise<void>) {
+    const mutationId = ++activeMutation.current;
+    const invalidatedAtStart = invalidated.current;
     setBusy(true);
     setError("");
     try {
@@ -128,7 +152,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      let data: { setup?: SetupLink; error?: string; code?: string } = {};
+      let data: { setup?: SetupLink; error?: string; code?: string; user?: { id?: string; accountVersion?: number }; deleted?: boolean; userId?: string; revoked?: number; sessionCount?: number; previewCount?: number } = {};
       let parseFailed = false;
       try {
         data = await response.json();
@@ -136,17 +160,39 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
         parseFailed = true;
         data = {};
       }
+
+      if (mutationId !== activeMutation.current || unmounted.current || invalidated.current) return false;
+
       if (!response.ok) {
         if (data.code === "STALE_ACCOUNT") await loadDetail();
         setError(data.error || "Unable to complete this request.");
         return false;
       }
-      if (parseFailed || Object.keys(data).length === 0) {
+
+      const recovery = url.endsWith("/recovery");
+      const status = url.endsWith("/status");
+      const role = url.endsWith("/role");
+      const singleSession = /\/sessions\/[^/]+$/.test(url);
+      const revokeAll = url.endsWith("/revoke-all");
+      const accountDelete = /\/api\/admin\/users\/[^/]+$/.test(url);
+
+      const validSuccess =
+        !parseFailed &&
+        (recovery ? Boolean(data.setup?.url && data.setup?.expiresAt) :
+         status ? Boolean(data.user?.id && typeof data.user.accountVersion === "number") :
+         role ? Boolean(data.user?.id) :
+         singleSession ? typeof data.revoked === "number" :
+         revokeAll ? typeof data.sessionCount === "number" && typeof data.previewCount === "number" :
+         accountDelete ? data.deleted === true && typeof data.userId === "string" :
+         true);
+
+      if (!validSuccess) {
         await loadDetail();
         await loadSessions();
         setError("Unable to confirm whether this request succeeded. The account state has been refreshed; retry or reissue credentials manually.");
         return false;
       }
+
       if (data.setup) setSetupLink(data.setup);
       if (onSuccess) {
         await onSuccess();
@@ -156,26 +202,33 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
       await loadSessions();
       return true;
     } catch {
+      if (mutationId !== activeMutation.current || unmounted.current || invalidated.current) return false;
       try {
         await loadDetail();
         await loadSessions();
       } catch {
-        // Ignore secondary refresh failures and report the original uncertainty.
+        // Ignore
       }
       setError("Unable to confirm this request. The account state has been refreshed; retry or reissue credentials manually.");
       return false;
     } finally {
-      setBusy(false);
+      if (mutationId === activeMutation.current) {
+        setBusy(false);
+      }
     }
   }
 
   async function signOutAfterSelfRevoke() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
-    router.replace("/login");
-    router.refresh();
+    window.location.href = "/login";
   }
 
-  if (!detail && !error) return <p className="text-sm text-zinc-400">Loading account…</p>;
+  if (!detail && !error) return (
+    <div className="flex items-center gap-2 py-4">
+      <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-500 border-t-transparent" />
+      <p className="text-sm text-zinc-400" id="loading-account">Loading account…</p>
+    </div>
+  );
   if (error && !detail) return <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm text-red-300 focus:outline-none">{error}</p>;
   if (!detail) return null;
   const account = detail.account;
@@ -319,13 +372,14 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
             disabled={busy}
             onClick={() => {
               if (!window.confirm("Revoke all login sessions and related preview capabilities?")) return;
-              if (isSelf) {
-                void mutate(`/api/admin/users/${id}/sessions/revoke-all`, "POST", { expectedVersion: account.accountVersion }, async () => {
-                  await signOutAfterSelfRevoke();
+              void (async () => {
+                const response = await fetch(`/api/admin/users/${id}/sessions/revoke-all`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ expectedVersion: account.accountVersion }),
                 });
-                return;
-              }
-              void mutate(`/api/admin/users/${id}/sessions/revoke-all`, "POST", { expectedVersion: account.accountVersion });
+                if (response.ok && isSelf) await signOutAfterSelfRevoke();
+              })();
             }}
             className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
           >
