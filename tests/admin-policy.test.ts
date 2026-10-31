@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   activeAdmin,
   disabled,
+  isAdminError,
   isCreatableRole,
   isUserRole,
   normalizeEmail,
@@ -114,6 +115,40 @@ describe("admin-policy", () => {
       assert.equal(dto.accountVersion, 3);
       assert.equal(dto.setupPending, true);
       assert.ok(!(dto as Record<string, unknown>).passwordHash);
+    });
+
+    it("throws on unknown roles instead of casting", () => {
+      const user = {
+        id: "u1",
+        email: "alice@example.com",
+        name: "Alice",
+        role: "SUPERADMIN" as const,
+        disabledAt: null,
+        createdAt: new Date("2026-01-01"),
+        lastSignInAt: null,
+        accountVersion: 0,
+        passwordHash: null,
+      };
+      assert.throws(() => toSafeAccount(user), /Unexpected user role: SUPERADMIN/);
+    });
+  });
+
+  describe("isAdminError", () => {
+    it("accepts valid AdminError objects", () => {
+      assert.equal(isAdminError({ error: "nope", code: "NOT_FOUND" }), true);
+    });
+
+    it("rejects non-objects, missing fields, and wrong types", () => {
+      assert.equal(isAdminError(null), false);
+      assert.equal(isAdminError("nope"), false);
+      assert.equal(isAdminError({ error: "nope" }), false);
+      assert.equal(isAdminError({ code: "NOT_FOUND" }), false);
+      assert.equal(isAdminError({ error: 123, code: "NOT_FOUND" }), false);
+      assert.equal(isAdminError({ error: "nope", code: 404 }), false);
+    });
+
+    it("rejects unknown error codes", () => {
+      assert.equal(isAdminError({ error: "nope", code: "MYSTERY" }), false);
     });
   });
 

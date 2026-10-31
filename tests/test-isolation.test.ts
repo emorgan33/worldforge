@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { test } from "node:test";
+import * as ts from "typescript";
 import { PrismaClient } from "@prisma/client";
 import { assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
@@ -18,31 +21,46 @@ const originUnsetSuites = [
   "world-export-import-api.test.tsx",
 ];
 
-test("fixture cleanup guards deleteMany against undefined ownerId", async context => {
-  assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
-  const ownerA = await db.user.create({ data: { name: "Guard A", email: `guard-a-${randomUUID()}@example.invalid` } });
-  const ownerB = await db.user.create({ data: { name: "Guard B", email: `guard-b-${randomUUID()}@example.invalid` } });
-  const worldA = await db.world.create({ data: { ownerId: ownerA.id, title: "Guard A world", slug: randomUUID() } });
-  const worldB = await db.world.create({ data: { ownerId: ownerB.id, title: "Guard B world", slug: randomUUID() } });
-  context.after(async () => {
-    await db.world.deleteMany({ where: { ownerId: { in: [ownerA.id, ownerB.id] } } });
-    await db.user.deleteMany({ where: { id: { in: [ownerA.id, ownerB.id] } } });
-    await db.$disconnect();
-  });
-
-  const before = await db.world.count();
-  assert.equal(before >= 2, true);
-  // Simulate the browser-fixture cleanup path when user creation failed and
-  // ownerId is still undefined: the guard must skip deletion entirely.
-  let ownerId: string | undefined;
-  if (ownerId) {
-    await db.world.deleteMany({ where: { ownerId } });
+async function worldDeleteManyGuarded(filePath: string): Promise<boolean> {
+  const sourceText = await readFile(filePath, "utf8");
+  const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true);
+  let guarded = true;
+  function visit(node: ts.Node) {
+    if (ts.isCallExpression(node)) {
+      const exprText = node.expression.getText(sourceFile);
+      if (exprText === "db.world.deleteMany") {
+        let parent: ts.Node | undefined = node.parent;
+        let insideOwnerIdIf = false;
+        while (parent) {
+          if (ts.isIfStatement(parent)) {
+            const cond = parent.expression.getText(sourceFile);
+            if (/\bownerId\b/.test(cond)) {
+              insideOwnerIdIf = true;
+              break;
+            }
+          }
+          parent = parent.parent;
+        }
+        if (!insideOwnerIdIf) guarded = false;
+      }
+    }
+    ts.forEachChild(node, visit);
   }
-  const after = await db.world.count();
-  assert.equal(after, before, "guarded cleanup with undefined ownerId must not delete worlds");
-  assert.ok(await db.world.findUnique({ where: { id: worldA.id } }));
-  assert.ok(await db.world.findUnique({ where: { id: worldB.id } }));
+  visit(sourceFile);
+  return guarded;
+}
+
+test("browser fixture cleanup guards db.world.deleteMany with ownerId", async () => {
+  const files = [
+    "tests/browser/article-saves.spec.ts",
+    "tests/browser/interactive-maps.spec.ts",
+    "tests/browser/variables.spec.ts",
+    "tests/browser/workspace-transitions.spec.ts",
+  ];
+  for (const file of files) {
+    const path = join(process.cwd(), file);
+    assert.equal(await worldDeleteManyGuarded(path), true, `${file} must guard db.world.deleteMany inside if (ownerId)`);
+  }
 });
 
 test("rejected test configuration and origin-unset skips preserve database and asset sentinels", async context => {
