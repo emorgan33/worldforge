@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
+import { SESSION_COOKIE } from "../src/lib/auth-constants";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
@@ -47,12 +48,14 @@ test("player invitations are email-bound, single-use, and do not grant author AP
   const staleCookieInvite = await staleCookieInviteResponse.json();
   const staleCookieToken = new URLSearchParams(new URL(staleCookieInvite.claimUrl).hash.slice(1)).get("token");
   assert(staleCookieToken);
-  const staleCookiePreview = await fetch(`${origin}/api/invitations/preview`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin!, Cookie: "wf_session=revoked-unrelated-session" }, body: JSON.stringify({ token: staleCookieToken }) });
+  const staleUnrelatedSessionToken = randomBytes(32).toString("base64url");
+  const staleCookie = `${SESSION_COOKIE}=${staleUnrelatedSessionToken}`;
+  const staleCookiePreview = await fetch(`${origin}/api/invitations/preview`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin!, Cookie: staleCookie }, body: JSON.stringify({ token: staleCookieToken }) });
   assert.equal(staleCookiePreview.status, 200);
   const staleCookiePreviewBody = await staleCookiePreview.json();
   assert.equal(staleCookiePreviewBody.accountExists, false);
   assert.equal(staleCookiePreviewBody.signedInEmail, null);
-  const staleCookieClaim = await fetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin!, Cookie: "wf_session=revoked-unrelated-session" }, body: JSON.stringify({ token: staleCookieToken, name: "Stale cookie player", password: "long-enough-password" }) });
+  const staleCookieClaim = await fetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin!, Cookie: staleCookie }, body: JSON.stringify({ token: staleCookieToken, name: "Stale cookie player", password: "long-enough-password" }) });
   assert.equal(staleCookieClaim.status, 200, "an invalid unrelated cookie must not block creating the invited account");
   assert.equal((await db.user.findUniqueOrThrow({ where: { email: staleCookieEmail } })).role, "PLAYER");
 
