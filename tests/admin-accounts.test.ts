@@ -1142,6 +1142,7 @@ describe("admin session services", () => {
     const { db, cleanup } = await createIsolatedDatabase();
     try {
       const { actor, user: admin } = await createAdminActor(db);
+      assert.equal(actor.type, "WEB_ADMIN");
       const target = await createTargetUser(db, { disabled: true });
       const otherAdmin = await createTargetUser(db, { role: "ADMIN" });
       const expired = new Date(Date.now() - 60_000);
@@ -1302,7 +1303,7 @@ describe("admin account deletion", () => {
       const world = await db.world.create({ data: { ownerId: admin.id, title: "Other", slug: `delete-${randomUUID()}`, isPublic: true } });
       const member = await db.worldMember.create({ data: { worldId: world.id, userId: user.id } });
       const policy = await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "ARTICLE", resourceId: randomUUID(), createdById: user.id } });
-      const grant = await db.audienceGrant.create({ data: { policyId: policy.id, userId: user.id, grantedById: user.id } });
+      const grant = await db.audienceGrant.create({ data: { policyId: policy.id, userId: admin.id, grantedById: user.id } });
       const invitation = await db.playerInvitation.create({ data: { worldId: world.id, email: user.email, tokenHash: tokenHash(randomUUID()), expiresAt: new Date(Date.now() + 60_000), issuedById: user.id } });
       const accessAudit = await db.accessAuditEvent.create({ data: { worldId: world.id, actorId: user.id, action: "TEST" } });
       const issuedPreviewHash = tokenHash(randomUUID());
@@ -1318,7 +1319,7 @@ describe("admin account deletion", () => {
       assert.ok(result.ok);
       assert.equal(await db.user.findUnique({ where: { id: user.id } }), null);
       assert.equal(await db.worldMember.findUnique({ where: { id: member.id } }), null);
-      assert.equal(await db.audienceGrant.findUnique({ where: { id: grant.id } }), null);
+      assert.ok(await db.audienceGrant.findUnique({ where: { id: grant.id } }));
       assert.equal(await db.authSession.count({ where: { userId: user.id } }), 0);
       assert.equal(await db.accountSetup.count({ where: { userId: user.id } }), 0);
       assert.equal((await db.audiencePolicy.findUniqueOrThrow({ where: { id: policy.id } })).createdById, null);
