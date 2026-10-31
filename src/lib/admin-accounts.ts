@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import type { PrismaClient, User, InstallationAdminState, Prisma } from "@prisma/client";
 import type { AdminError, InstallationAuditAction } from "./admin-policy";
-import { activeAdmin } from "./admin-policy";
+import { activeAdmin, validateCreateAccountInput } from "./admin-policy";
+import { newToken, tokenHash } from "./passwords";
 import {
   appendInstallationAuditEvent,
   recordFailedAdminAttempt,
@@ -208,4 +210,71 @@ export async function runAdminMutation<T>(
 ): Promise<AdminMutationResult<T>> {
   // Forward only production options so runtime-cast test hooks cannot execute here.
   return _runAdminMutation(db, actor, target, action, mutate, { mode: options?.mode });
+}
+
+const SETUP_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+
+export type CreateAccountResult = { userId: string; token: string; expiresAt: Date };
+
+export async function createAccount(
+  db: PrismaClient,
+  actor: AdminActor,
+  body: Record<string, unknown>,
+): Promise<AdminMutationResult<CreateAccountResult>> {
+  const input = validateCreateAccountInput(body);
+  if ("code" in input) return { ok: false, error: input };
+
+  const userId = randomUUID();
+  const token = newToken();
+  const tokenHashValue = tokenHash(token);
+
+  return runAdminMutation(db, actor, { userId }, "ACCOUNT_CREATE", async (ctx) => {
+    const existing = await ctx.tx.user.findUnique({ where: { email: input.email } });
+    if (existing) {
+      return { error: "An account with this email already exists.", code: "DUPLICATE_EMAIL" };
+    }
+
+    await ctx.tx.user.create({
+      data: { id: ctx.target.id, email: input.email, name: input.name, role: input.role, disabledAt: null },
+    });
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + SETUP_TOKEN_TTL_MS);
+    await ctx.tx.accountSetup.updateMany({
+      where: { userId: ctx.target.id, usedAt: null },
+      data: { usedAt: now },
+    });
+    await ctx.tx.accountSetup.create({
+      data: { tokenHash: tokenHashValue, userId: ctx.target.id, expiresAt },
+    });
+
+    return { value: { token, expiresAt, userId: ctx.target.id }, details: { role: input.role } };
+  }, { mode: "create" });
+}
+
+export type IssueRecoveryResult = { token: string; expiresAt: Date };
+
+export async function issueRecovery(
+  db: PrismaClient,
+  actor: AdminActor,
+  target: AdminMutationTarget,
+): Promise<AdminMutationResult<IssueRecoveryResult>> {
+  const token = newToken();
+  const tokenHashValue = tokenHash(token);
+  return runAdminMutation(db, actor, target, "ACCOUNT_RECOVERY", async (ctx) => {
+    if (ctx.target.disabledAt !== null) {
+      return { error: "Account is disabled.", code: "ACCOUNT_DISABLED" };
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + SETUP_TOKEN_TTL_MS);
+    await ctx.tx.accountSetup.updateMany({
+      where: { userId: ctx.target.id, usedAt: null },
+      data: { usedAt: now },
+    });
+    await ctx.tx.accountSetup.create({
+      data: { tokenHash: tokenHashValue, userId: ctx.target.id, expiresAt },
+    });
+
+    return { value: { token, expiresAt } };
+  });
 }

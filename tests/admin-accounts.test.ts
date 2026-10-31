@@ -2,8 +2,16 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { runAdminMutation, _runAdminMutation, type AdminMutateContext, type AdminMutationOptions } from "../src/lib/admin-accounts";
+import {
+  runAdminMutation,
+  _runAdminMutation,
+  createAccount,
+  issueRecovery,
+  type AdminMutateContext,
+  type AdminMutationOptions,
+} from "../src/lib/admin-accounts";
 import { appendInstallationAuditEvent, recordFailedAdminAttempt, sanitizeAuditDetails } from "../src/lib/admin-audit";
+import { tokenHash } from "../src/lib/passwords";
 import { isAdminError } from "../src/lib/admin-policy";
 import {
   createAdminActor,
@@ -572,6 +580,232 @@ describe("admin-accounts mutation core", () => {
       const audit = await db.installationAuditEvent.findFirst({ where: { targetIdSnapshot: target.id } });
       assert.equal(audit?.outcome, "REJECTED");
       assert.equal(audit?.reasonCode, "SELF_CHANGE");
+    } finally {
+      await cleanup();
+    }
+  });
+});
+
+describe("admin account lifecycle services", () => {
+  it("creates an AUTHOR account with a setup link and audits without leaking the token", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const email = `new-author-${randomUUID()}@example.invalid`;
+
+      const result = await createAccount(db, actor, { name: "New Author", email, role: "AUTHOR" });
+
+      assert.equal(result.ok, true);
+      if (!result.ok) return;
+      assert.ok(result.value.token.length > 0);
+      const created = await db.user.findUniqueOrThrow({ where: { id: result.value.userId } });
+      assert.equal(created.email, email);
+      assert.equal(created.role, "AUTHOR");
+      assert.equal(created.passwordHash, null);
+
+      const setup = await db.accountSetup.findUniqueOrThrow({ where: { tokenHash: tokenHash(result.value.token) } });
+      assert.equal(setup.userId, created.id);
+      assert.ok(setup.expiresAt > new Date(Date.now() + 23 * 60 * 60 * 1000));
+      assert.equal(setup.usedAt, null);
+
+      const audit = await db.installationAuditEvent.findFirstOrThrow({ where: { targetIdSnapshot: created.id } });
+      assert.equal(audit.action, "ACCOUNT_CREATE");
+      assert.equal(audit.outcome, "SUCCESS");
+      assert.ok(!audit.detailsJson.includes(result.value.token));
+      assert.ok(!audit.detailsJson.includes(tokenHash(result.value.token)));
+      const details = JSON.parse(audit.detailsJson);
+      assert.equal(details.role, "AUTHOR");
+      assert.equal(details.emailDomain, undefined);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("creates a PLAYER account with no worlds, memberships, or grants", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const email = `new-player-${randomUUID()}@example.invalid`;
+
+      const result = await createAccount(db, actor, { name: "New Player", email, role: "PLAYER" });
+
+      assert.equal(result.ok, true);
+      if (!result.ok) return;
+      const created = await db.user.findUniqueOrThrow({ where: { id: result.value.userId } });
+      assert.equal(created.role, "PLAYER");
+      assert.equal(created.passwordHash, null);
+
+      assert.equal(await db.world.count({ where: { ownerId: created.id } }), 0);
+      assert.equal(await db.worldMember.count({ where: { userId: created.id } }), 0);
+      assert.equal(await db.audienceGrant.count({ where: { userId: created.id } }), 0);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("rejects a duplicate normalized email with DUPLICATE_EMAIL", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const email = `dupe-${randomUUID()}@example.invalid`;
+
+      const first = await createAccount(db, actor, { name: "First", email, role: "AUTHOR" });
+      assert.equal(first.ok, true);
+
+      const second = await createAccount(db, actor, { name: "Second", email: email.toUpperCase(), role: "AUTHOR" });
+      assert.equal(second.ok, false);
+      if (second.ok) return;
+      assert.equal(second.error.code, "DUPLICATE_EMAIL");
+
+      assert.equal(await db.user.count({ where: { email } }), 1);
+      const audit = await db.installationAuditEvent.findFirst({
+        where: { action: "ACCOUNT_CREATE", outcome: "REJECTED", reasonCode: "DUPLICATE_EMAIL" },
+      });
+      assert.equal(audit?.outcome, "REJECTED");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("rejects invalid creation input before touching the mutation core", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+
+      const result = await createAccount(db, actor, { name: "", email: "not-an-email", role: "ADMIN" });
+
+      assert.equal(result.ok, false);
+      if (result.ok) return;
+      assert.equal(result.error.code, "INVALID_INPUT");
+      assert.equal(await db.installationAuditEvent.count({ where: { action: "ACCOUNT_CREATE" } }), 0);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("issues a recovery link, invalidates earlier unused links, and leaves sessions intact", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const target = await createTargetUser(db);
+      const session = await db.authSession.create({
+        data: { userId: target.id, tokenHash: tokenHash("session-token"), expiresAt: new Date(Date.now() + 60_000) },
+      });
+
+      const old1 = await db.accountSetup.create({
+        data: { tokenHash: tokenHash("old-1"), userId: target.id, expiresAt: new Date(Date.now() + 60_000) },
+      });
+      const old2 = await db.accountSetup.create({
+        data: { tokenHash: tokenHash("old-2"), userId: target.id, expiresAt: new Date(Date.now() + 60_000) },
+      });
+      const expired = await db.accountSetup.create({
+        data: { tokenHash: tokenHash("expired"), userId: target.id, expiresAt: new Date(Date.now() - 60_000) },
+      });
+
+      const result = await issueRecovery(db, actor, { userId: target.id });
+
+      assert.equal(result.ok, true);
+      if (!result.ok) return;
+      assert.ok(result.value.token.length > 0);
+
+      const refreshedOld1 = await db.accountSetup.findUniqueOrThrow({ where: { tokenHash: old1.tokenHash } });
+      const refreshedOld2 = await db.accountSetup.findUniqueOrThrow({ where: { tokenHash: old2.tokenHash } });
+      assert.ok(refreshedOld1.usedAt !== null);
+      assert.ok(refreshedOld2.usedAt !== null);
+      assert.ok((await db.accountSetup.findUniqueOrThrow({ where: { tokenHash: expired.tokenHash } })).usedAt !== null);
+
+      const fresh = await db.accountSetup.findUniqueOrThrow({ where: { tokenHash: tokenHash(result.value.token) } });
+      assert.equal(fresh.userId, target.id);
+      assert.equal(fresh.usedAt, null);
+
+      const remainingSession = await db.authSession.findUnique({ where: { id: session.id } });
+      assert.ok(remainingSession);
+
+      const audit = await db.installationAuditEvent.findFirstOrThrow({ where: { targetIdSnapshot: target.id, action: "ACCOUNT_RECOVERY" } });
+      assert.equal(audit.outcome, "SUCCESS");
+      assert.ok(!audit.detailsJson.includes(result.value.token));
+      assert.ok(!audit.detailsJson.includes(tokenHash(result.value.token)));
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("rejects recovery for a disabled account with ACCOUNT_DISABLED", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const target = await createTargetUser(db, { disabled: true });
+      const old = await db.accountSetup.create({
+        data: { tokenHash: tokenHash("old"), userId: target.id, expiresAt: new Date(Date.now() + 60_000) },
+      });
+
+      const result = await issueRecovery(db, actor, { userId: target.id });
+
+      assert.equal(result.ok, false);
+      if (result.ok) return;
+      assert.equal(result.error.code, "ACCOUNT_DISABLED");
+
+      const refreshed = await db.accountSetup.findUniqueOrThrow({ where: { tokenHash: old.tokenHash } });
+      assert.equal(refreshed.usedAt, null);
+      const audit = await db.installationAuditEvent.findFirstOrThrow({
+        where: { targetIdSnapshot: target.id, action: "ACCOUNT_RECOVERY" },
+      });
+      assert.equal(audit.outcome, "REJECTED");
+      assert.equal(audit.reasonCode, "ACCOUNT_DISABLED");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("returns NOT_FOUND when recovering a missing account", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const missingId = "00000000-0000-0000-0000-000000000000";
+
+      const result = await issueRecovery(db, actor, { userId: missingId });
+
+      assert.equal(result.ok, false);
+      if (result.ok) return;
+      assert.equal(result.error.code, "NOT_FOUND");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("returns STALE_ACCOUNT for recovery when expectedVersion does not match", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const target = await createTargetUser(db);
+
+      const result = await issueRecovery(db, actor, { userId: target.id, expectedVersion: 999 });
+
+      assert.equal(result.ok, false);
+      if (result.ok) return;
+      assert.equal(result.error.code, "STALE_ACCOUNT");
+      assert.equal(await db.accountSetup.count({ where: { userId: target.id } }), 0);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("rejects creation and recovery after the admin session is revoked", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor, sessionId } = await createAdminActor(db);
+      const target = await createTargetUser(db);
+      await db.authSession.delete({ where: { id: sessionId } });
+      const email = `revoked-${randomUUID()}@example.invalid`;
+      const created = await createAccount(db, actor, { name: "New", email, role: "AUTHOR" });
+      const recovered = await issueRecovery(db, actor, { userId: target.id });
+      assert.equal(created.ok, false);
+      assert.equal(recovered.ok, false);
+      if (!created.ok) assert.equal(created.error.code, "UNAUTHORIZED");
+      if (!recovered.ok) assert.equal(recovered.error.code, "UNAUTHORIZED");
+      assert.equal(await db.user.count({ where: { email } }), 0);
+      assert.equal(await db.accountSetup.count({ where: { userId: target.id } }), 0);
+      assert.equal(await db.installationAuditEvent.count(), 0);
     } finally {
       await cleanup();
     }
