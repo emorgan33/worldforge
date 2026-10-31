@@ -49,8 +49,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
   const [backupAcknowledged, setBackupAcknowledged] = useState(false);
   const [setupLink, setSetupLink] = useState<SetupLink | null>(null);
   const activeMutation = useRef(0);
-  const recoverySeq = useRef(0);
-  const invalidated = useRef(false);
+  const departureSeq = useRef(0);
   const unmounted = useRef(false);
 
   useEffect(() => {
@@ -66,25 +65,24 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
 
   useEffect(() => {
     const clear = () => setSetupLink(null);
-    const invalidate = () => {
-      invalidated.current = true;
-      activeMutation.current += 1;
+    const depart = () => {
+      departureSeq.current += 1;
       setSetupLink(null);
     };
     const onPageShow = (event: PageTransitionEvent) => {
-      if (event.persisted) invalidate();
+      if (event.persisted) depart();
     };
     const onClick = (event: MouseEvent) => {
-      if ((event.target as Element | null)?.closest("a[href]")) invalidate();
+      if ((event.target as Element | null)?.closest("a[href]")) depart();
     };
-    window.addEventListener("pagehide", invalidate);
+    window.addEventListener("pagehide", depart);
     window.addEventListener("pageshow", onPageShow);
-    window.addEventListener("popstate", invalidate);
+    window.addEventListener("popstate", depart);
     document.addEventListener("click", onClick, true);
     return () => {
-      window.removeEventListener("pagehide", invalidate);
+      window.removeEventListener("pagehide", depart);
       window.removeEventListener("pageshow", onPageShow);
-      window.removeEventListener("popstate", invalidate);
+      window.removeEventListener("popstate", depart);
       document.removeEventListener("click", onClick, true);
     };
   }, []);
@@ -143,7 +141,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
 
   async function mutate(url: string, method: string, body: unknown, onSuccess?: () => Promise<void>) {
     const mutationId = ++activeMutation.current;
-    const invalidatedAtStart = invalidated.current;
+    const departureAtStart = departureSeq.current;
     setBusy(true);
     setError("");
     try {
@@ -161,7 +159,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
         data = {};
       }
 
-      if (mutationId !== activeMutation.current || unmounted.current || invalidated.current) return false;
+      if (mutationId !== activeMutation.current || unmounted.current || departureSeq.current !== departureAtStart) return false;
 
       if (!response.ok) {
         if (data.code === "STALE_ACCOUNT") await loadDetail();
@@ -202,7 +200,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
       await loadSessions();
       return true;
     } catch {
-      if (mutationId !== activeMutation.current || unmounted.current || invalidated.current) return false;
+      if (mutationId !== activeMutation.current || unmounted.current || departureSeq.current !== departureAtStart) return false;
       try {
         await loadDetail();
         await loadSessions();
@@ -373,12 +371,50 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
             onClick={() => {
               if (!window.confirm("Revoke all login sessions and related preview capabilities?")) return;
               void (async () => {
-                const response = await fetch(`/api/admin/users/${id}/sessions/revoke-all`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ expectedVersion: account.accountVersion }),
-                });
-                if (response.ok && isSelf) await signOutAfterSelfRevoke();
+                setBusy(true);
+                setError("");
+                try {
+                  const response = await fetch(`/api/admin/users/${id}/sessions/revoke-all`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ expectedVersion: account.accountVersion }),
+                  });
+                  let data: { sessionCount?: number; previewCount?: number; error?: string; code?: string } = {};
+                  let parseFailed = false;
+                  try {
+                    data = await response.json();
+                  } catch {
+                    parseFailed = true;
+                    data = {};
+                  }
+                  if (!response.ok) {
+                    if (data.code === "STALE_ACCOUNT") await loadDetail();
+                    setError(data.error || "Unable to complete this request.");
+                    return;
+                  }
+                  if (parseFailed || typeof data.sessionCount !== "number" || typeof data.previewCount !== "number") {
+                    await loadDetail();
+                    await loadSessions();
+                    setError("Unable to confirm whether this request succeeded. The account state has been refreshed; retry or reissue credentials manually.");
+                    return;
+                  }
+                  if (isSelf) {
+                    await signOutAfterSelfRevoke();
+                    return;
+                  }
+                  await loadDetail();
+                  await loadSessions();
+                } catch {
+                  try {
+                    await loadDetail();
+                    await loadSessions();
+                  } catch {
+                    // Ignore
+                  }
+                  setError("Unable to confirm this request. The account state has been refreshed; retry or reissue credentials manually.");
+                } finally {
+                  setBusy(false);
+                }
               })();
             }}
             className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
