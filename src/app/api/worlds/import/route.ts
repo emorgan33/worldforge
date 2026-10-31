@@ -6,6 +6,7 @@ import { readWorldTransferJson } from "@/lib/world-transfer-adapters";
 import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { AccountEligibilityError, AccountLifecycleConflictError, requireActiveAuthor, withAccountLifecycleLock } from "@/lib/account-lifecycle";
+import { createDurableImportRequest } from "@/lib/world-import-request";
 
 const activeImports = new Set<string>();
 
@@ -41,15 +42,13 @@ export const POST = withAuthor({ target: "account" }, async (request: Request, _
     if (record && activeImports.has(record.id)) return NextResponse.json({ error: "This import request is still running. Check its status shortly." }, { status: 409, headers: { "Retry-After": "2" } });
     let recovering = false;
     if (!record) {
-      try {
-        record = await withAccountLifecycleLock(prisma, async (tx) => {
+      record = await createDurableImportRequest(
+        () => withAccountLifecycleLock(prisma, async (tx) => {
           await requireActiveAuthor(tx, ownerId);
           return tx.worldTransferImport.create({ data: { id: randomUUID(), ownerId, requestKey: key, payloadHash, payloadJson, status: "PENDING" } });
-        });
-      } catch (error) {
-        if (error instanceof AccountEligibilityError) throw error;
-        record = await prisma.worldTransferImport.findUnique({ where: { ownerId_requestKey: { ownerId, requestKey: key } } });
-      }
+        }),
+        () => prisma.worldTransferImport.findUnique({ where: { ownerId_requestKey: { ownerId, requestKey: key } } }),
+      );
     }
     if (!record) throw new Error("Could not establish durable import request");
     if (record.payloadHash !== payloadHash) return NextResponse.json({ error: "This idempotency key was already used for different import content." }, { status: 409 });

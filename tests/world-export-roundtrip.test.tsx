@@ -94,6 +94,25 @@ test("v4 roundtrip preserves timeline eras and ordered ink/erase/ink drawings", 
     assert.equal(deletion.ok, false);
     if (!deletion.ok) assert.equal(deletion.error.code, "OWNS_WORLDS");
     assert.ok(await db.world.findUnique({ where: { id: imported.id } }), "a competing account deletion cannot remove the imported world");
+
+    const deleteWinner = await db.user.create({ data: { name: "Delete wins import", email: `delete-wins-import-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
+    const winnerDisabled = await setAccountStatus(adminClient, actor, { userId: deleteWinner.id, expectedVersion: 0 }, { disabled: true });
+    assert.equal(winnerDisabled.ok, true);
+    let signalPending!: () => void;
+    let resumeImport!: () => void;
+    const pending = new Promise<void>(resolve => { signalPending = resolve; });
+    const heldBeforeTransaction = new Promise<void>(resolve => { resumeImport = resolve; });
+    const lateImport = exportService.importWorldV2(bundle, deleteWinner.id, async slug => !!await db.world.findUnique({ where: { slug } }), undefined, {
+      beforeTransaction: async () => { signalPending(); await heldBeforeTransaction; },
+    });
+    await pending;
+    const disabledWinner = await db.user.findUniqueOrThrow({ where: { id: deleteWinner.id } });
+    const winnerDeleted = await deleteAccount(adminClient, actor, { userId: deleteWinner.id, expectedVersion: disabledWinner.accountVersion }, { confirmEmail: disabledWinner.email, backupAcknowledged: true });
+    assert.equal(winnerDeleted.ok, true);
+    resumeImport();
+    await assert.rejects(lateImport, /not eligible/i);
+    assert.equal(await db.world.count({ where: { ownerId: deleteWinner.id } }), 0, "a pending import cannot recreate a deleted account's world");
+    assert.equal(await db.user.findUnique({ where: { id: deleteWinner.id } }), null);
   } finally {
     await adminClient.$disconnect();
     await deleteTestUsers(db, importTarget.id, admin.id);

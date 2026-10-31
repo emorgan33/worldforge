@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { deleteAccount, setAccountStatus } from "../src/lib/admin-accounts";
+import { deleteAccount, setAccountRole, setAccountStatus } from "../src/lib/admin-accounts";
 import { assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 test("world creation validates, retries concurrent requests, and allocates collision-safe slugs", { skip: !process.env.WORLD_CREATION_TEST_DATABASE_URL }, async () => {
@@ -90,6 +90,33 @@ test("world creation validates, retries concurrent requests, and allocates colli
     assert.equal(deletion.ok, false);
     if (!deletion.ok) assert.equal(deletion.error.code, "OWNS_WORLDS");
     assert.ok(await prisma.world.findUnique({ where: { id: createdWorld.world.id } }), "the competing account deletion cannot remove the committed world");
+
+    const deleteWinner = await prisma.user.create({ data: { name: "Delete wins create", email: `delete-wins-create-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
+    additionalUserIds.push(deleteWinner.id);
+    const disabled = await setAccountStatus(prisma, actor, { userId: deleteWinner.id, expectedVersion: 0 }, { disabled: true });
+    assert.equal(disabled.ok, true);
+    let signalPending!: () => void;
+    let resumeWriter!: () => void;
+    const pending = new Promise<void>(resolve => { signalPending = resolve; });
+    const heldBeforeTransaction = new Promise<void>(resolve => { resumeWriter = resolve; });
+    const lateCreate = createWorld(deleteWinner.id, { ...payload, title: "Must not survive deletion", requestId: randomUUID() }, undefined, undefined, db2, {
+      beforeTransaction: async () => { signalPending(); await heldBeforeTransaction; },
+    });
+    await pending;
+    const disabledUser = await prisma.user.findUniqueOrThrow({ where: { id: deleteWinner.id } });
+    const deleted = await deleteAccount(prisma, actor, { userId: deleteWinner.id, expectedVersion: disabledUser.accountVersion }, { confirmEmail: disabledUser.email, backupAcknowledged: true });
+    assert.equal(deleted.ok, true);
+    resumeWriter();
+    await assert.rejects(lateCreate, /not eligible|cannot create worlds/i);
+    assert.equal(await prisma.world.count({ where: { ownerId: deleteWinner.id } }), 0, "the pending writer cannot recreate a deleted account's world");
+    assert.equal(await prisma.user.findUnique({ where: { id: deleteWinner.id } }), null);
+
+    const demotionTarget = await prisma.user.create({ data: { name: "Demotion wins create", email: `demotion-wins-create-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
+    additionalUserIds.push(demotionTarget.id);
+    const demotion = await setAccountRole(prisma, actor, { userId: demotionTarget.id, expectedVersion: 0 }, { role: "PLAYER" });
+    assert.equal(demotion.ok, true);
+    await assert.rejects(createWorld(demotionTarget.id, { ...payload, title: "Demoted owner", requestId: randomUUID() }, undefined, undefined, db2), /not eligible|cannot create worlds/i);
+    assert.equal(await prisma.world.count({ where: { ownerId: demotionTarget.id } }), 0, "demotion still prevents author-world creation");
   } finally {
     await db2.$disconnect();
     await deleteTestUsers(prisma, owner.id, otherOwner.id, ...additionalUserIds);

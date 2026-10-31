@@ -13,10 +13,12 @@ test("player invitations are email-bound, single-use, and do not grant author AP
   const owner = await db.user.create({ data: { name: "Invitation GM", email: `gm-${stamp}@example.invalid` } });
   const world = await db.world.create({ data: { ownerId: owner.id, title: "Invitation world", slug: `invite-${stamp}` } });
   const email = `player-${stamp}@example.invalid`;
+  const staleCookieEmail = `stale-cookie-player-${stamp}@example.invalid`;
   context.after(async () => {
     await db.world.delete({ where: { id: world.id } });
     const player = await db.user.findUnique({ where: { email } });
-    await deleteTestUsers(db, owner.id, player?.id);
+    const staleCookiePlayer = await db.user.findUnique({ where: { email: staleCookieEmail } });
+    await deleteTestUsers(db, owner.id, player?.id, staleCookiePlayer?.id);
     await db.$disconnect();
   });
   const gmFetch = await authorFetch(db, owner.id, origin!);
@@ -39,6 +41,20 @@ test("player invitations are email-bound, single-use, and do not grant author AP
   assert.equal(player.role, "PLAYER");
   assert.equal((await db.worldMember.findUniqueOrThrow({ where: { worldId_userId: { worldId: world.id, userId: player.id } } })).status, "ACTIVE");
   assert.equal((await fetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin! }, body: JSON.stringify({ token, name: "Second", password: "long-enough-password" }) })).status, 404);
+
+  const staleCookieInviteResponse = await gmFetch(`${origin}/api/worlds/${world.id}/invitations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: staleCookieEmail }) });
+  assert.equal(staleCookieInviteResponse.status, 201);
+  const staleCookieInvite = await staleCookieInviteResponse.json();
+  const staleCookieToken = new URLSearchParams(new URL(staleCookieInvite.claimUrl).hash.slice(1)).get("token");
+  assert(staleCookieToken);
+  const staleCookiePreview = await fetch(`${origin}/api/invitations/preview`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin!, Cookie: "wf_session=revoked-unrelated-session" }, body: JSON.stringify({ token: staleCookieToken }) });
+  assert.equal(staleCookiePreview.status, 200);
+  const staleCookiePreviewBody = await staleCookiePreview.json();
+  assert.equal(staleCookiePreviewBody.accountExists, false);
+  assert.equal(staleCookiePreviewBody.signedInEmail, null);
+  const staleCookieClaim = await fetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin!, Cookie: "wf_session=revoked-unrelated-session" }, body: JSON.stringify({ token: staleCookieToken, name: "Stale cookie player", password: "long-enough-password" }) });
+  assert.equal(staleCookieClaim.status, 200, "an invalid unrelated cookie must not block creating the invited account");
+  assert.equal((await db.user.findUniqueOrThrow({ where: { email: staleCookieEmail } })).role, "PLAYER");
 
   const playerFetch = await authorFetch(db, player.id, origin!);
   const home = await playerFetch(`${origin}/api/player/worlds`);

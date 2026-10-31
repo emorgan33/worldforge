@@ -31,12 +31,13 @@ export function readableWorldSlug(title: string) {
 }
 
 /** @internal Test-only synchronization points for eligibility serialization tests. */
-export type WorldCreationTestHooks = { afterEligibility?: () => Promise<void> };
+export type WorldCreationTestHooks = { beforeTransaction?: () => Promise<void>; afterEligibility?: () => Promise<void> };
 
 export async function createWorld(ownerId: string, payload: WorldCreationPayload, slugFactory = readableWorldSlug, requestIdentity?: string, db: PrismaClient = prisma, testHooks?: WorldCreationTestHooks) {
   const hash = requestIdentity ? createHash("sha256").update(requestIdentity).digest("hex") : worldCreationHash(payload);
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
+      await testHooks?.beforeTransaction?.();
       return await withAccountLifecycleLock(db, async (tx) => {
         await requireActiveAuthor(tx, ownerId);
         await testHooks?.afterEligibility?.();

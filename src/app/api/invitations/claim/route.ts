@@ -26,11 +26,11 @@ export async function POST(request: NextRequest) {
     const sessionExpiresAt = new Date(Date.now() + SESSION_SECONDS * 1000);
     const claim = await withAccountLifecycleLock(prisma, async (tx) => {
       const signedIn = existingSessionToken ? await findActiveSessionActor(tx, tokenHash(existingSessionToken)) : null;
-      if (existingSessionToken && !signedIn) throw new AccessError("Your sign-in session is no longer valid. Sign in again to claim this invitation.", 401);
       const current = await tx.playerInvitation.findUnique({ where: { id: invitation.id }, select: { id: true, email: true, worldId: true, expiresAt: true, claimedAt: true, cancelledAt: true, world: { select: { deletedAt: true, slug: true } } } });
       if (!current || current.claimedAt || current.cancelledAt || current.expiresAt <= new Date() || current.world.deletedAt) throw new AccessError("This invitation is invalid or expired.", 404);
       const existing = await tx.user.findUnique({ where: { email: current.email }, select: { id: true, disabledAt: true } });
       if (existing?.disabledAt) throw new AccessError("This account is disabled and cannot claim invitations.", 403);
+      if (existing && existingSessionToken && !signedIn) throw new AccessError("Your sign-in session is no longer valid. Sign in again to claim this invitation.", 401);
       if (existing && signedIn?.id !== existing.id) throw new AccessError("Sign in with the invited email address to claim this world.", 403);
       if (!existing && signedIn) throw new AccessError("Sign out before creating an account for the invited email address.", 403);
       if (!existing && (typeof body?.name !== "string" || !body.name.trim() || body.name.length > 120 || !passwordHash)) throw new AccessError("Enter a name and a password of 12–128 characters.", 400);

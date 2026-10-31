@@ -434,7 +434,7 @@ export async function importWorldV2(
   ownerUserId: string,
   existingSlugCheck: (slug: string) => Promise<boolean>,
   identity?: { worldId: string; assetId(sourceId: string): string; completionRequestId?: string; completionPayloadHash?: string },
-  testHooks?: { afterEligibility?: () => Promise<void> },
+  testHooks?: { beforeTransaction?: () => Promise<void>; afterEligibility?: () => Promise<void> },
 ): Promise<ImportV2Result> {
   const warnings: string[] = [];
   const articleIdMap = new Map((data.articles || []).map((article) => [article.id, randomUUID()]));
@@ -453,6 +453,7 @@ export async function importWorldV2(
   const newWorldId = identity?.worldId ?? randomUUID();
   const createdAssetFiles: string[] = [];
   try {
+  await testHooks?.beforeTransaction?.();
   await withAccountLifecycleLock(prisma, async (tx) => {
     await requireActiveAuthor(tx, ownerUserId);
     await testHooks?.afterEligibility?.();
