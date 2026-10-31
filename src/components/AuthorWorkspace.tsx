@@ -53,6 +53,7 @@ export default function WorldForgeApp() {
   };
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [actorId, setActorId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [worlds, setWorlds] = useState<WorldSummary[]>([]);
   const [world, setWorld] = useState<WorldSummary | null>(null);
   const [articles, setArticles] = useState<ArticleListItem[]>([]);
@@ -345,7 +346,9 @@ export default function WorldForgeApp() {
         const sessionValue: unknown = await sessionRes.json();
         if (!Array.isArray(ownedValue) || !sessionValue || typeof sessionValue !== "object") throw new Error("Your account response was invalid.");
         const owned = ownedValue as WorldSummary[];
-        const actor = (sessionValue as { user?: { id?: string } | null }).user?.id ?? null;
+        const sessionUser = (sessionValue as { user?: { id?: string; role?: string } | null }).user;
+        const actor = sessionUser?.id ?? null;
+        setIsAdmin(sessionUser?.role === "ADMIN");
         if (cancelled) return;
         setActorId(actor);
         setWorlds(owned);
@@ -791,6 +794,7 @@ export default function WorldForgeApp() {
         onNewWorld={() => { setMobileNavigationOpen(false); openNewWorld(); }}
         onRefreshWorlds={refreshWorlds}
         actorId={actorId}
+        isAdmin={isAdmin}
         onBeforeManageAction={beforeWorldManagementAction}
         onManageWorld={completeWorldManagementAction}
         collapsed={sidebarCollapsed}
