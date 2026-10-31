@@ -7,6 +7,7 @@ import {
   _runAdminMutation,
   createAccount,
   issueRecovery,
+  setAccountStatus,
   type AdminMutateContext,
   type AdminMutationOptions,
 } from "../src/lib/admin-accounts";
@@ -809,6 +810,149 @@ describe("admin account lifecycle services", () => {
     } finally {
       await cleanup();
     }
+  });
+});
+
+describe("admin account status", () => {
+  it("disables credentials without changing world, publication, membership, or grants and does not restore them on enable", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const target = await createTargetUser(db);
+      const other = await createTargetUser(db);
+      const world = await db.world.create({ data: { title: "Preserved", slug: `status-${randomUUID()}`, ownerId: target.id, isPublic: true } });
+      const member = await db.worldMember.create({ data: { worldId: world.id, userId: target.id } });
+      const policy = await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "ARTICLE", resourceId: randomUUID(), mode: "PUBLIC" } });
+      const grant = await db.audienceGrant.create({ data: { policyId: policy.id, userId: target.id } });
+      const expiresAt = new Date(Date.now() + 60_000);
+      await db.authSession.create({ data: { userId: target.id, tokenHash: tokenHash(randomUUID()), expiresAt } });
+      const setupHash = tokenHash(randomUUID());
+      await db.accountSetup.create({ data: { userId: target.id, tokenHash: setupHash, expiresAt } });
+      const subjectHash = tokenHash(randomUUID());
+      const issuerHash = tokenHash(randomUUID());
+      const otherHash = tokenHash(randomUUID());
+      await db.previewSession.createMany({ data: [
+        { tokenHash: subjectHash, userId: target.id, issuedById: other.id, worldId: world.id, expiresAt },
+        { tokenHash: issuerHash, userId: other.id, issuedById: target.id, worldId: world.id, expiresAt },
+        { tokenHash: otherHash, userId: other.id, issuedById: other.id, worldId: world.id, expiresAt },
+      ] });
+      const before = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      const disabled = await setAccountStatus(db, actor, { userId: target.id, expectedVersion: before.accountVersion }, { disabled: true });
+      assert.equal(disabled.ok, true);
+      const afterDisable = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      assert.ok(afterDisable.disabledAt);
+      assert.equal(afterDisable.accountVersion, before.accountVersion + 1);
+      assert.equal(await db.authSession.count({ where: { userId: target.id } }), 0);
+      assert.ok((await db.accountSetup.findUniqueOrThrow({ where: { tokenHash: setupHash } })).usedAt);
+      assert.ok((await db.previewSession.findUniqueOrThrow({ where: { tokenHash: subjectHash } })).revokedAt);
+      assert.ok((await db.previewSession.findUniqueOrThrow({ where: { tokenHash: issuerHash } })).revokedAt);
+      assert.equal((await db.previewSession.findUniqueOrThrow({ where: { tokenHash: otherHash } })).revokedAt, null);
+      assert.deepEqual(await db.world.findUniqueOrThrow({ where: { id: world.id } }), world);
+      assert.deepEqual(await db.worldMember.findUniqueOrThrow({ where: { id: member.id } }), member);
+      assert.deepEqual(await db.audiencePolicy.findUniqueOrThrow({ where: { id: policy.id } }), policy);
+      assert.deepEqual(await db.audienceGrant.findUniqueOrThrow({ where: { id: grant.id } }), grant);
+      const enabled = await setAccountStatus(db, actor, { userId: target.id, expectedVersion: afterDisable.accountVersion }, { disabled: false });
+      assert.equal(enabled.ok, true);
+      const afterEnable = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      assert.equal(afterEnable.disabledAt, null);
+      assert.equal(afterEnable.accountVersion, before.accountVersion + 2);
+      assert.equal(await db.authSession.count({ where: { userId: target.id } }), 0);
+      assert.ok((await db.accountSetup.findUniqueOrThrow({ where: { tokenHash: setupHash } })).usedAt);
+      assert.ok((await db.previewSession.findUniqueOrThrow({ where: { tokenHash: subjectHash } })).revokedAt);
+      assert.ok((await db.previewSession.findUniqueOrThrow({ where: { tokenHash: issuerHash } })).revokedAt);
+      const audits = await db.installationAuditEvent.findMany({ where: { targetIdSnapshot: target.id }, orderBy: { createdAt: "asc" } });
+      assert.equal(audits.length, 2);
+      assert.deepEqual(audits.map((a) => a.reasonCode).sort(), ["DISABLED", "ENABLED"]);
+      assert.ok(audits.every((a) => a.action === "STATUS_CHANGE" && a.outcome === "SUCCESS"));
+    } finally { await cleanup(); }
+  });
+
+  it("rejects self-disable, last-admin disable, invalid input and stale versions", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor, user } = await createAdminActor(db);
+      const self = await setAccountStatus(db, actor, { userId: user.id }, { disabled: true });
+      assert.equal(self.ok, false);
+      if (!self.ok) assert.equal(self.error.code, "SELF_CHANGE");
+      const last = await setAccountStatus(db, { type: "LOCAL_OPERATOR" }, { userId: user.id }, { disabled: true });
+      assert.equal(last.ok, false);
+      if (!last.ok) assert.equal(last.error.code, "LAST_ADMIN");
+      const invalid = await setAccountStatus(db, actor, { userId: user.id }, { disabled: "yes" });
+      assert.equal(invalid.ok, false);
+      if (!invalid.ok) assert.equal(invalid.error.code, "INVALID_INPUT");
+      const target = await createTargetUser(db);
+      const stale = await setAccountStatus(db, actor, { userId: target.id, expectedVersion: 99 }, { disabled: true });
+      assert.equal(stale.ok, false);
+      if (!stale.ok) assert.equal(stale.error.code, "STALE_ACCOUNT");
+      assert.equal((await db.user.findUniqueOrThrow({ where: { id: target.id } })).disabledAt, null);
+      assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).disabledAt, null);
+    } finally { await cleanup(); }
+  });
+
+  it("serializes opposing admin disables and leaves an active administrator", async () => {
+    const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
+    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    try {
+      const a = await createAdminActor(db);
+      const b = await createAdminActor(db2);
+      const barrier = makeBarrier();
+      const first = (async () => { barrier.a.enter(); await barrier.a.wait(); return setAccountStatus(db, a.actor, { userId: b.user.id }, { disabled: true }); })();
+      const second = (async () => { barrier.b.enter(); await barrier.b.wait(); return setAccountStatus(db2, b.actor, { userId: a.user.id }, { disabled: true }); })();
+      await withTimeout(Promise.all([barrier.aEntered(), barrier.bEntered()]), 5000);
+      barrier.releaseA();
+      barrier.releaseB();
+      const results = await Promise.all([first, second]);
+      assert.equal(results.filter((r) => r.ok).length, 1);
+      assert.equal(await db.user.count({ where: { role: "ADMIN", disabledAt: null } }), 1);
+      const rejected = results.find((r) => !r.ok);
+      assert.ok(rejected && !rejected.ok);
+      assert.equal(rejected.error.code, "UNAUTHORIZED");
+    } finally { await db2.$disconnect(); await cleanup(); }
+  });
+
+  it("serializes competing local disables and rejects removal of the last admin", async () => {
+    const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
+    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    try {
+      const a = await createAdminActor(db);
+      const b = await createAdminActor(db2);
+      const barrier = makeBarrier();
+      const actor = { type: "LOCAL_OPERATOR" as const };
+      const first = (async () => { barrier.a.enter(); await barrier.a.wait(); return setAccountStatus(db, actor, { userId: a.user.id }, { disabled: true }); })();
+      const second = (async () => { barrier.b.enter(); await barrier.b.wait(); return setAccountStatus(db2, actor, { userId: b.user.id }, { disabled: true }); })();
+      await withTimeout(Promise.all([barrier.aEntered(), barrier.bEntered()]), 5000);
+      barrier.releaseA();
+      barrier.releaseB();
+      const results = await Promise.all([first, second]);
+      assert.equal(results.filter((r) => r.ok).length, 1);
+      const rejected = results.find((r) => !r.ok);
+      assert.ok(rejected && !rejected.ok);
+      assert.equal(rejected.error.code, "LAST_ADMIN");
+      assert.equal(await db.user.count({ where: { role: "ADMIN", disabledAt: null } }), 1);
+    } finally { await db2.$disconnect(); await cleanup(); }
+  });
+
+  it("rechecks an actor disabled by an earlier serialized mutation", async () => {
+    const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
+    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    try {
+      const { actor, user } = await createAdminActor(db);
+      const target = await createTargetUser(db);
+      const barrier = makeBarrier();
+      const first = _runAdminMutation(db, { type: "LOCAL_OPERATOR" }, { userId: user.id }, "STATUS_CHANGE", async ({ tx }) => {
+        await tx.user.update({ where: { id: user.id }, data: { disabledAt: new Date() } });
+        return { value: {} };
+      }, { checkpoint: async () => { barrier.a.enter(); await withTimeout(barrier.a.wait(), 5000); } });
+      await withTimeout(barrier.aEntered(), 5000);
+      const second = setAccountStatus(db2, actor, { userId: target.id }, { disabled: true });
+      barrier.releaseA();
+      assert.equal((await first).ok, true);
+      const result = await second;
+      assert.equal(result.ok, false);
+      if (!result.ok) assert.equal(result.error.code, "UNAUTHORIZED");
+      assert.equal((await db.user.findUniqueOrThrow({ where: { id: target.id } })).disabledAt, null);
+      assert.equal(await db.installationAuditEvent.count({ where: { targetIdSnapshot: target.id } }), 0);
+    } finally { await db2.$disconnect(); await cleanup(); }
   });
 });
 

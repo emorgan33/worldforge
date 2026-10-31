@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { PrismaClient, User, InstallationAdminState, Prisma } from "@prisma/client";
 import type { AdminError, InstallationAuditAction } from "./admin-policy";
-import { activeAdmin, validateCreateAccountInput } from "./admin-policy";
+import { activeAdmin, validateCreateAccountInput, validateStatusChangeInput } from "./admin-policy";
 import { newToken, tokenHash } from "./passwords";
 import {
   appendInstallationAuditEvent,
@@ -276,5 +276,51 @@ export async function issueRecovery(
     });
 
     return { value: { token, expiresAt } };
+  });
+}
+
+/** Call only after acquiring the installation singleton lock. */
+export async function assertNotLastActiveAdmin(
+  tx: Prisma.TransactionClient,
+  target: Pick<User, "role" | "disabledAt">,
+): Promise<AdminError | null> {
+  if (!activeAdmin(target)) return null;
+  const count = await tx.user.count({ where: { role: "ADMIN", disabledAt: null } });
+  return count <= 1 ? { error: "The last active administrator cannot be removed.", code: "LAST_ADMIN" } : null;
+}
+
+export async function setAccountStatus(
+  db: PrismaClient,
+  actor: AdminActor,
+  target: AdminMutationTarget,
+  body: Record<string, unknown>,
+): Promise<AdminMutationResult<{ userId: string }>> {
+  const input = validateStatusChangeInput(body);
+  if ("code" in input) return { ok: false, error: input };
+
+  return runAdminMutation(db, actor, target, "STATUS_CHANGE", async (ctx) => {
+    if (input.disabled) {
+      if (actor.userId != null && actor.userId === ctx.target.id) {
+        return { error: "You cannot disable your own account.", code: "SELF_CHANGE" };
+      }
+      const guardError = await assertNotLastActiveAdmin(ctx.tx, ctx.target);
+      if (guardError) return guardError;
+
+      const now = new Date();
+      await ctx.tx.user.update({ where: { id: ctx.target.id }, data: { disabledAt: now } });
+      await ctx.tx.authSession.deleteMany({ where: { userId: ctx.target.id } });
+      await ctx.tx.accountSetup.updateMany({ where: { userId: ctx.target.id, usedAt: null }, data: { usedAt: now } });
+      await ctx.tx.previewSession.updateMany({
+        where: { revokedAt: null, OR: [{ userId: ctx.target.id }, { issuedById: ctx.target.id }] },
+        data: { revokedAt: now },
+      });
+    } else {
+      await ctx.tx.user.update({ where: { id: ctx.target.id }, data: { disabledAt: null } });
+    }
+    return {
+      value: { userId: ctx.target.id },
+      details: { disabled: input.disabled },
+      reasonCode: input.disabled ? "DISABLED" : "ENABLED",
+    };
   });
 }
