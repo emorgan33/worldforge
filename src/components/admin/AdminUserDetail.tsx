@@ -395,6 +395,10 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                   if (parseFailed || typeof data.sessionCount !== "number" || typeof data.previewCount !== "number") {
                     await loadDetail();
                     await loadSessions();
+                    if (isSelf) {
+                      await signOutAfterSelfRevoke();
+                      return;
+                    }
                     setError("Unable to confirm whether this request succeeded. The account state has been refreshed; retry or reissue credentials manually.");
                     return;
                   }
@@ -410,6 +414,10 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                     await loadSessions();
                   } catch {
                     // Ignore
+                  }
+                  if (isSelf) {
+                    await signOutAfterSelfRevoke();
+                    return;
                   }
                   setError("Unable to confirm this request. The account state has been refreshed; retry or reissue credentials manually.");
                 } finally {
