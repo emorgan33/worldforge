@@ -36,6 +36,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# Local Docker Compose deployment settings
+/docker-compose.override.yml
+
 # vercel
 .vercel
 
