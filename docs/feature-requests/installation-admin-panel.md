@@ -176,7 +176,7 @@ Report actionable defects with file/line evidence and missing acceptance checks.
 
 | Package | Status | Commit / validation evidence |
 | --- | --- | --- |
-| P1 | Completed | Schema/migration, `src/lib/admin-policy.ts`, safe DTOs, `deleteTestUsers` fixture helper, `tests/admin-policy.test.ts`, `tests/admin-migration.test.ts`. `pnpm lint`, `pnpm build`, `pnpm test:unit`, and `pnpm test:service` pass on isolated SQLite storage. |
+| P1 | Completed | Schema/migration, `src/lib/admin-policy.ts`, safe DTOs, `deleteTestUsers` fixture helper, `tests/admin-policy.test.ts`, `tests/admin-migration.test.ts`. Reviewer findings fixed: guarded browser-spec cleanup, singleton inserted/enforced by migration, populated-upgrade migration test added, session-ID length corrected, transactional cleanup, role validation in safe DTO, tightened `isAdminError`. `pnpm lint`, `pnpm build`, `pnpm test:unit`, and `pnpm test:service` pass on isolated SQLite storage. |
 | P2 | Not started | |
 | P3 | Not started | |
 | P4 | Not started | |

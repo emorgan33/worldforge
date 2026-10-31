@@ -12,10 +12,11 @@ CREATE INDEX "User_createdAt_id_idx" ON "User"("createdAt", "id");
 
 -- Singleton that serializes installation lifecycle decisions.
 CREATE TABLE "InstallationAdminState" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" INTEGER NOT NULL PRIMARY KEY,
     "version" INTEGER NOT NULL DEFAULT 0,
     "updatedAt" DATETIME NOT NULL
 );
+INSERT OR IGNORE INTO "InstallationAdminState" ("id", "version", "updatedAt") VALUES (1, 0, CURRENT_TIMESTAMP);
 
 -- Append-only installation audit log with scalar ID snapshots.
 CREATE TABLE "InstallationAuditEvent" (

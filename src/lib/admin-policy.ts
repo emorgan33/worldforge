@@ -94,11 +94,12 @@ export function setupPending(user: Pick<User, "passwordHash">): boolean {
 }
 
 export function toSafeAccount(user: Pick<User, "id" | "email" | "name" | "role" | "disabledAt" | "createdAt" | "lastSignInAt" | "accountVersion" | "passwordHash">): SafeAccount {
+  if (!isUserRole(user.role)) throw new Error(`Unexpected user role: ${user.role}`);
   return {
     id: user.id,
     email: user.email,
     name: user.name,
-    role: user.role as UserRole,
+    role: user.role,
     disabledAt: user.disabledAt,
     createdAt: user.createdAt,
     lastSignInAt: user.lastSignInAt,
@@ -140,5 +141,7 @@ export function adminErrorResponse(error: AdminError, status = 400): Response {
 }
 
 export function isAdminError(value: unknown): value is AdminError {
-  return typeof value === "object" && value !== null && "error" in value && "code" in value;
+  if (typeof value !== "object" || value === null) return false;
+  const { error, code } = value as Record<string, unknown>;
+  return typeof error === "string" && typeof code === "string" && ADMIN_ERROR_CODES.includes(code as AdminErrorCode);
 }

@@ -50,8 +50,10 @@ const test = base.extend<{ variables: Page }>({
     } finally {
       await page.close();
       try {
-        await db.world.deleteMany({ where: { ownerId } });
-        if (ownerId) await db.user.delete({ where: { id: ownerId } });
+        if (ownerId) {
+          await db.world.deleteMany({ where: { ownerId } });
+          await db.user.delete({ where: { id: ownerId } });
+        }
       } finally { await db.$disconnect(); }
     }
   },

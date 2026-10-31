@@ -27,12 +27,14 @@ export function assertIsolatedTestEnvironment() {
 export async function deleteTestUsers(db: PrismaClient, ...userIds: string[]) {
   const ids = userIds.filter(Boolean);
   if (!ids.length) return;
-  await db.worldTransferImport.deleteMany({ where: { ownerId: { in: ids } } });
-  await db.foundryImportRun.deleteMany({ where: { authorId: { in: ids } } });
-  await db.foundryPreview.deleteMany({ where: { authorId: { in: ids } } });
-  await db.articleRevision.deleteMany({ where: { userId: { in: ids } } });
-  await db.world.deleteMany({ where: { ownerId: { in: ids } } });
-  await db.user.deleteMany({ where: { id: { in: ids } } });
+  await db.$transaction([
+    db.worldTransferImport.deleteMany({ where: { ownerId: { in: ids } } }),
+    db.foundryImportRun.deleteMany({ where: { authorId: { in: ids } } }),
+    db.foundryPreview.deleteMany({ where: { authorId: { in: ids } } }),
+    db.articleRevision.deleteMany({ where: { userId: { in: ids } } }),
+    db.world.deleteMany({ where: { ownerId: { in: ids } } }),
+    db.user.deleteMany({ where: { id: { in: ids } } }),
+  ]);
 }
 
 export async function authorFetch(db: PrismaClient, userId: string, origin: string) {

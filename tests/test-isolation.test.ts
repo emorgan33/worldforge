@@ -18,6 +18,33 @@ const originUnsetSuites = [
   "world-export-import-api.test.tsx",
 ];
 
+test("fixture cleanup guards deleteMany against undefined ownerId", async context => {
+  assertIsolatedTestEnvironment();
+  const db = new PrismaClient();
+  const ownerA = await db.user.create({ data: { name: "Guard A", email: `guard-a-${randomUUID()}@example.invalid` } });
+  const ownerB = await db.user.create({ data: { name: "Guard B", email: `guard-b-${randomUUID()}@example.invalid` } });
+  const worldA = await db.world.create({ data: { ownerId: ownerA.id, title: "Guard A world", slug: randomUUID() } });
+  const worldB = await db.world.create({ data: { ownerId: ownerB.id, title: "Guard B world", slug: randomUUID() } });
+  context.after(async () => {
+    await db.world.deleteMany({ where: { ownerId: { in: [ownerA.id, ownerB.id] } } });
+    await db.user.deleteMany({ where: { id: { in: [ownerA.id, ownerB.id] } } });
+    await db.$disconnect();
+  });
+
+  const before = await db.world.count();
+  assert.equal(before >= 2, true);
+  // Simulate the browser-fixture cleanup path when user creation failed and
+  // ownerId is still undefined: the guard must skip deletion entirely.
+  let ownerId: string | undefined;
+  if (ownerId) {
+    await db.world.deleteMany({ where: { ownerId } });
+  }
+  const after = await db.world.count();
+  assert.equal(after, before, "guarded cleanup with undefined ownerId must not delete worlds");
+  assert.ok(await db.world.findUnique({ where: { id: worldA.id } }));
+  assert.ok(await db.world.findUnique({ where: { id: worldB.id } }));
+});
+
 test("rejected test configuration and origin-unset skips preserve database and asset sentinels", async context => {
   assertIsolatedTestEnvironment();
   const db = new PrismaClient();

@@ -639,7 +639,7 @@ model LoginLimit {
 // Installation Administration
 // -------------------------------------------------------------
 model InstallationAdminState {
-  id        String   @id @default(uuid())
+  id        Int      @id @default(1)
   version   Int      @default(0)
   updatedAt DateTime @updatedAt
 }

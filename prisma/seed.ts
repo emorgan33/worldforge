@@ -522,7 +522,7 @@ async function main() {
     },
   });
 
-  await prisma.installationAdminState.create({ data: { version: 1 } });
+  await prisma.installationAdminState.create({ data: { id: 1, version: 1 } });
 
   console.log("Database seeded successfully!");
 }
