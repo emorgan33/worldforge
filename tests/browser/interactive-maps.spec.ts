@@ -28,7 +28,10 @@ const test = base.extend<{ mapEditor: { page: Page; db: PrismaClient; mapId: str
       await run({ page, db, mapId: map.id });
     } finally {
       await Promise.all(context.pages().map(target => target.close()));
-      try { if (ownerId) await db.user.delete({ where: { id: ownerId } }); }
+      try {
+        await db.world.deleteMany({ where: { ownerId } });
+        if (ownerId) await db.user.delete({ where: { id: ownerId } });
+      }
       finally { await db.$disconnect(); }
     }
   },

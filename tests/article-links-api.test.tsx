@@ -1,4 +1,4 @@
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
@@ -8,7 +8,7 @@ test("article save indexes stable links atomically, deduplicates edges, scopes w
   assert.match(origin!, /^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/);
   const db = new PrismaClient();
   const user = await db.user.create({ data: { name: "Article link fixture", email: `links-${Date.now()}@example.invalid` } });
-  context.after(async () => { await db.user.delete({ where: { id: user.id } }); await db.$disconnect(); });
+  context.after(async () => { await deleteTestUsers(db, user.id); await db.$disconnect(); });
   const authenticatedFetch = await authorFetch(db, user.id, origin!);
   const world = await db.world.create({ data: { ownerId: user.id, title: "Links", slug: `links-${Date.now()}` } });
   const other = await db.world.create({ data: { ownerId: user.id, title: "Other", slug: `links-other-${Date.now()}` } });

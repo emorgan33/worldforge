@@ -20,6 +20,9 @@ model User {
   avatar          String?
   role            String             @default("AUTHOR") // ADMIN, AUTHOR, GM, PLAYER
   passwordHash    String?
+  disabledAt      DateTime?
+  lastSignInAt    DateTime?
+  accountVersion  Int                @default(0)
   sessions        AuthSession[]
   setupLinks      AccountSetup[]
   worlds          World[]
@@ -37,6 +40,9 @@ model User {
   worldTransferImports WorldTransferImport[]
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
+
+  @@index([role, disabledAt, createdAt])
+  @@index([createdAt, id])
 }
 
 // -------------------------------------------------------------
@@ -58,7 +64,7 @@ model World {
   ownerId             String
   creationRequestId   String?
   creationPayloadHash String?
-  owner               User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner               User                 @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   categories          Category[]
   articles            Article[]
   secrets             Secret[]
@@ -425,7 +431,7 @@ model FoundryPreview {
   worldId        String
   world          World    @relation(fields: [worldId], references: [id], onDelete: Cascade)
   authorId       String
-  author         User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author         User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
   metadataJson   String
   candidatesJson String
   expiresAt      DateTime
@@ -439,7 +445,7 @@ model FoundryImportRun {
   worldId        String
   world          World    @relation(fields: [worldId], references: [id], onDelete: Cascade)
   authorId       String
-  author         User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author         User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
   previewId      String
   idempotencyKey String
   requestHash    String
@@ -456,7 +462,7 @@ model FoundryImportRun {
 model WorldTransferImport {
   id             String   @id @default(uuid())
   ownerId        String
-  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   requestKey     String
   payloadHash    String
   payloadJson    String
@@ -605,13 +611,14 @@ model AssetCleanupJob {
 }
 
 model AuthSession {
-  tokenHash String   @id
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  @@index([userId])
+  @@index([userId, expiresAt])
 }
 
 model AccountSetup {
@@ -626,6 +633,31 @@ model LoginLimit {
   key      String   @id
   attempts Int      @default(0)
   resetsAt DateTime
+}
+
+// -------------------------------------------------------------
+// Installation Administration
+// -------------------------------------------------------------
+model InstallationAdminState {
+  id        String   @id @default(uuid())
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model InstallationAuditEvent {
+  id               String   @id @default(uuid())
+  actorIdSnapshot  String?
+  targetIdSnapshot String?
+  action           String
+  outcome          String
+  reasonCode       String?
+  detailsJson      String
+  actorType        String
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt, id])
+  @@index([targetIdSnapshot, createdAt])
+  @@index([action, createdAt])
 }
 
 // -------------------------------------------------------------
@@ -818,7 +850,7 @@ model ArticleRevision {
 
   // Metadata
   userId  String
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Restrict)
   savedAt DateTime @default(now())
 
   // For concurrent edit detection

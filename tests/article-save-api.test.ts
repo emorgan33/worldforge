@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
@@ -10,7 +10,7 @@ if (origin) assertIsolatedTestEnvironment();
 test("article saves reject stale versions without changing content, revisions or mentions", { skip: !origin }, async context => {
   const db = new PrismaClient();
   const owner = await db.user.create({ data: { name: "Save fixture", email: `article-save-${randomUUID()}@example.invalid` } });
-  context.after(async () => { await db.user.delete({ where: { id: owner.id } }); await db.$disconnect(); });
+  context.after(async () => { await deleteTestUsers(db, owner.id); await db.$disconnect(); });
   const world = await db.world.create({ data: { ownerId: owner.id, title: "Save versions", slug: randomUUID() } });
   const owned = await authorFetch(db, owner.id, origin!);
   const send = (path: string, body: object, method = "PATCH") => owned(`${origin}/api/articles${path}`, {
@@ -66,7 +66,7 @@ test("article saves reject stale versions without changing content, revisions or
 test("article metadata rejects non-string reference values on create and update", { skip: !origin }, async context => {
   const db = new PrismaClient();
   const owner = await db.user.create({ data: { name: "Metadata validation fixture", email: `metadata-validation-${randomUUID()}@example.invalid` } });
-  context.after(async () => { await db.user.delete({ where: { id: owner.id } }); await db.$disconnect(); });
+  context.after(async () => { await deleteTestUsers(db, owner.id); await db.$disconnect(); });
   const world = await db.world.create({ data: { ownerId: owner.id, title: "Metadata validation", slug: randomUUID() } });
   const owned = await authorFetch(db, owner.id, origin!);
   const send = (path: string, body: object, method = "PATCH") => owned(`${origin}/api/articles${path}`, {

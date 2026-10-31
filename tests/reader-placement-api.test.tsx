@@ -3,7 +3,7 @@ import { test, type TestContext } from "node:test";
 import { createHash, randomUUID } from "node:crypto";
 import { PrismaClient, type Prisma } from "@prisma/client";
 import sharp from "sharp";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { writeAsset, removeAssetFile } from "../src/lib/asset-storage";
 import { DEFAULT_APPEARANCE } from "../src/lib/world-appearance";
 
@@ -20,6 +20,7 @@ async function publicImageFixture(context: TestContext) {
   const ownerIds: string[] = [];
   context.after(async () => {
     try {
+      await db.world.deleteMany({ where: { ownerId: { in: ownerIds } } });
       if (ownerIds.length) await db.user.deleteMany({ where: { id: { in: ownerIds } } });
       await Promise.all(assetIds.map(removeAssetFile));
     } finally {
@@ -251,7 +252,7 @@ test("public and campaign readers preserve informative, decorative and fallback 
   const [cover, portrait] = ids.map(id => `/api/assets/${id}/file`);
   context.after(async () => {
     await db.world.deleteMany({ where: { id: world.id } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, player.id] } } });
+    await deleteTestUsers(db, owner.id, player.id);
     await Promise.all(ids.map(removeAssetFile));
     await db.$disconnect();
   });

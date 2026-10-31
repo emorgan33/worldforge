@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
@@ -14,7 +14,7 @@ test("authenticated lifecycle API archives privately, restores, duplicates with 
   const article = await db.article.create({ data: { worldId: world.id, title: "Published", slug: "published", publicationStatus: "PUBLISHED", visibility: "PUBLIC" } });
   const assetId = randomUUID();
   await db.imageAsset.create({ data: { id: assetId, worldId: world.id, title: "Asset", originalName: "asset.webp", byteSize: 1, width: 1, height: 1, sha256: randomUUID().replaceAll("-", "").padEnd(64, "a").slice(0, 64) } });
-  context.after(async () => { await db.user.deleteMany({ where: { id: owner.id } }); await db.$disconnect(); });
+  context.after(async () => { await deleteTestUsers(db, owner.id); await db.$disconnect(); });
   const owned = await authorFetch(db, owner.id, origin!);
   const request = (url: string, init?: RequestInit) => owned(`${origin}${url}`, init);
   const post = (url: string, body: unknown) => request(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });

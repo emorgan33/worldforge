@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
@@ -15,7 +15,8 @@ test("player invitations are email-bound, single-use, and do not grant author AP
   const email = `player-${stamp}@example.invalid`;
   context.after(async () => {
     await db.world.delete({ where: { id: world.id } });
-    await db.user.deleteMany({ where: { email: { in: [owner.email, email] } } });
+    const player = await db.user.findUnique({ where: { email } });
+    await deleteTestUsers(db, owner.id, player?.id);
     await db.$disconnect();
   });
   const gmFetch = await authorFetch(db, owner.id, origin!);
@@ -61,7 +62,7 @@ test("existing author invitation preserves role and ownership; cancelled links c
   const ownWorld = await db.world.create({ data: { ownerId: invited.id, title: "Owned", slug: `owned-${stamp}` } });
   context.after(async () => {
     await db.world.deleteMany({ where: { id: { in: [world.id, ownWorld.id] } } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, invited.id] } } });
+    await deleteTestUsers(db, owner.id, invited.id);
     await db.$disconnect();
   });
   const gmFetch = await authorFetch(db, owner.id, origin!);

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { assertIsolatedTestEnvironment } from "./auth-fixture";
+import { assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { hashPassword } from "../src/lib/passwords";
 import { SESSION_COOKIE } from "../src/lib/auth-constants";
 
@@ -18,7 +18,7 @@ test("production login issues a session accepted by authenticated APIs", { skip:
     data: { name: "Production auth smoke", email, passwordHash: await hashPassword(password) },
   });
   context.after(async () => {
-    await db.user.deleteMany({ where: { id: user.id } });
+    await deleteTestUsers(db, user.id);
     await db.$disconnect();
   });
 

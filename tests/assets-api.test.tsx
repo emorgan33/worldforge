@@ -5,7 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { mkdir, rm } from "node:fs/promises";
 import { writeAsset, readAsset, removeAssetFile } from "../src/lib/asset-storage";
-import { authorFetch as authenticatedAuthorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch as authenticatedAuthorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { drainAssetCleanupJobs } from "../src/lib/world-management";
 
 const db = new PrismaClient();
@@ -31,7 +31,7 @@ before(async () => {
 after(async () => {
   if (testAssetId) await removeAssetFile(testAssetId).catch(() => {});
   if (world?.id) await db.world.deleteMany({ where: { id: world.id } });
-  if (user?.id) await db.user.deleteMany({ where: { id: user.id } });
+  if (user?.id) await deleteTestUsers(db, user.id);
   await db.$disconnect();
 });
 
@@ -154,7 +154,7 @@ test("asset detail routes enforce the owning world for valid UUIDs", { skip: !or
   } finally {
     await removeAssetFile(otherAssetId).catch(() => {});
     await db.world.delete({ where: { id: otherWorld.id } });
-    await db.user.delete({ where: { id: otherUser.id } });
+    await deleteTestUsers(db, otherUser.id);
   }
 });
 

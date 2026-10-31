@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { deleteTestUsers } from "./auth-fixture";
 
 let db: PrismaClientType;
 let exportService: typeof import("../src/lib/world-export");
@@ -71,7 +72,7 @@ after(async () => {
     await db.accessAuditEvent.deleteMany({ where: { worldId: { in: worldIds } } });
     await db.world.deleteMany({ where: { id: { in: worldIds } } });
   }
-  if (ownerId) await db.user.deleteMany({ where: { id: ownerId } });
+  if (ownerId) await deleteTestUsers(db, ownerId);
   await db.$disconnect();
   await rm(tempDir, { recursive: true, force: true });
   if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL; else Object.assign(process.env, { DATABASE_URL: originalDatabaseUrl });

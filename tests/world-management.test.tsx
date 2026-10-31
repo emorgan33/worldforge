@@ -92,6 +92,7 @@ test("world archive preserves settings, settings duplicate is private and empty,
     await assert.rejects(readFile(path.join(assetDir, `${assetId}.webp`)));
     assert.equal(await prisma.assetCleanupJob.count(), 0);
   } finally {
+    await prisma.world.deleteMany({ where: { ownerId: owner.id } });
     await prisma.user.delete({ where: { id: owner.id } });
     await prisma.$disconnect();
     await rm(databasePath, { force: true });

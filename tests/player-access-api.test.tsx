@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { writeAsset, removeAssetFile } from "../src/lib/asset-storage";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
@@ -16,7 +16,7 @@ test("player access: denied paths return 404 without leaking resource info", { s
   const outsider = await db.user.create({ data: { name: "Outsider", email: `out-${stamp}@example.invalid` } });
 
   context.after(async () => {
-    await db.user.deleteMany({ where: { id: { in: [owner.id, playerA.id, playerB.id, outsider.id] } } });
+    await deleteTestUsers(db, owner.id, playerA.id, playerB.id, outsider.id);
     await db.$disconnect();
   });
 
@@ -83,7 +83,7 @@ test("player access: membership + policy grants access", { skip: !origin }, asyn
   context.after(async () => {
     await db.accessAuditEvent.deleteMany({ where: { worldId: world.id } });
     await db.world.deleteMany({ where: { ownerId: owner.id } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, player.id] } } });
+    await deleteTestUsers(db, owner.id, player.id);
     await db.$disconnect();
   });
 
@@ -131,7 +131,7 @@ test("player access: later member does not inherit grants", { skip: !origin }, a
   context.after(async () => {
     await db.accessAuditEvent.deleteMany({ where: { worldId: world.id } });
     await db.world.deleteMany({ where: { ownerId: owner.id } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, playerA.id, playerB.id] } } });
+    await deleteTestUsers(db, owner.id, playerA.id, playerB.id);
     await db.$disconnect();
   });
 
@@ -172,7 +172,7 @@ test("player discovery surfaces only policy-readable article metadata", { skip: 
   const world = await db.world.create({ data: { ownerId: owner.id, title: "Discovery", slug: `discovery-${stamp}`, isPublic: false } });
   context.after(async () => {
     await db.world.deleteMany({ where: { id: world.id } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, playerA.id, playerB.id] } } });
+    await deleteTestUsers(db, owner.id, playerA.id, playerB.id);
     await db.$disconnect();
   });
 
@@ -211,7 +211,7 @@ test("shared articles reveal embedded assets and statblocks only after their own
   const world = await db.world.create({ data: { ownerId: owner.id, title: "Embeds", slug: `embeds-${stamp}` } });
   context.after(async () => {
     await db.world.delete({ where: { id: world.id } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, player.id] } } });
+    await deleteTestUsers(db, owner.id, player.id);
     await db.$disconnect();
   });
   const asset = await db.imageAsset.create({ data: { worldId: world.id, title: "Hidden map", originalName: "map.webp", byteSize: 1, width: 1, height: 1, sha256: `embed-${stamp}` } });
@@ -244,7 +244,7 @@ test("player article metadata removes references to unreadable articles and stat
   const world = await db.world.create({ data: { ownerId: owner.id, title: "Metadata", slug: `metadata-${stamp}` } });
   context.after(async () => {
     await db.world.delete({ where: { id: world.id } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, player.id] } } });
+    await deleteTestUsers(db, owner.id, player.id);
     await db.$disconnect();
   });
 
@@ -294,7 +294,7 @@ test("player access: revocation takes effect immediately", { skip: !origin }, as
     if (assetId) await removeAssetFile(assetId);
     await db.accessAuditEvent.deleteMany({ where: { worldId: world.id } });
     await db.world.deleteMany({ where: { ownerId: owner.id } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, player.id] } } });
+    await deleteTestUsers(db, owner.id, player.id);
     await db.$disconnect();
   });
 
@@ -341,7 +341,7 @@ test("audit: events recorded for member actions", { skip: !origin }, async (cont
   context.after(async () => {
     await db.accessAuditEvent.deleteMany({ where: { worldId: world.id } });
     await db.world.deleteMany({ where: { ownerId: owner.id } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, player.id] } } });
+    await deleteTestUsers(db, owner.id, player.id);
     await db.$disconnect();
   });
 
@@ -383,7 +383,7 @@ test("player access: public reader behavior preserved", { skip: !origin }, async
 
   context.after(async () => {
     await db.world.deleteMany({ where: { ownerId: owner.id } });
-    await db.user.delete({ where: { id: owner.id } });
+    await deleteTestUsers(db, owner.id);
     await db.$disconnect();
   });
 
@@ -410,7 +410,7 @@ test("explicit author declarations bind access to their declared identifier and 
   const foreignArticle = await db.article.create({ data: { worldId: foreignWorld.id, slug: `foreign-${stamp}`, title: "Foreign article" } });
   context.after(async () => {
     await db.world.deleteMany({ where: { id: { in: [ownWorld.id, foreignWorld.id] } } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, otherOwner.id] } } });
+    await deleteTestUsers(db, owner.id, otherOwner.id);
     await db.$disconnect();
   });
 
@@ -450,7 +450,7 @@ test("preview sessions resolve one shared actor and stay confined to the declare
   context.after(async () => {
     await db.accessAuditEvent.deleteMany({ where: { worldId: world.id } });
     await db.world.deleteMany({ where: { id: { in: [world.id, foreignWorld.id] } } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, player.id] } } });
+    await deleteTestUsers(db, owner.id, player.id);
     await db.$disconnect();
   });
 

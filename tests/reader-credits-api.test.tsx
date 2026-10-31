@@ -1,4 +1,4 @@
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { removeAssetFile, writeAsset } from "../src/lib/asset-storage";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -18,7 +18,7 @@ test("reader credits and image authorization follow publication and revocation",
   context.after(async () => {
     await removeAssetFile(assetId).catch(() => {});
     await db.world.deleteMany({ where: { ownerId: user.id } });
-    await db.user.delete({ where: { id: user.id } });
+    await deleteTestUsers(db, user.id);
     await db.$disconnect();
   });
   const owned = await authorFetch(db, user.id, origin!);

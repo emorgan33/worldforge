@@ -1,7 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { randomUUID } from "node:crypto";
 
 const db = new PrismaClient();
@@ -87,7 +87,7 @@ after(async () => {
   for (const uid of usersToDelete) {
     try {
       await db.authSession.deleteMany({ where: { userId: uid } });
-      await db.user.delete({ where: { id: uid } });
+      await deleteTestUsers(db, uid);
     } catch { /* ignore */ }
   }
   await db.$disconnect();

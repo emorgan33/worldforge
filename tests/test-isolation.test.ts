@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { assertIsolatedTestEnvironment } from "./auth-fixture";
+import { assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const rejectedByGuard = [
   "assets-api.test.tsx",
@@ -39,7 +39,7 @@ test("rejected test configuration and origin-unset skips preserve database and a
   const world = await db.world.create({ data: { ownerId: user.id, title: "Isolation sentinel", slug } });
   context.after(async () => {
     await db.world.deleteMany({ where: { id: world.id } });
-    await db.user.deleteMany({ where: { id: user.id } });
+    await deleteTestUsers(db, user.id);
     await db.$disconnect();
   });
 

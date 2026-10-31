@@ -5,7 +5,7 @@ import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { assetDirectory } from "../src/lib/asset-storage";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
@@ -29,7 +29,7 @@ test("world cleanup leaves shared assets and staged files untouched", { skip: !o
   await db.imageAsset.create({ data: { id: assetIds[2], worldId: worldB.id, title: "B", originalName: "b.webp", byteSize: 14, width: 1, height: 1, sha256: "c".repeat(64) } });
   context.after(async () => {
     await Promise.all([...fileBytes.keys()].map(id => rm(path.join(directory, `${id}.webp`), { force: true })));
-    await db.user.deleteMany({ where: { id: { in: [ownerA.id, ownerB.id] } } });
+    await deleteTestUsers(db, ownerA.id, ownerB.id);
     await db.$disconnect();
   });
 

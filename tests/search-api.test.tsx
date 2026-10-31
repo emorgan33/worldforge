@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
@@ -11,7 +11,7 @@ test("owner search finds body text, paginates, filters, and hides other campaign
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "Search fixture", email: `search-${stamp}@example.invalid` } });
   const outsider = await db.user.create({ data: { name: "Other search author", email: `search-out-${stamp}@example.invalid` } });
-  context.after(async () => { await db.user.deleteMany({ where: { id: { in: [owner.id, outsider.id] } } }); await db.$disconnect(); });
+  context.after(async () => { await deleteTestUsers(db, owner.id, outsider.id); await db.$disconnect(); });
   const world = await db.world.create({ data: { ownerId: owner.id, title: "Search world", slug: `search-${stamp}` } });
   const other = await db.world.create({ data: { ownerId: outsider.id, title: "Foreign search", slug: `search-out-${stamp}` } });
   const owned = await authorFetch(db, owner.id, origin!);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { assertIsolatedTestEnvironment } from "./auth-fixture";
+import { assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 test("world creation validates, retries concurrent requests, and allocates collision-safe slugs", { skip: !process.env.WORLD_CREATION_TEST_DATABASE_URL }, async () => {
   assertIsolatedTestEnvironment();
@@ -55,6 +55,6 @@ test("world creation validates, retries concurrent requests, and allocates colli
     const anotherNullKeyWorld = await prisma.world.create({ data: { ownerId: owner.id, title: "No key B", slug: `null-b-${randomUUID()}` } });
     assert.notEqual(nullKeyWorld.id, anotherNullKeyWorld.id);
   } finally {
-    await prisma.user.deleteMany({ where: { id: { in: [owner.id, otherOwner.id] } } });
+    await deleteTestUsers(prisma, owner.id, otherOwner.id);
   }
 });

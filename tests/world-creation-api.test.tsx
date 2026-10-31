@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
@@ -12,7 +12,7 @@ test("world collection API validates creation, authorizes PATCH targets, and ret
   const owner = await db.user.create({ data: { name: "World API owner", email: `world-api-${randomUUID()}@example.invalid` } });
   const otherOwner = await db.user.create({ data: { name: "World API other", email: `world-api-other-${randomUUID()}@example.invalid` } });
   const foreign = await db.world.create({ data: { ownerId: otherOwner.id, title: "Foreign", slug: `foreign-${randomUUID()}` } });
-  context.after(async () => { await db.user.deleteMany({ where: { id: { in: [owner.id, otherOwner.id] } } }); await db.$disconnect(); });
+  context.after(async () => { await deleteTestUsers(db, owner.id, otherOwner.id); await db.$disconnect(); });
   const owned = await authorFetch(db, owner.id, origin!);
   const requestId = randomUUID();
   const send = (payload: unknown, fetcher = owned) => fetcher(`${origin}/api/worlds`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });

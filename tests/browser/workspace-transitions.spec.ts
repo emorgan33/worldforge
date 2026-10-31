@@ -35,8 +35,10 @@ const test = base.extend<{ workspace: WorkspaceFixture }>({
       await run({ page, worldA: { id: worldA.id, title: worldA.title }, worldB: { id: worldB.id, title: worldB.title } });
     } finally {
       await Promise.all(context.pages().map(target => target.close()));
-      try { if (ownerId) await db.user.delete({ where: { id: ownerId } }); }
-      finally { await db.$disconnect(); }
+      try {
+        await db.world.deleteMany({ where: { ownerId } });
+        if (ownerId) await db.user.delete({ where: { id: ownerId } });
+      } finally { await db.$disconnect(); }
     }
   },
 });

@@ -4,7 +4,7 @@ import { test, type TestContext } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { addMember, createPolicy, issuePreviewSession, replaceSnapshotGrants, retroactiveGrant, revokeMember, revokePolicy, revokePreviewSession } from "../src/lib/membership";
 import { tokenHash } from "../src/lib/passwords";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
@@ -17,7 +17,7 @@ async function fixture(context: TestContext) {
   const world = await db.world.create({ data: { ownerId: owner.id, title: "R14 access operations", slug: `r14-${randomUUID()}` } });
   context.after(async () => {
     await db.world.deleteMany({ where: { id: world.id } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, playerA.id, playerB.id] } } });
+    await deleteTestUsers(db, owner.id, playerA.id, playerB.id);
     await db.$disconnect();
   });
   const article = await db.article.create({ data: { worldId: world.id, title: "R14 shared article", slug: `r14-article-${randomUUID()}` } });

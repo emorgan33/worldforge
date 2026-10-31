@@ -14,7 +14,7 @@ const httpFiles = new Set([
   "world-switch.test.tsx",
 ]);
 const productionOnlyFiles = new Set(["production-auth-smoke.test.ts"]);
-const servicePattern = /^(?:foundry-import-service|test-isolation|world-creation(?:-migration|-recovery)?|world-management|world-export-roundtrip|stock-art-storage|stock-advisories|stock-review-migration)\.test\.(?:ts|tsx)$/;
+const servicePattern = /^(?:foundry-import-service|test-isolation|world-creation(?:-migration|-recovery)?|world-management|world-export-roundtrip|stock-art-storage|stock-advisories|stock-review-migration|admin-migration|admin-accounts)\.test\.(?:ts|tsx)$/;
 
 if (!["all", "unit", "service", "http"].includes(category)) {
   throw new Error("Choose a test category: all, unit, service, or http.");

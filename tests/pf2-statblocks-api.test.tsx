@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 const origin=process.env.WORLDFORGE_TEST_ORIGIN;
 if(origin)assertIsolatedTestEnvironment();
 test("Pathfinder block types persist fields and enforce system/category combinations on partial updates",{skip:!origin},async context=>{
- const db=new PrismaClient();const owner=await db.user.create({data:{name:"PF layout fixture",email:`pf-layout-${Date.now()}@example.invalid`}});context.after(async()=>{await db.user.delete({where:{id:owner.id}});await db.$disconnect();});const world=await db.world.create({data:{ownerId:owner.id,title:"PF layouts",slug:`pf-layout-${owner.id}`,system:"PF_2E"}});const fetchOwned=await authorFetch(db,owner.id,origin!);
+ const db=new PrismaClient();const owner=await db.user.create({data:{name:"PF layout fixture",email:`pf-layout-${Date.now()}@example.invalid`}});context.after(async()=>{await deleteTestUsers(db, owner.id);await db.$disconnect();});const world=await db.world.create({data:{ownerId:owner.id,title:"PF layouts",slug:`pf-layout-${owner.id}`,system:"PF_2E"}});const fetchOwned=await authorFetch(db,owner.id,origin!);
  for(const category of ["MONSTER","NPC","HAZARD","FEAT","SPELL","ITEM","CLASS"]){const stats={level:0,rank:1,description:"Retained effect",customField:{keep:true},actions:[{name:"Ward",cost:"reaction",section:"defense",trigger:"Approach",desc:"Block"}]};const response=await fetchOwned(`${origin}/api/statblocks`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({worldId:world.id,name:`Fixture ${category}`,system:"PF_2E",category,stats})});assert.equal(response.status,201);const block=await response.json();assert.deepEqual(JSON.parse(block.statsJson),stats);const renamed=await fetchOwned(`${origin}/api/statblocks/${block.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:"Renamed"})});assert.equal(renamed.status,200);assert.deepEqual(JSON.parse((await renamed.json()).statsJson),stats);if(["HAZARD","FEAT"].includes(category))assert.equal((await fetchOwned(`${origin}/api/statblocks/${block.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:'{"system":"DND_5E"}'})).status,400);}
 });

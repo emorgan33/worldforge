@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test, type TestContext } from "node:test";
 import { PrismaClient, type Article } from "@prisma/client";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
@@ -10,7 +10,7 @@ if (origin) assertIsolatedTestEnvironment();
 async function fixture(context: TestContext) {
   const db = new PrismaClient();
   const owner = await db.user.create({ data: { name: "Revision fixture", email: `revision-${randomUUID()}@example.invalid` } });
-  context.after(async () => { await db.user.delete({ where: { id: owner.id } }); await db.$disconnect(); });
+  context.after(async () => { await deleteTestUsers(db, owner.id); await db.$disconnect(); });
   const world = await db.world.create({ data: { ownerId: owner.id, title: "Revision lifecycle", slug: randomUUID() } });
   const otherWorld = await db.world.create({ data: { ownerId: owner.id, title: "Other world", slug: randomUUID() } });
   const owned = await authorFetch(db, owner.id, origin!);

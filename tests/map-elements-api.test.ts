@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
@@ -14,7 +14,7 @@ test("map elements validate, persist, update, delete and stay owner-scoped", { s
   const other = await db.user.create({ data: { name: "Other owner", email: `map-other-${randomUUID()}@example.invalid` } });
   context.after(async () => {
     await db.world.deleteMany({ where: { ownerId: { in: [owner.id, other.id] } } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, other.id] } } });
+    await deleteTestUsers(db, owner.id, other.id);
     await db.$disconnect();
   });
 

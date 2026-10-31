@@ -35,7 +35,10 @@ const test = base.extend<{ article: { page: Page; db: PrismaClient; ownerId: str
       await run({ page, db, ownerId, worldId: world.id, id: article.id, keyFor, open });
     } finally {
       await Promise.all(context.pages().map(page => page.close()));
-      try { if (ownerId) await db.user.delete({ where: { id: ownerId } }); }
+      try {
+        await db.world.deleteMany({ where: { ownerId } });
+        if (ownerId) await db.user.delete({ where: { id: ownerId } });
+      }
       finally { await db.$disconnect(); }
     }
   },

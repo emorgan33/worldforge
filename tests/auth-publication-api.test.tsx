@@ -3,7 +3,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import sharp from "sharp";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { removeAssetFile } from "../src/lib/asset-storage";
 import { tokenHash } from "../src/lib/passwords";
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
@@ -13,7 +13,7 @@ test("owner sessions and public readers enforce drafts, private worlds, GM block
   const db = new PrismaClient(); const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "Publishing fixture", email: `publisher-${stamp}@example.invalid` } });
   const outsider = await db.user.create({ data: { name: "Other author", email: `outsider-${stamp}@example.invalid` } });
-  context.after(async () => { const assets = await db.imageAsset.findMany({ where: { world: { ownerId: owner.id } } }); for (const asset of assets) await removeAssetFile(asset.id); await db.user.deleteMany({ where: { id: { in: [owner.id, outsider.id] } } }); await db.$disconnect(); });
+  context.after(async () => { const assets = await db.imageAsset.findMany({ where: { world: { ownerId: owner.id } } }); for (const asset of assets) await removeAssetFile(asset.id); await deleteTestUsers(db, owner.id, outsider.id); await db.$disconnect(); });
   const world = await db.world.create({ data: { ownerId: owner.id, title: "Reader fixture", slug: `reader-${stamp}`, isPublic: true } });
   const parentCategory = await db.category.create({ data: { worldId: world.id, name: "Visible ancestor" } });
   const publicCategory = await db.category.create({ data: { worldId: world.id, parentId: parentCategory.id, name: "Visible category" } });
@@ -67,7 +67,7 @@ test("owner sessions and public readers enforce drafts, private worlds, GM block
 test("one-time account setup, local sign-in, CSRF checks, expiration and logout revocation", { skip: !origin }, async context => {
   const db = new PrismaClient(); const stamp = Date.now(); const email = `auth-${stamp}@example.invalid`;
   const user = await db.user.create({ data: { name: "Auth fixture", email } });
-  context.after(async () => { await db.user.delete({ where: { id: user.id } }); await db.$disconnect(); });
+  context.after(async () => { await deleteTestUsers(db, user.id); await db.$disconnect(); });
   const token = randomBytes(32).toString("base64url");
   await db.accountSetup.create({ data: { tokenHash: digest(token), userId: user.id, expiresAt: new Date(Date.now() + 60_000) } });
   const password = "Fixture passphrase for publishing 901!";

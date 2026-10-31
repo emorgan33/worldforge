@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch, assertIsolatedTestEnvironment } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { characterRowsKey } from "../src/lib/character-sheet";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
@@ -12,7 +12,7 @@ test("character sheets persist through edits, revisions and world export/import 
   const db = new PrismaClient();
   const owner = await db.user.create({ data: { name: "Sheet owner", email: `sheet-${randomUUID()}@example.invalid` } });
   const foreign = await db.user.create({ data: { name: "Other owner", email: `sheet-other-${randomUUID()}@example.invalid` } });
-  context.after(async () => { await db.user.deleteMany({ where: { id: { in: [owner.id, foreign.id] } } }); await db.$disconnect(); });
+  context.after(async () => { await deleteTestUsers(db, owner.id, foreign.id); await db.$disconnect(); });
   const owned = await authorFetch(db, owner.id, origin!);
   const other = await authorFetch(db, foreign.id, origin!);
   const send = (path: string, body: unknown, method = "POST") => owned(`${origin}${path}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
