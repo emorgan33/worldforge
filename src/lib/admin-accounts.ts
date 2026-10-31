@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { PrismaClient, User, InstallationAdminState, Prisma } from "@prisma/client";
 import type { AdminError, InstallationAuditAction } from "./admin-policy";
-import { activeAdmin, validateCreateAccountInput, validateStatusChangeInput } from "./admin-policy";
+import { activeAdmin, validateCreateAccountInput, validateRoleChangeInput, validateStatusChangeInput } from "./admin-policy";
 import { newToken, tokenHash } from "./passwords";
 import {
   appendInstallationAuditEvent,
@@ -322,5 +322,39 @@ export async function setAccountStatus(
       details: { disabled: input.disabled },
       reasonCode: input.disabled ? "DISABLED" : "ENABLED",
     };
+  });
+}
+
+export async function setAccountRole(
+  db: PrismaClient,
+  actor: AdminActor,
+  target: AdminMutationTarget,
+  body: Record<string, unknown>,
+): Promise<AdminMutationResult<{ userId: string }>> {
+  const input = validateRoleChangeInput(body);
+  if ("code" in input) return { ok: false, error: input };
+
+  return runAdminMutation(db, actor, target, "ROLE_CHANGE", async (ctx) => {
+    if (ctx.target.role === "ADMIN" && input.role !== "ADMIN") {
+      if (actor.userId != null && actor.userId === ctx.target.id) {
+        return { error: "You cannot demote your own account.", code: "SELF_CHANGE" };
+      }
+      const guardError = await assertNotLastActiveAdmin(ctx.tx, ctx.target);
+      if (guardError) return guardError;
+    }
+
+    if (input.role === "PLAYER" && await ctx.tx.world.count({ where: { ownerId: ctx.target.id } }) > 0) {
+      return { error: "Accounts owning worlds cannot become players.", code: "OWNS_WORLDS" };
+    }
+
+    const now = new Date();
+    await ctx.tx.user.update({ where: { id: ctx.target.id }, data: { role: input.role } });
+    await ctx.tx.authSession.deleteMany({ where: { userId: ctx.target.id } });
+    await ctx.tx.accountSetup.updateMany({ where: { userId: ctx.target.id, usedAt: null }, data: { usedAt: now } });
+    await ctx.tx.previewSession.updateMany({
+      where: { revokedAt: null, OR: [{ userId: ctx.target.id }, { issuedById: ctx.target.id }] },
+      data: { revokedAt: now },
+    });
+    return { value: { userId: ctx.target.id }, details: { role: input.role, previousRole: ctx.target.role } };
   });
 }
