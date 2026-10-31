@@ -30,12 +30,16 @@ export type AdminMutateResult<T> = { value: T; details?: AuditDetails; reasonCod
 
 export type AdminMutateFn<T> = (ctx: AdminMutateContext) => Promise<AdminMutateResult<T> | AdminError>;
 
-export type AdminMutationCheckpoint = (ctx: AdminMutateContext) => Promise<void>;
-
 export type AdminMutationOptions = {
   mode?: AdminMutationMode;
   appendAudit?: typeof appendInstallationAuditEvent;
   recordFailure?: typeof recordFailedAdminAttempt;
+};
+
+export type AdminMutationCheckpoint = (ctx: AdminMutateContext) => Promise<void>;
+
+/** @internal Test-only hooks; never pass from production callers. */
+export type AdminMutationTestOptions = AdminMutationOptions & {
   checkpoint?: AdminMutationCheckpoint;
 };
 
@@ -81,13 +85,14 @@ function isConcurrencyError(error: unknown): boolean {
   return /database is locked|busy|deadlock/i.test(message);
 }
 
-export async function runAdminMutation<T>(
+/** @internal Exposed for tests that need to prove ordering inside the transaction. */
+export async function _runAdminMutation<T>(
   db: PrismaClient,
   actor: AdminActor,
   target: AdminMutationTarget,
   action: InstallationAuditAction,
   mutate: AdminMutateFn<T>,
-  options?: AdminMutationOptions,
+  options?: AdminMutationTestOptions,
 ): Promise<AdminMutationResult<T>> {
   const mode = options?.mode ?? "default";
   const append = options?.appendAudit ?? appendInstallationAuditEvent;
@@ -184,4 +189,16 @@ export async function runAdminMutation<T>(
     }
     return { ok: false, error: { error: "Unable to complete this request.", code: "INTERNAL_ERROR" } };
   }
+}
+
+/** Production entry point for admin mutations. Tests needing ordering hooks should import `_runAdminMutation`. */
+export async function runAdminMutation<T>(
+  db: PrismaClient,
+  actor: AdminActor,
+  target: AdminMutationTarget,
+  action: InstallationAuditAction,
+  mutate: AdminMutateFn<T>,
+  options?: AdminMutationOptions,
+): Promise<AdminMutationResult<T>> {
+  return _runAdminMutation(db, actor, target, action, mutate, options);
 }

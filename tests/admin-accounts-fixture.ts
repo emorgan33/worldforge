@@ -1,7 +1,8 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path, { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
 import { tokenHash } from "../src/lib/passwords";
@@ -9,8 +10,29 @@ import type { AdminActor } from "../src/lib/admin-accounts";
 
 let baseDatabase: { dir: string; baseDb: string } | null = null;
 
+function isWithin(parent: string, candidate: string) {
+  const relative = path.relative(parent, candidate);
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+}
+
+function assertAdminTestIsolation(): void {
+  const databaseUrl = process.env.DATABASE_URL;
+  const assetDir = process.env.WORLDFORGE_ASSET_DIR;
+  if (databaseUrl !== undefined) {
+    const databasePath = databaseUrl.match(/^file:(.*?)(?:\?.*)?$/)?.[1];
+    if (!databasePath || !path.isAbsolute(databasePath) || !isWithin(tmpdir(), path.resolve(databasePath))) {
+      throw new Error("Admin unit fixtures require DATABASE_URL to point to an absolute SQLite file under the system temporary directory.");
+    }
+  }
+  if (assetDir !== undefined && (!path.isAbsolute(assetDir) || !isWithin(tmpdir(), path.resolve(assetDir)))) {
+    throw new Error("Admin unit fixtures require WORLDFORGE_ASSET_DIR to point under the system temporary directory.");
+  }
+}
+
 async function ensureBaseDatabase(): Promise<{ dir: string; baseDb: string }> {
   if (baseDatabase) return baseDatabase;
+  // Re-use the shared isolation backstop; admin unit tests do not need WORLD_CREATION_TEST_DATABASE_URL.
+  assertAdminTestIsolation();
   const tmpRoot = process.env.WORLD_TEST_TMP_ROOT || tmpdir();
   const dir = await mkdtemp(join(tmpRoot, "worldforge-admin-base-"));
   const baseDb = join(dir, "base.db");
@@ -26,6 +48,14 @@ async function ensureBaseDatabase(): Promise<{ dir: string; baseDb: string }> {
     throw new Error(`Base migration failed: ${result.stderr?.toString() ?? ""}\n${result.stdout?.toString() ?? ""}`);
   }
   baseDatabase = { dir, baseDb };
+  // Best-effort cleanup of the per-process module cache on exit.
+  process.on("exit", () => {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  });
   return baseDatabase;
 }
 

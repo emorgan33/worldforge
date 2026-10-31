@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { runAdminMutation, type AdminMutateContext } from "../src/lib/admin-accounts";
+import { runAdminMutation, _runAdminMutation, type AdminMutateContext } from "../src/lib/admin-accounts";
 import { appendInstallationAuditEvent, recordFailedAdminAttempt, sanitizeAuditDetails } from "../src/lib/admin-audit";
 import { isAdminError } from "../src/lib/admin-policy";
 import {
@@ -246,7 +246,7 @@ describe("admin-accounts mutation core", () => {
       let firstVersion: number | null = null;
       let secondVersion: number | null = null;
 
-      const first = runAdminMutation(db1, actor1, { userId: target1.id }, "STATUS_CHANGE", async (ctx) => {
+      const first = _runAdminMutation(db1, actor1, { userId: target1.id }, "STATUS_CHANGE", async (ctx) => {
         await ctx.tx.user.update({ where: { id: ctx.target.id }, data: { name: "First" } });
         return { value: {} };
       }, {
@@ -259,7 +259,7 @@ describe("admin-accounts mutation core", () => {
 
       await withTimeout(barrier.aEntered(), 5000);
 
-      const second = runAdminMutation(db2, actor2, { userId: target2.id }, "STATUS_CHANGE", async (ctx) => {
+      const second = _runAdminMutation(db2, actor2, { userId: target2.id }, "STATUS_CHANGE", async (ctx) => {
         await ctx.tx.user.update({ where: { id: ctx.target.id }, data: { name: "Second" } });
         return { value: {} };
       }, {
@@ -294,7 +294,7 @@ describe("admin-accounts mutation core", () => {
       const before = await db.user.findUniqueOrThrow({ where: { id: target.id } });
 
       const barrier = makeBarrier();
-      const first = runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, {
+      const first = _runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, {
         checkpoint: async () => {
           barrier.a.enter();
           await withTimeout(barrier.a.wait(), 5000);
@@ -335,7 +335,7 @@ describe("admin-accounts mutation core", () => {
       let firstVersion: number | null = null;
       let secondVersion: number | null = null;
 
-      const first = runAdminMutation(db1, actor1, { userId: target1.id }, "BOOTSTRAP", async (ctx) => {
+      const first = _runAdminMutation(db1, actor1, { userId: target1.id }, "BOOTSTRAP", async (ctx) => {
         await ctx.tx.user.update({ where: { id: ctx.target.id }, data: { name: "First" } });
         return { value: {} };
       }, {
@@ -348,7 +348,7 @@ describe("admin-accounts mutation core", () => {
 
       await withTimeout(barrier.aEntered(), 5000);
 
-      const second = runAdminMutation(db2, actor2, { userId: target2.id }, "BOOTSTRAP", async (ctx) => {
+      const second = _runAdminMutation(db2, actor2, { userId: target2.id }, "BOOTSTRAP", async (ctx) => {
         await ctx.tx.user.update({ where: { id: ctx.target.id }, data: { name: "Second" } });
         return { value: {} };
       }, {
