@@ -1138,6 +1138,37 @@ describe("admin session services", () => {
     } finally { await cleanup(); }
   });
 
+  it("does not disclose target existence to invalid actors in either read service", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor, user: admin } = await createAdminActor(db);
+      const target = await createTargetUser(db, { disabled: true });
+      const otherAdmin = await createTargetUser(db, { role: "ADMIN" });
+      const expired = new Date(Date.now() - 60_000);
+      const invalidActors = [
+        { label: "disabled", change: () => db.user.update({ where: { id: admin.id }, data: { disabledAt: new Date() } }), restore: () => db.user.update({ where: { id: admin.id }, data: { disabledAt: null } }), actor },
+        { label: "demoted", change: () => db.user.update({ where: { id: admin.id }, data: { role: "AUTHOR" } }), restore: () => db.user.update({ where: { id: admin.id }, data: { role: "ADMIN" } }), actor },
+        { label: "expired", change: () => db.authSession.update({ where: { id: actor.sessionId }, data: { expiresAt: expired } }), restore: () => db.authSession.update({ where: { id: actor.sessionId }, data: { expiresAt: new Date(Date.now() + 60_000) } }), actor },
+        { label: "identity mismatch", change: async () => {}, restore: async () => {}, actor: { ...actor, userId: otherAdmin.id } },
+        { label: "missing session", change: () => db.authSession.delete({ where: { id: actor.sessionId } }), restore: async () => {}, actor: { ...actor, sessionId: randomUUID() } },
+      ];
+      for (const invalid of invalidActors) {
+        await invalid.change();
+        for (const targetId of [target.id, randomUUID()]) {
+          const sessions = await listTargetSessions(db, invalid.actor, targetId);
+          const preview = await deletionPreview(db, invalid.actor, targetId);
+          assert.ok(!sessions.ok, `${invalid.label}: sessions must reject`);
+          assert.ok(!preview.ok, `${invalid.label}: preview must reject`);
+          assert.equal(sessions.error.code, "UNAUTHORIZED");
+          assert.equal(preview.error.code, "UNAUTHORIZED");
+          assert.equal("value" in sessions, false);
+          assert.equal("value" in preview, false);
+        }
+        await invalid.restore();
+      }
+    } finally { await cleanup(); }
+  });
+
   it("single revoke checks ownership and version while preserving other credentials", async () => {
     const { db, cleanup } = await createIsolatedDatabase();
     try {
@@ -1238,7 +1269,7 @@ describe("admin account deletion", () => {
     } finally { await cleanup(); }
   });
 
-  it("blocks durable revisions, foundry history and nonterminal imports", async () => {
+  it("blocks durable revisions, foundry history and every nonterminal or unknown import state", async () => {
     const { db, cleanup } = await createIsolatedDatabase();
     try {
       const { actor, user: owner } = await createAdminActor(db);
@@ -1247,13 +1278,13 @@ describe("admin account deletion", () => {
       const article = await db.article.create({ data: { worldId: world.id, title: "Article", slug: "article" } });
       const revision = await db.articleRevision.create({ data: { articleId: article.id, userId: user.id, title: "Article", slug: "article", publicationStatus: "DRAFT", visibility: "PRIVATE", state: "DRAFT", articleVersionAtSave: 1 } });
       const run = await db.foundryImportRun.create({ data: { worldId: world.id, authorId: user.id, previewId: randomUUID(), idempotencyKey: randomUUID(), requestHash: "hash", outcomesJson: "[]" } });
-      const pending = await db.worldTransferImport.create({ data: { ownerId: user.id, requestKey: randomUUID(), payloadHash: "hash", payloadJson: "{}", status: "RUNNING" } });
+      const imports = await Promise.all(["PENDING", "RUNNING", "RECOVERING", "UNKNOWN_FUTURE_STATE"].map((status) => db.worldTransferImport.create({ data: { ownerId: user.id, requestKey: randomUUID(), payloadHash: "hash", payloadJson: "{}", status } })));
       const preview = await deletionPreview(db, actor, user.id);
       assert.ok(preview.ok);
       assert.deepEqual(preview.value.revisionIds, [revision.id]);
       assert.deepEqual(preview.value.foundryImportIds, [run.id]);
-      assert.deepEqual(preview.value.pendingImportIds, [pending.id]);
-      for (const remove of [async () => db.articleRevision.delete({ where: { id: revision.id } }), async () => db.foundryImportRun.delete({ where: { id: run.id } }), async () => db.worldTransferImport.delete({ where: { id: pending.id } })]) {
+      assert.deepEqual(preview.value.pendingImportIds, imports.map(({ id }) => id).sort());
+      for (const remove of [async () => db.articleRevision.delete({ where: { id: revision.id } }), async () => db.foundryImportRun.delete({ where: { id: run.id } }), ...imports.map(({ id }) => async () => db.worldTransferImport.delete({ where: { id } }))]) {
         const result = await deleteAccount(db, actor, { userId: user.id, expectedVersion: 0 }, { confirmEmail: user.email, backupAcknowledged: true });
         assert.ok(!result.ok);
         assert.equal(result.error.code, "HAS_DURABLE_RECORDS");
@@ -1271,7 +1302,13 @@ describe("admin account deletion", () => {
       const world = await db.world.create({ data: { ownerId: admin.id, title: "Other", slug: `delete-${randomUUID()}`, isPublic: true } });
       const member = await db.worldMember.create({ data: { worldId: world.id, userId: user.id } });
       const policy = await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "ARTICLE", resourceId: randomUUID(), createdById: user.id } });
-      const grant = await db.audienceGrant.create({ data: { policyId: policy.id, userId: user.id } });
+      const grant = await db.audienceGrant.create({ data: { policyId: policy.id, userId: user.id, grantedById: user.id } });
+      const invitation = await db.playerInvitation.create({ data: { worldId: world.id, email: user.email, tokenHash: tokenHash(randomUUID()), expiresAt: new Date(Date.now() + 60_000), issuedById: user.id } });
+      const accessAudit = await db.accessAuditEvent.create({ data: { worldId: world.id, actorId: user.id, action: "TEST" } });
+      const issuedPreviewHash = tokenHash(randomUUID());
+      await db.previewSession.create({ data: { tokenHash: issuedPreviewHash, userId: admin.id, issuedById: user.id, worldId: world.id, expiresAt: new Date(Date.now() + 60_000) } });
+      const foundryPreview = await db.foundryPreview.create({ data: { worldId: world.id, authorId: user.id, metadataJson: "{}", candidatesJson: "[]", expiresAt: new Date(Date.now() + 60_000) } });
+      const terminalImports = await Promise.all(["COMPLETED", "FAILED"].map((status) => db.worldTransferImport.create({ data: { ownerId: user.id, requestKey: randomUUID(), payloadHash: "hash", payloadJson: "{}", status } })));
       const expiresAt = new Date(Date.now() + 60_000);
       await db.authSession.create({ data: { userId: user.id, tokenHash: tokenHash(randomUUID()), expiresAt } });
       await db.accountSetup.create({ data: { userId: user.id, tokenHash: tokenHash(randomUUID()), expiresAt } });
@@ -1285,6 +1322,15 @@ describe("admin account deletion", () => {
       assert.equal(await db.authSession.count({ where: { userId: user.id } }), 0);
       assert.equal(await db.accountSetup.count({ where: { userId: user.id } }), 0);
       assert.equal((await db.audiencePolicy.findUniqueOrThrow({ where: { id: policy.id } })).createdById, null);
+      const survivingGrant = await db.audienceGrant.findFirstOrThrow({ where: { policyId: policy.id } });
+      assert.equal(survivingGrant.grantedById, null);
+      assert.equal((await db.playerInvitation.findUniqueOrThrow({ where: { id: invitation.id } })).issuedById, null);
+      assert.equal((await db.accessAuditEvent.findUniqueOrThrow({ where: { id: accessAudit.id } })).actorId, null);
+      const survivingPreview = await db.previewSession.findUniqueOrThrow({ where: { tokenHash: issuedPreviewHash } });
+      assert.equal(survivingPreview.issuedById, null);
+      assert.ok(survivingPreview.revokedAt);
+      assert.equal(await db.foundryPreview.findUnique({ where: { id: foundryPreview.id } }), null);
+      for (const record of terminalImports) assert.equal(await db.worldTransferImport.findUnique({ where: { id: record.id } }), null);
       assert.deepEqual(await db.world.findUniqueOrThrow({ where: { id: world.id } }), world);
       const audit = await db.installationAuditEvent.findFirstOrThrow({ where: { targetIdSnapshot: user.id, action: "ACCOUNT_DELETE" } });
       assert.equal(audit.actorIdSnapshot, admin.id);
@@ -1314,30 +1360,26 @@ describe("admin account deletion", () => {
     } finally { await cleanup(); }
   });
 
-  it("recomputes blockers after a competing world creation", async () => {
+  it("recomputes ownership blockers after an independent world writer without a version bump", async () => {
     const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
     const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
     try {
       const { actor } = await createAdminActor(db);
       const user = await createTargetUser(db, { disabled: true });
-      const barrier = makeBarrier();
-      const writer = _runAdminMutation(db, actor, { userId: user.id }, "BOOTSTRAP", async ({ tx }) => {
-        await tx.world.create({ data: { ownerId: user.id, title: "Concurrent", slug: `delete-${randomUUID()}` } });
-        return { value: {} };
-      }, { checkpoint: async () => { barrier.a.enter(); await withTimeout(barrier.a.wait(), 5000); } });
-      await withTimeout(barrier.aEntered(), 5000);
-      // The creator increments accountVersion, so deletion must reject either stale state or the new world.
-      const deletion = deleteAccount(db2, actor, { userId: user.id, expectedVersion: 0 }, { confirmEmail: user.email, backupAcknowledged: true });
-      barrier.releaseA();
-      assert.equal((await writer).ok, true);
-      const result = await deletion;
+      const before = await deletionPreview(db, actor, user.id);
+      assert.ok(before.ok);
+      const version = before.value.accountVersion;
+      const created = await db2.world.create({ data: { ownerId: user.id, title: "Independent writer", slug: `delete-${randomUUID()}` } });
+      assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).accountVersion, version);
+      const result = await deleteAccount(db, actor, { userId: user.id, expectedVersion: version }, { confirmEmail: user.email, backupAcknowledged: true });
       assert.ok(!result.ok);
-      assert.ok(result.error.code === "STALE_ACCOUNT" || result.error.code === "OWNS_WORLDS");
+      assert.equal(result.error.code, "OWNS_WORLDS");
       assert.ok(await db.user.findUnique({ where: { id: user.id } }));
-      assert.equal(await db.world.count({ where: { ownerId: user.id } }), 1);
-      const refreshed = await deleteAccount(db, actor, { userId: user.id, expectedVersion: 1 }, { confirmEmail: user.email, backupAcknowledged: true });
-      assert.ok(!refreshed.ok);
-      assert.equal(refreshed.error.code, "OWNS_WORLDS");
+      assert.ok(await db.world.findUnique({ where: { id: created.id } }));
+      const after = await deletionPreview(db, actor, user.id);
+      assert.ok(after.ok);
+      assert.equal(after.value.accountVersion, version);
+      assert.deepEqual(after.value.worlds.map(({ id }) => id), [created.id]);
     } finally { await db2.$disconnect(); await cleanup(); }
   });
 });
