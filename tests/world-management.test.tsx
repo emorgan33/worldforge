@@ -15,6 +15,7 @@ test("world archive preserves settings, settings duplicate is private and empty,
   await writeFile(databasePath, "");
   execFileSync("pnpm", ["exec", "prisma", "db", "push", "--skip-generate", "--schema", "prisma/schema.prisma"], { encoding: "utf8", env: process.env });
   const { prisma } = await import("../src/lib/db");
+  await prisma.installationAdminState.upsert({ where: { id: 1 }, create: { id: 1 }, update: {} });
   const { archiveWorld, duplicateWorldSettings, drainAssetCleanupJobs, purgeArchivedWorld } = await import("../src/lib/world-management");
   const owner = await prisma.user.create({ data: { name: "Lifecycle test", email: `lifecycle-${randomUUID()}@example.invalid` } });
   const world = await prisma.world.create({ data: {

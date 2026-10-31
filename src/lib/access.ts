@@ -17,9 +17,14 @@ export async function resolveActor(): Promise<Actor> {
   if (previewToken) {
     const preview = await prisma.previewSession.findUnique({
       where: { tokenHash: tokenHash(previewToken) },
-      select: { userId: true, worldId: true, expiresAt: true, revokedAt: true, memberAtGrant: true },
+      select: {
+        userId: true, worldId: true, expiresAt: true, revokedAt: true, memberAtGrant: true,
+        user: { select: { disabledAt: true } },
+        issuedBy: { select: { disabledAt: true } },
+      },
     });
-    if (preview && preview.expiresAt > new Date() && !preview.revokedAt && preview.memberAtGrant) {
+    if (preview && preview.expiresAt > new Date() && !preview.revokedAt && preview.memberAtGrant &&
+      preview.user.disabledAt === null && (!preview.issuedBy || preview.issuedBy.disabledAt === null)) {
       return {
         kind: "PREVIEW",
         userId: preview.userId,

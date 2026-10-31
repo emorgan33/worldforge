@@ -89,3 +89,25 @@ test("existing author invitation preserves role and ownership; cancelled links c
   assert.equal((await invitedFetch(`${origin}/api/invitations/preview`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: expired.token }) })).status, 404);
   assert.equal((await invitedFetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: expired.token }) })).status, 404);
 });
+
+test("disabled existing invitees cannot claim membership or receive a session", { skip: !origin }, async context => {
+  const db = new PrismaClient();
+  const stamp = randomUUID();
+  const owner = await db.user.create({ data: { name: "Disabled-invite owner", email: `disabled-invite-owner-${stamp}@example.invalid` } });
+  const invited = await db.user.create({ data: { name: "Disabled invitee", email: `disabled-invitee-${stamp}@example.invalid`, disabledAt: new Date() } });
+  const world = await db.world.create({ data: { ownerId: owner.id, title: "Disabled invite world", slug: `disabled-invite-${stamp}` } });
+  context.after(async () => { await db.world.deleteMany({ where: { id: world.id } }); await deleteTestUsers(db, owner.id, invited.id); await db.$disconnect(); });
+  const gmFetch = await authorFetch(db, owner.id, origin!);
+  const invitationResponse = await gmFetch(`${origin}/api/worlds/${world.id}/invitations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: invited.email }) });
+  assert.equal(invitationResponse.status, 201);
+  const invitation = await invitationResponse.json();
+  const token = new URLSearchParams(new URL(invitation.claimUrl).hash.slice(1)).get("token")!;
+  const preview = await fetch(`${origin}/api/invitations/preview`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin! }, body: JSON.stringify({ token }) });
+  assert.equal(preview.status, 200);
+  assert.equal((await preview.json()).accountExists, true);
+  const claim = await fetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin! }, body: JSON.stringify({ token, name: "Should not be created", password: "long-enough-password" }) });
+  assert.equal(claim.status, 403);
+  assert.equal(await db.worldMember.count({ where: { worldId: world.id, userId: invited.id } }), 0);
+  assert.equal(await db.authSession.count({ where: { userId: invited.id } }), 0);
+  assert.equal((await db.playerInvitation.findUniqueOrThrow({ where: { id: invitation.invitation.id } })).claimedAt, null);
+});

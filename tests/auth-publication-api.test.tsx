@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { randomBytes, createHash } from "node:crypto";
+import { randomBytes, createHash, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import sharp from "sharp";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { removeAssetFile } from "../src/lib/asset-storage";
 import { tokenHash } from "../src/lib/passwords";
+import { hashPassword } from "../src/lib/passwords";
+import { setAccountStatus } from "../src/lib/admin-accounts";
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -105,4 +107,96 @@ test("one-time account setup, local sign-in, CSRF checks, expiration and logout 
   assert.equal(logout.status, 200, "logout succeeds even with an expired normal session");
   assert.ok((await db.previewSession.findUniqueOrThrow({ where: { tokenHash: digest(previewToken) } })).revokedAt);
   assert.match(logout.headers.get("set-cookie") || "", /wf_preview=/);
+});
+
+test("disabled accounts cannot use existing sessions, login, or setup; setup is email-bound and replaces credentials atomically", { skip: !origin }, async context => {
+  const db = new PrismaClient();
+  const stamp = randomUUID();
+  const password = "Disabled-account fixture passphrase 902!";
+  const disabled = await db.user.create({ data: { name: "Disabled auth fixture", email: `disabled-${stamp}@example.invalid`, passwordHash: await hashPassword(password), disabledAt: new Date() } });
+  const disabledSetupToken = randomBytes(32).toString("base64url");
+  const active = await db.user.create({ data: { name: "Setup-bound fixture", email: `setup-bound-${stamp}@example.invalid` } });
+  const setupToken = randomBytes(32).toString("base64url");
+  const priorSessionToken = randomBytes(32).toString("base64url");
+  await db.accountSetup.createMany({ data: [
+    { userId: disabled.id, tokenHash: digest(disabledSetupToken), expiresAt: new Date(Date.now() + 60_000) },
+    { userId: active.id, tokenHash: digest(setupToken), expiresAt: new Date(Date.now() + 60_000) },
+  ] });
+  const priorSession = await db.authSession.create({ data: { userId: active.id, tokenHash: digest(priorSessionToken), expiresAt: new Date(Date.now() + 60_000) } });
+  context.after(async () => { await deleteTestUsers(db, disabled.id, active.id); await db.$disconnect(); });
+
+  const cookie = `worldforge_session=${priorSessionToken}`;
+  assert.equal((await fetch(`${origin}/api/auth/session`, { headers: { Cookie: cookie } })).status, 200);
+  assert.equal((await (await fetch(`${origin}/api/auth/session`, { headers: { Cookie: cookie } })).json()).user.id, active.id);
+  const changedEmail = `changed-${stamp}@example.invalid`;
+  const setup = (token: string, email: string) => fetch(`${origin}/api/auth/setup`, {
+    method: "POST", headers: { "Content-Type": "application/json", Origin: origin! },
+    body: JSON.stringify({ token, email, password }),
+  });
+  assert.equal((await setup(setupToken, changedEmail)).status, 400);
+  assert.equal((await db.accountSetup.findUniqueOrThrow({ where: { tokenHash: digest(setupToken) } })).usedAt, null);
+  assert.equal((await db.user.findUniqueOrThrow({ where: { id: active.id } })).email, active.email);
+
+  const disabledSessionToken = randomBytes(32).toString("base64url");
+  await db.authSession.create({ data: { userId: disabled.id, tokenHash: digest(disabledSessionToken), expiresAt: new Date(Date.now() + 60_000) } });
+  const sessionResponse = await fetch(`${origin}/api/auth/session`, { headers: { Cookie: `worldforge_session=${disabledSessionToken}` } });
+  assert.equal((await sessionResponse.json()).user, null);
+  const sessionsBeforeLogin = await db.authSession.count({ where: { userId: disabled.id } });
+  const disabledLogin = await fetch(`${origin}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin! }, body: JSON.stringify({ email: disabled.email, password }) });
+  assert.equal(disabledLogin.status, 401);
+  assert.equal((await disabledLogin.json()).error, "Email or password is incorrect.");
+  assert.equal(await db.authSession.count({ where: { userId: disabled.id } }), sessionsBeforeLogin);
+  assert.equal((await setup(disabledSetupToken, disabled.email)).status, 400);
+  assert.equal((await db.accountSetup.findUniqueOrThrow({ where: { tokenHash: digest(disabledSetupToken) } })).usedAt, null);
+
+  const success = await setup(setupToken, active.email);
+  assert.equal(success.status, 200);
+  const setCookie = success.headers.get("set-cookie") || "";
+  assert.match(setCookie, /HttpOnly/i);
+  assert.equal(await db.authSession.findUnique({ where: { id: priorSession.id } }), null);
+  assert.equal(await db.authSession.count({ where: { userId: active.id } }), 1);
+  const saved = await db.user.findUniqueOrThrow({ where: { id: active.id } });
+  assert.equal(saved.email, active.email);
+  assert.ok(saved.lastSignInAt);
+  assert.equal((await db.accountSetup.findUniqueOrThrow({ where: { tokenHash: digest(setupToken) } })).usedAt !== null, true);
+});
+
+test("login and setup races with disable cannot leave sessions on a disabled account", { skip: !origin }, async context => {
+  const db = new PrismaClient();
+  const stamp = randomUUID();
+  const admin = await db.user.create({ data: { name: "Lifecycle admin", email: `lifecycle-admin-${stamp}@example.invalid`, role: "ADMIN" } });
+  const adminToken = randomBytes(32).toString("base64url");
+  const adminSession = await db.authSession.create({ data: { userId: admin.id, tokenHash: digest(adminToken), expiresAt: new Date(Date.now() + 60_000) } });
+  const actor = { type: "WEB_ADMIN" as const, userId: admin.id, sessionId: adminSession.id };
+  const password = "Lifecycle race fixture passphrase 903!";
+  const loginTarget = await db.user.create({ data: { name: "Login race", email: `login-race-${stamp}@example.invalid`, passwordHash: await hashPassword(password) } });
+  const setupTarget = await db.user.create({ data: { name: "Setup race", email: `setup-race-${stamp}@example.invalid` } });
+  const setupToken = randomBytes(32).toString("base64url");
+  await db.accountSetup.create({ data: { userId: setupTarget.id, tokenHash: digest(setupToken), expiresAt: new Date(Date.now() + 60_000) } });
+  context.after(async () => { await deleteTestUsers(db, admin.id, loginTarget.id, setupTarget.id); await db.$disconnect(); });
+
+  const loginRequest = fetch(`${origin}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin!, "X-WorldForge-Client-IP": `192.0.2.${Math.floor(Math.random() * 200) + 1}` }, body: JSON.stringify({ email: loginTarget.email, password }) });
+  const loginDisable = setAccountStatus(db, actor, { userId: loginTarget.id, expectedVersion: 0 }, { disabled: true });
+  const [loginResponse, loginMutation] = await Promise.all([loginRequest, loginDisable]);
+  const finalLoginTarget = await db.user.findUniqueOrThrow({ where: { id: loginTarget.id } });
+  const loginSessions = await db.authSession.count({ where: { userId: loginTarget.id } });
+  if (loginMutation.ok) {
+    assert.ok(finalLoginTarget.disabledAt);
+    assert.equal(loginSessions, 0);
+  } else {
+    assert.equal(loginMutation.error.code, "CONCURRENCY_CONFLICT");
+    assert.equal(finalLoginTarget.disabledAt, null);
+  }
+  assert.ok(loginResponse.status === 200 || loginResponse.status === 401);
+
+  const setupRequest = fetch(`${origin}/api/auth/setup`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin! }, body: JSON.stringify({ token: setupToken, email: setupTarget.email, password }) });
+  const setupDisable = setAccountStatus(db, actor, { userId: setupTarget.id, expectedVersion: 0 }, { disabled: true });
+  const [setupResponse, setupMutation] = await Promise.all([setupRequest, setupDisable]);
+  const finalSetupTarget = await db.user.findUniqueOrThrow({ where: { id: setupTarget.id } });
+  const setupSessions = await db.authSession.count({ where: { userId: setupTarget.id } });
+  assert.equal(finalSetupTarget.disabledAt !== null && setupSessions > 0, false, "disable and setup serialize so disabled accounts never retain a session");
+  if (finalSetupTarget.disabledAt) assert.equal(setupResponse.status, 400);
+  if (setupResponse.status === 200) assert.equal(finalSetupTarget.disabledAt, null, "setup winning the lock makes the stale disable fail rather than leave a disabled live session");
+  if (setupMutation.ok) assert.ok(finalSetupTarget.disabledAt);
+  else assert.ok(["STALE_ACCOUNT", "CONCURRENCY_CONFLICT"].includes(setupMutation.error.code));
 });

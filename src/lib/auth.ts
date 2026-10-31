@@ -2,6 +2,8 @@ import { unstable_rethrow } from "next/navigation";
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { prisma } from "./db";
+import type { Prisma } from "@prisma/client";
+import { AccountEligibilityError, requireActiveAccount, withAccountLifecycleLock } from "./account-lifecycle";
 import { newToken, tokenHash } from "./passwords";
 import { SESSION_COOKIE, SESSION_SECONDS } from "./auth-constants";
 import { AccessError, resolveResourceWorld, sameOrigin, sessionUser, type ResourceKind } from "./authorization-core";
@@ -22,15 +24,41 @@ export async function ownedArchivedWorld(worldId: unknown, userId?: string) {
 
 export async function issueSession(userId: string, request: Request) {
   const token = newToken();
-  await prisma.authSession.create({ data: { userId, tokenHash: tokenHash(token), expiresAt: new Date(Date.now() + SESSION_SECONDS * 1000) } });
+  const expiresAt = new Date(Date.now() + SESSION_SECONDS * 1000);
+  try {
+    await withAccountLifecycleLock(prisma, async (tx) => {
+      await requireActiveAccount(tx, userId);
+      await createSessionRecord(tx, userId, token, expiresAt);
+    });
+  } catch (error) {
+    if (error instanceof AccountEligibilityError) return false;
+    throw error;
+  }
+  setSessionCookie(token, request);
+  return true;
+}
+
+export async function createSessionRecord(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  token: string,
+  expiresAt: Date,
+) {
+  await tx.user.update({ where: { id: userId }, data: { lastSignInAt: new Date() } });
+  await tx.authSession.create({ data: { userId, tokenHash: tokenHash(token), expiresAt } });
+}
+
+export async function setSessionCookie(token: string, request: Request) {
   (await cookies()).set(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: (process.env.WORLDFORGE_ORIGIN || request.url).startsWith("https:"), path: "/", maxAge: SESSION_SECONDS });
 }
 
 export async function revokeSession() {
   const jar = await cookies(); const token = jar.get(SESSION_COOKIE)?.value;
   const previewToken = jar.get("wf_preview")?.value;
-  if (token) await prisma.authSession.deleteMany({ where: { tokenHash: tokenHash(token) } });
-  if (previewToken) await prisma.previewSession.updateMany({ where: { tokenHash: tokenHash(previewToken), revokedAt: null }, data: { revokedAt: new Date() } });
+  if (token || previewToken) await withAccountLifecycleLock(prisma, async (tx) => {
+    if (token) await tx.authSession.deleteMany({ where: { tokenHash: tokenHash(token) } });
+    if (previewToken) await tx.previewSession.updateMany({ where: { tokenHash: tokenHash(previewToken), revokedAt: null }, data: { revokedAt: new Date() } });
+  });
   jar.delete(SESSION_COOKIE);
   jar.delete("wf_preview");
 }

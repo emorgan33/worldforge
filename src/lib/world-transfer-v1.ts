@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { WorldExportV1 } from "@/lib/world-export";
 import { remapArticleMetadata } from "@/lib/metadata-references";
 import { importedWorldSlug, remapWorldAssetUrls, remapWorldReferenceId, worldTransferSlugsValid } from "@/lib/world-transfer-adapters";
+import { requireActiveAuthor, withAccountLifecycleLock } from "@/lib/account-lifecycle";
 
 export interface WorldTransferExecutionResult {
   worldId: string;
@@ -22,8 +23,11 @@ let slug = v1Body.world.slug;
   const newWorldId = identity?.worldId ?? randomUUID();
   const createdAssetFiles: string[] = [];
   try {
-  await prisma.world.create({
-    data: { id: newWorldId, slug, title: v1Body.world.title, description: v1Body.world.description, genre: v1Body.world.genre || "Fantasy", system: v1Body.world.system || "DND_5E", isPublic: false, coverImage: null, bannerImage: null, appearance: v1Body.world.appearance, ownerId },
+  await withAccountLifecycleLock(prisma, async (tx) => {
+    await requireActiveAuthor(tx, ownerId);
+    await tx.world.create({
+      data: { id: newWorldId, slug, title: v1Body.world.title, description: v1Body.world.description, genre: v1Body.world.genre || "Fantasy", system: v1Body.world.system || "DND_5E", isPublic: false, coverImage: null, bannerImage: null, appearance: v1Body.world.appearance, ownerId },
+    });
   });
 
   const categoryIdMap = new Map<string, string>();

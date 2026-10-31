@@ -26,9 +26,10 @@ export async function sessionUser() {
   if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
   const session = await prisma.authSession.findUnique({
     where: { tokenHash: tokenHash(token) },
-    select: { expiresAt: true, user: { select: { id: true, email: true, name: true, role: true } } },
+    select: { expiresAt: true, user: { select: { id: true, email: true, name: true, role: true, disabledAt: true } } },
   });
-  return session && session.expiresAt > new Date() ? session.user : null;
+  if (!session || session.expiresAt <= new Date() || session.user.disabledAt !== null) return null;
+  return { id: session.user.id, email: session.user.email, name: session.user.name, role: session.user.role };
 }
 
 export function sameOrigin(request: Request) {

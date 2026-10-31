@@ -5,6 +5,7 @@ import { importWorldV1, type WorldTransferExecutionResult } from "@/lib/world-tr
 import { exportWorldV1 } from "@/lib/world-transfer-v1-export";
 import { createHash } from "node:crypto";
 import { removeAssetFile } from "@/lib/asset-storage";
+import { requireActiveAuthor, withAccountLifecycleLock } from "@/lib/account-lifecycle";
 
 export type WorldTransferImportResult =
   | ({ success: true } & WorldTransferExecutionResult)
@@ -49,7 +50,10 @@ export async function executeWorldTransfer(decoded: DecodedWorldTransfer, ownerI
         categories, articles, assets, statblocks, secrets, timelines, variableCollections,
       } };
     }
-    await prisma.world.deleteMany({ where: { id: importIdentity.worldId, ownerId } });
+    await withAccountLifecycleLock(prisma, async (tx) => {
+      await requireActiveAuthor(tx, ownerId);
+      await tx.world.deleteMany({ where: { id: importIdentity.worldId, ownerId } });
+    });
     for (const asset of canonical.assets ?? []) await removeAssetFile(importIdentity.assetId(asset.id));
     await prisma.assetCleanupJob.deleteMany({ where: { assetId: { in: (canonical.assets ?? []).map(asset => importIdentity.assetId(asset.id)) } } });
   }

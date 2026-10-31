@@ -469,4 +469,9 @@ test("preview sessions resolve one shared actor and stay confined to the declare
   const outsidePreview = await fetch(`${origin}/c/${foreignWorld.slug}`, { headers: previewCookie });
   const outsideBody = await outsidePreview.text();
   assert(!outsideBody.includes(foreignWorld.title));
+  await db.user.update({ where: { id: player.id }, data: { disabledAt: new Date() } });
+  assert.equal((await fetch(`${origin}/c/${world.slug}/a/${article.slug}`, { headers: previewCookie })).status, 404, "disabled preview subject loses capability immediately");
+  await db.user.update({ where: { id: player.id }, data: { disabledAt: null } });
+  await db.user.update({ where: { id: owner.id }, data: { disabledAt: new Date() } });
+  assert.equal((await fetch(`${origin}/c/${world.slug}/a/${article.slug}`, { headers: previewCookie })).status, 404, "disabled preview issuer loses capability immediately");
 });

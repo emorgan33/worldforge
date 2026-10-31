@@ -15,8 +15,8 @@ export async function POST(request: Request) {
     if (!user?.passwordHash || !verified) {
       return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
     }
+    if (!await issueSession(user.id, request)) return Response.json({ error: "Email or password is incorrect." }, { status: 401, headers: { "Cache-Control": "no-store" } });
     await releaseSuccessfulLogin(email, source);
-    await issueSession(user.id, request);
     return Response.json({ success: true }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return Response.json({ error: error instanceof AccessError ? error.message : "Unable to sign in." }, { status: error instanceof AccessError ? error.status : 400 }); }
 }

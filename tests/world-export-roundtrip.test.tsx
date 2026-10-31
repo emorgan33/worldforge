@@ -53,6 +53,11 @@ test("v4 roundtrip preserves timeline eras and ordered ink/erase/ink drawings", 
   assert.equal(bundle.timelines.find(item => item.id === era.timelineId)?.eras[0].name, "Dawn");
   assert.equal(bundle.timelines.find(item => item.id === era.timelineId)?.events[0].eraId, era.id);
   assert.deepEqual(bundle.maps?.find(item => item.id === map.id)?.elements.map(element => element.style), ["{\"color\":\"red\",\"strokeWidth\":3}", "{\"erase\":true,\"strokeWidth\":16}", "{\"color\":\"#3b82f6\"}"]);
+  const worldCountBeforeDeniedImport = await db.world.count({ where: { ownerId } });
+  await db.user.update({ where: { id: ownerId }, data: { disabledAt: new Date() } });
+  await assert.rejects(() => exportService.importWorldV2(bundle, ownerId, async slug => !!await db.world.findUnique({ where: { slug } })), /not eligible/i);
+  assert.equal(await db.world.count({ where: { ownerId } }), worldCountBeforeDeniedImport, "a disabled author cannot create an import root world");
+  await db.user.update({ where: { id: ownerId }, data: { disabledAt: null } });
   const restored = await exportService.importWorldV2(bundle, ownerId, async slug => !!await db.world.findUnique({ where: { slug } }));
   assert.equal(restored.success, true);
   const restoredTimeline = await db.timeline.findFirstOrThrow({ where: { worldId: restored.worldId, title: `Era timeline ${stamp}` }, include: { eras: true, events: true } });

@@ -9,6 +9,7 @@ import { remapArticleMetadata } from "@/lib/metadata-references";
 import { importedWorldSlug, remapWorldAssetUrls, worldTransferSlugsValid } from "@/lib/world-transfer-adapters";
 import type { JSONContent } from "@tiptap/core";
 import { normalizeMapGeometry, normalizeMapStyle } from "./map-elements";
+import { requireActiveAuthor, withAccountLifecycleLock } from "@/lib/account-lifecycle";
 
 // ---------------------------------------------------------------------------
 // v1 Manifest (re-exported for type checking)
@@ -451,17 +452,20 @@ export async function importWorldV2(
   const newWorldId = identity?.worldId ?? randomUUID();
   const createdAssetFiles: string[] = [];
   try {
-  await prisma.world.create({
-    data: {
-      id: newWorldId, slug, title: data.world.title,
-      description: data.world.description,
-      genre: data.world.genre || "Fantasy",
-      system: data.world.system || "DND_5E",
-      isPublic: false, coverImage: null, bannerImage: null,
-      coverImageAlt: data.world.coverImageAlt ?? null, bannerImageAlt: data.world.bannerImageAlt ?? null,
-      appearance: data.world.appearance,
-      ownerId: ownerUserId,
-    },
+  await withAccountLifecycleLock(prisma, async (tx) => {
+    await requireActiveAuthor(tx, ownerUserId);
+    await tx.world.create({
+      data: {
+        id: newWorldId, slug, title: data.world.title,
+        description: data.world.description,
+        genre: data.world.genre || "Fantasy",
+        system: data.world.system || "DND_5E",
+        isPublic: false, coverImage: null, bannerImage: null,
+        coverImageAlt: data.world.coverImageAlt ?? null, bannerImageAlt: data.world.bannerImageAlt ?? null,
+        appearance: data.world.appearance,
+        ownerId: ownerUserId,
+      },
+    });
   });
 
   const categoryIdMap = new Map<string, string>();
