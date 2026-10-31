@@ -13,6 +13,7 @@ export default function AdminUsersPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const errorRef = useRef<HTMLParagraphElement>(null);
+  const requestSeq = useRef(0);
 
   const [searchDraft, setSearchDraft] = useState("");
   const [roleDraftFilter, setRoleDraftFilter] = useState("");
@@ -33,19 +34,26 @@ export default function AdminUsersPage() {
   useEffect(() => {
     if (!setupLink) return;
     const clear = () => setSetupLink(null);
-    window.addEventListener("pagehide", clear);
-    window.addEventListener("pageshow", (event) => {
+    const onPageShow = (event: PageTransitionEvent) => {
       if (event.persisted) clear();
-    });
+    };
+    const onClick = (event: MouseEvent) => {
+      if ((event.target as Element | null)?.closest("a[href]")) clear();
+    };
+    window.addEventListener("pagehide", clear);
+    window.addEventListener("pageshow", onPageShow);
     window.addEventListener("popstate", clear);
+    document.addEventListener("click", onClick, true);
     return () => {
       window.removeEventListener("pagehide", clear);
-      window.removeEventListener("pageshow", clear);
+      window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("popstate", clear);
+      document.removeEventListener("click", onClick, true);
     };
   }, [setupLink]);
 
   async function loadUsers(cursor?: string | null, replace = true, filters = { search, role, status }) {
+    const requestId = ++requestSeq.current;
     if (cursor) setLoadingMore(true);
     else setLoading(true);
     setError("");
@@ -62,6 +70,7 @@ export default function AdminUsersPage() {
       } catch {
         data = {};
       }
+      if (requestId !== requestSeq.current) return;
       if (!response.ok) {
         setError(data.error || "Unable to load accounts.");
         return;
@@ -69,10 +78,12 @@ export default function AdminUsersPage() {
       setUsers((previous) => (replace ? data.users || [] : [...previous, ...(data.users || [])]));
       setNextCursor(data.nextCursor ?? null);
     } catch {
+      if (requestId !== requestSeq.current) return;
       setError("Unable to confirm this request. The account list has been refreshed; retry if needed.");
       try {
         const response = await fetch("/api/admin/users");
         const data = await response.json();
+        if (requestId !== requestSeq.current) return;
         if (response.ok) {
           setUsers(data.users || []);
           setNextCursor(data.nextCursor ?? null);
@@ -81,8 +92,10 @@ export default function AdminUsersPage() {
         // Leave the current list in place; controls are restored below.
       }
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (requestId === requestSeq.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   }
 
@@ -109,16 +122,23 @@ export default function AdminUsersPage() {
         body: JSON.stringify(form),
       });
       let data: { user?: SafeAccount; setup?: SetupLink; error?: string } = {};
+      let parseFailed = false;
       try {
         data = await response.json();
       } catch {
+        parseFailed = true;
         data = {};
       }
       if (!response.ok) {
         setError(data.error || "Unable to create account.");
         return;
       }
-      if (data.user) setUsers((previous) => [data.user as SafeAccount, ...previous]);
+      if (parseFailed || !data.user || !data.setup?.url) {
+        await loadUsers();
+        setError("Unable to confirm whether account creation succeeded. The list has been refreshed; do not resubmit until you verify whether it succeeded.");
+        return;
+      }
+      setUsers((previous) => [data.user as SafeAccount, ...previous]);
       if (data.setup) setSetupLink(data.setup);
       setForm({ email: "", name: "", role: "AUTHOR" });
       setShowCreate(false);
@@ -264,7 +284,7 @@ export default function AdminUsersPage() {
         <div className="md:col-span-4">
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || loadingMore}
             className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
           >
             Apply filters
