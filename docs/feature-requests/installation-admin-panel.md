@@ -133,6 +133,101 @@ Dependencies: P1 → P2 → P3 → P4 → P5 → P6 → P7 → P8. Keep schema e
 
 For smaller prompts, split P2 into create/recovery, status/role, sessions, and deletion service commits; split P7 into list/detail shell, action forms, and audit/deletion views. Keep each subtask's tests with it. Do not parallelize edits to auth services or schema.
 
+### P2 breakdown — transaction services and audit
+
+P2 delivers domain services only. Each subtask is one reviewed commit that fits one coding session. Scope fence (nothing here may be silently dropped or pulled forward):
+
+- No schema edits: P1 owns the schema. If a subtask proves a schema defect, stop and make an explicit follow-up migration plus a contract update in this document, as the P1→P2 dependency rule requires.
+- No HTTP routes, DTO marshalling, or status-code mapping: routes are P5/P6. Services return `AdminError` values with the stable codes from `admin-policy.ts`; routes map codes to statuses later.
+- No integration into `sessionUser()`, login, setup consumption, invitations, or world create/import transactions: that is P3. P2 performs and tests the database-level credential invalidation itself (deleting sessions/links, revoking previews); request-level enforcement comes in P3.
+- No CLI commands or scripts: P4. P2 services must stay callable with a `LOCAL_OPERATOR` actor and injected database client so P4 can reuse them without refactor.
+- Two-client races use two independent `PrismaClient` instances against isolated temporary SQLite storage with controlled barriers, never timing sleeps, per CONTRIBUTING.md. All subtask checks run with `pnpm test:service` (plus `pnpm test:unit` for pure logic and `pnpm lint`).
+
+Shared conventions for every subtask: services live in `src/lib/admin-accounts.ts` and `src/lib/admin-audit.ts` with domain operations kept out of route files; every mutation follows the documented transaction order (singleton lock; reload actor and target; expectedVersion and precondition checks; allowlisted writes; increment target `accountVersion`; append success audit; commit); raw tokens and password hashes are generated outside transactions and eligibility is revalidated inside; successful mutation and its audit event commit together.
+
+| ID | Deliverable and main files | Depends on | Individual review required |
+| --- | --- | --- | --- |
+| P2.1 | Mutation core, singleton serialization, audit service: `src/lib/admin-audit.ts`, core scaffold in `src/lib/admin-accounts.ts`, two-client test harness, `tests/admin-accounts.test.ts` | P1 | Yes — concurrency protocol and audit atomicity |
+| P2.2 | Account create and recovery-link issuance services in `src/lib/admin-accounts.ts` | P2.1 | Yes — credential issuance (may share the P1–P3 checkpoint review) |
+| P2.3 | Status change (disable/enable) service with last-admin guard and credential invalidation | P2.1 | Yes — last-admin concurrency and bulk credential invalidation |
+| P2.4 | Role change service with ownership and last-admin guards | P2.3 | Yes — authorization and last-admin (shares P2.3's guard review) |
+| P2.5 | Session listing, single revoke, and revoke-all services | P2.1 | Yes — credentials (may share the P1–P3 checkpoint review) |
+| P2.6 | Deletion preview and delete services with in-transaction blocker recomputation | P2.1 | Yes — deletion, foreign keys, race |
+
+#### P2.1 — Mutation core, singleton serialization, and append-only audit
+
+Behavior delivered: a `runAdminMutation` scaffold in `src/lib/admin-accounts.ts` implementing the documented transaction order inside a single interactive Prisma transaction — bump `InstallationAdminState.version` first (serializing lifecycle decisions on the database write lock), reload the actor's session and recheck expiry, `role === ADMIN`, and `disabledAt === null` for `WEB_ADMIN` actors (a request that waited behind a demotion, disable, or revocation must fail), reload the target and compare `expectedVersion` when supplied, run the subtask's allowlisted writes, increment the target's `accountVersion`, and insert the success `InstallationAuditEvent` in the same transaction. `LOCAL_OPERATOR` actors skip the session recheck but still serialize on the singleton. `src/lib/admin-audit.ts` provides the in-transaction append, the separate-transaction failure audit used after a rollback (authenticated admin attempts only, sanitized `REJECTED`/`FAILED` outcome), bounded reason codes, and allowlisted details JSON only — never request bodies, passwords, cookies, tokens, token hashes, bearer URLs, or arbitrary exception text. SQLite busy/transaction conflicts return a bounded, retryable `CONCURRENCY_CONFLICT` error; an uncertain committed action is never blindly repeated. Also delivers the two-client test harness (isolated database, barrier utility, `deleteTestUsers` cleanup) reused by P2.2–P2.6.
+
+Files affected: new `src/lib/admin-audit.ts`, new `src/lib/admin-accounts.ts`, new `tests/admin-accounts.test.ts`.
+
+Dependencies: P1 (schema, `admin-policy.ts`, `InstallationAdminState`, `InstallationAuditEvent`).
+
+Focused tests and completion criteria: audit insertion failure rolls back the mutation; a rejected mutation records a sanitized failure audit in a separate transaction and returns a generic error; a `WEB_ADMIN` actor whose session was demoted, disabled, expired, or revoked between request and transaction fails inside the transaction; `LOCAL_OPERATOR` mutations serialize but skip the session recheck; two independent clients serialize on the singleton (the second writer observes the first's version bump); failure-audit persistence failure returns a generic error without leaking detail; sanitization assertions prove no token, hash, or body text reaches audit details; all pass under `pnpm test:service` on isolated storage.
+
+Suggested commit: `P2.1: admin mutation core, singleton serialization, and audit service`.
+
+#### P2.2 — Account create and recovery-link issuance services
+
+Behavior delivered: `createAccount` validates input through `admin-policy.ts` (`validateCreateAccountInput`), generates the raw setup token and its hash outside the transaction, then inside the serialized transaction rechecks the actor, rejects duplicate normalized email with `DUPLICATE_EMAIL`, creates the AUTHOR or PLAYER account, invalidates the target's previous unused `AccountSetup` links, and audits `ACCOUNT_CREATE`. A PLAYER account is created with no campaign membership or grant. `issueRecovery` rechecks that the target is active (`ACCOUNT_DISABLED` otherwise), invalidates previous unused links, keeps the 24-hour TTL, stores only the hash, and audits `ACCOUNT_RECOVERY`; it does not revoke existing sessions. Both return the one-time token and expiry to the caller only — URL construction and the ephemeral panel are P6/P7 — and neither token nor hash ever reaches an audit row or log line. Missing targets return `NOT_FOUND`.
+
+Files affected: `src/lib/admin-accounts.ts`, `tests/admin-accounts.test.ts`.
+
+Dependencies: P2.1 (mutation core and audit service).
+
+Focused tests and completion criteria: AUTHOR and PLAYER creation produce correct roles and `setupPending`; duplicate email returns `DUPLICATE_EMAIL`; issuing a new link invalidates all earlier unused links for that account; recovery for a disabled target is rejected; recovery issuance alone leaves existing sessions intact; created PLAYER rows have no membership/grant rows; audit rows carry the right action/outcome and contain no hash or token; stale-version and actor-recheck paths behave per the core.
+
+Suggested commit: `P2.2: admin account create and recovery link services`.
+
+#### P2.3 — Status change (disable/enable) service
+
+Behavior delivered: `setAccountStatus` implements disable and enable. Disable rejects self-disable with `SELF_CHANGE`, rejects removing the last active admin with `LAST_ADMIN` (active-admin count read inside the serialized transaction, after the singleton lock), and otherwise clears nothing but `disabledAt` plus credential invalidation: delete all `AuthSession` rows for the target, invalidate all unused `AccountSetup` links, and revoke `PreviewSession` rows where the target is subject (`userId`) or issuer (`issuedById`) — while preserving worlds, publication settings, memberships, and grants untouched. Enable only clears `disabledAt`; it never recreates or restores any credential deleted by disable, so the account signs in again only with its existing password. Both paths bump `accountVersion` and audit `STATUS_CHANGE` with outcome and reason code. Extract the last-active-admin assertion as a shared guard helper for reuse by P2.4.
+
+Files affected: `src/lib/admin-accounts.ts`, `tests/admin-accounts.test.ts`.
+
+Dependencies: P2.1 (mutation core and audit service).
+
+Focused tests and completion criteria: disable with live sessions, preview rows as subject and issuer, and setup links present removes/revokes every one while world, publication, and membership rows are byte-identical before/after; re-enable clears only `disabledAt` and creates no session, link, or preview; self-disable returns `SELF_CHANGE`; stale `expectedVersion` returns `STALE_ACCOUNT`; the two-client last-admin race — two active admins racing opposing disables through independent clients with a controlled barrier — always leaves at least one active admin; the core actor recheck rejects a disabled actor mid-transaction.
+
+Suggested commit: `P2.3: admin account status service with last-admin guard`.
+
+#### P2.4 — Role change service
+
+Behavior delivered: `setAccountRole` validates the role through `validateRoleChangeInput` (unknown values return `INVALID_ROLE`; GM is accepted and keeps its existing author behavior), rejects self-demotion with `SELF_CHANGE`, rejects demotion to PLAYER while any active or archived world is owned with `OWNS_WORLDS`, and rejects removing the last active admin through the shared guard from P2.3. A successful change writes the new role, bumps `accountVersion`, invalidates all login sessions, outstanding setup links, and affected preview capabilities so an old recovery link cannot acquire newly promoted authority, and audits `ROLE_CHANGE`.
+
+Files affected: `src/lib/admin-accounts.ts`, `tests/admin-accounts.test.ts`.
+
+Dependencies: P2.1, P2.3 (shared last-active-admin guard).
+
+Focused tests and completion criteria: the full promote/demote matrix over ADMIN/AUTHOR/GM/PLAYER; demotion to PLAYER blocked by an active world and separately by an archived world; last-admin demotion blocked, including a two-client race against a concurrent disable; unknown role values rejected; after a role change every prior session, link, and preview for the target is gone; stale version and self-demotion return their codes; an outstanding recovery link issued before a promotion cannot be consumed into the new authority at the service level (link invalidated).
+
+Suggested commit: `P2.4: admin role change service with ownership and last-admin guards`.
+
+#### P2.5 — Session listing and revocation services
+
+Behavior delivered: `listTargetSessions` returns unexpired sessions with the opaque `AuthSession.id`, `createdAt`, `expiresAt`, a current-session flag when a row matches the acting admin's session, and preview capability counts (subject and issuer) — never `tokenHash`. `revokeTargetSession` deletes a session only when it belongs to the target (mismatch returns `NOT_FOUND`), checks `expectedVersion`, affects only that session (previews untouched), and audits `SESSION_REVOKE`. `revokeAllTargetSessions` deletes all login sessions and revokes previews where the target is subject or issuer, returns the counts, and audits `SESSION_REVOKE_ALL`. Revoking the actor's own sessions — including revoke-all on self — is explicitly permitted and is not `SELF_CHANGE`; the caller (P6/P7) handles clearing local signed-in state.
+
+Files affected: `src/lib/admin-accounts.ts`, `tests/admin-accounts.test.ts`.
+
+Dependencies: P2.1 (mutation core and audit service).
+
+Focused tests and completion criteria: a session ID belonging to another user is rejected with `NOT_FOUND` and does not delete anything; expired sessions are excluded from listing; the current-session flag is correct for the acting admin; preview counts distinguish subject and issuer; single revoke leaves previews and other sessions intact; revoke-all returns accurate session and preview counts and removes both classes; self revoke-all succeeds; no hash appears in any returned value or audit row; stale version returns `STALE_ACCOUNT`.
+
+Suggested commit: `P2.5: admin session listing and revocation services`.
+
+#### P2.6 — Deletion preview and delete services
+
+Behavior delivered: `deletionPreview` returns the target's current `accountVersion`, owned-world summaries (identifiers and titles only, active and archived, never content bodies), durable blockers (article revisions and Foundry import history requiring preservation), pending/running world imports, affected membership/grant/credential counts, and an allowed flag. `deleteAccount` requires the target to be disabled, `expectedVersion` to match, `confirmEmail` to equal the target's current email, and `backupAcknowledged === true` — then recomputes every blocker inside the serialized transaction, so no confirmation or preview can bypass a blocker. Blockers surface as `OWNS_WORLDS` / `HAS_DURABLE_RECORDS` per the P1 relation inventory; owned worlds and durable revisions/import history RESTRICT, credentials and target memberships/grants cascade, nullable actor/issuer attribution is SetNull, terminal temporary request records are explicitly removed, and unrelated campaign content and audit history are preserved. The `ACCOUNT_DELETE` audit uses immutable scalar ID snapshots and is written so it survives the deletion. Deletion of the User row itself uses the database's RESTRICT behavior as the final backstop.
+
+Files affected: `src/lib/admin-accounts.ts`, `tests/admin-accounts.test.ts` (deletion fixtures with explicit cleanup per P1's fixture rules).
+
+Dependencies: P2.1 (mutation core and audit service).
+
+Focused tests and completion criteria: deletion is blocked by an active world, an archived world, durable revisions, import history, and a pending/running import, each returning the right code with blocker identifiers; a disabled PLAYER with no blockers deletes and cascades exactly its credentials, memberships, and grants; nullable attribution rows become null rather than deleting content; audit history for the deletion survives with actor and target ID snapshots; an unrelated world's content is identical before and after; the race of a new owned-world creation (independent client) against deletion cannot produce a deleted owner of a live world because blockers are recomputed inside the transaction; email mismatch, missing acknowledgement, enabled target, and stale version are each rejected.
+
+Suggested commit: `P2.6: admin account deletion preview and delete services`.
+
+P2 completion evidence, mapped to the package row: last-admin protection (P2.3, P2.4), stale request rejection (P2.1 core plus each subtask's version checks), audit rollback (P2.1), and preserved unrelated records (P2.3, P2.6). Record the subtask commits in the completion table under P2 when done.
+
 ## Required behavioral checks
 
 1. Test each admin page and each API against anonymous, AUTHOR, GM, PLAYER, active ADMIN, expired session, disabled ADMIN, and revoked session. Verify a newly demoted actor cannot finish a queued mutation.
@@ -177,7 +272,7 @@ Report actionable defects with file/line evidence and missing acceptance checks.
 | Package | Status | Commit / validation evidence |
 | --- | --- | --- |
 | P1 | Completed | Schema/migration, `src/lib/admin-policy.ts`, safe DTOs, `deleteTestUsers` fixture helper, `tests/admin-policy.test.ts`, `tests/admin-migration.test.ts`. Reviewer findings fixed: guarded browser-spec cleanup, singleton inserted/enforced by migration, populated-upgrade migration test added, session-ID length corrected, transactional cleanup, role validation in safe DTO, tightened `isAdminError`. Fix-review follow-up: eliminated schema↔migration drift on `InstallationAdminState` (AUTOINCREMENT DEFAULT 1), added AST-based browser-fixture guard regression test, and added unit tests for the safe-DTO throw path and `isAdminError` rejection of unknown codes. `pnpm lint`, `pnpm build`, `pnpm test:unit` (208), and `pnpm test:service` (31) pass on isolated SQLite storage. |
-| P2 | Not started | |
+| P2 | P2.1 complete; P2.2–P2.6 not started | `src/lib/admin-accounts.ts` mutation core and singleton serialization, `src/lib/admin-audit.ts` append-only/failure audit, `tests/admin-accounts.test.ts`, `tests/admin-accounts-fixture.ts`. Added `INTERNAL_ERROR` to `ADMIN_ERROR_CODES` in `src/lib/admin-policy.ts`. `pnpm lint`, `pnpm test:unit` (208), and `pnpm test:service` (45) pass on isolated SQLite storage. |
 | P3 | Not started | |
 | P4 | Not started | |
 | P5 | Not started | |

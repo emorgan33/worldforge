@@ -20,6 +20,7 @@ export const ADMIN_ERROR_CODES = [
   "UNAUTHORIZED",
   "FORBIDDEN",
   "CONCURRENCY_CONFLICT",
+  "INTERNAL_ERROR",
 ] as const;
 export type AdminErrorCode = (typeof ADMIN_ERROR_CODES)[number];
 
