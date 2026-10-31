@@ -17,8 +17,6 @@
     "auth:setup": "tsx scripts/auth-setup.ts",
     "admin:bootstrap": "tsx scripts/admin-bootstrap.ts",
     "admin:recover": "tsx scripts/admin-recover.ts",
-    "admin:local-recovery": "tsx scripts/admin-recover.ts",
-    "admin:local-recover": "tsx scripts/admin-recover.ts",
     "db:generate": "prisma generate",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",

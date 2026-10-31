@@ -3,7 +3,6 @@ import { PrismaClient } from "@prisma/client";
 import type { User, InstallationAdminState, Prisma } from "@prisma/client";
 import type { AdminError, InstallationAuditAction } from "./admin-policy";
 import { activeAdmin, normalizeEmail, validateCreateAccountInput, validateRoleChangeInput, validateStatusChangeInput } from "./admin-policy";
-import { withAccountLifecycleLock, requireActiveAccount } from "./account-lifecycle";
 import { newToken, tokenHash } from "./passwords";
 import {
   appendInstallationAuditEvent,
@@ -522,43 +521,24 @@ export async function deleteAccount(
   }, { mode: "delete" });
 }
 
-type OperatorArgs = [PrismaClient, ...unknown[]];
-
-function parseOperatorArgs(args: unknown[]): { db: PrismaClient; actor: AdminActor; email: string | null } {
-  let db: PrismaClient | null = null;
-  let actor: AdminActor = { type: "LOCAL_OPERATOR" };
-  let email: string | null = null;
-  for (const arg of args) {
-    if (arg && typeof arg === "object" && typeof (arg as { $transaction?: unknown }).$transaction === "function") {
-      db = arg as PrismaClient;
-      continue;
-    }
-    if (typeof arg === "string") {
-      email = arg;
-      continue;
-    }
-    if (arg && typeof arg === "object") {
-      const record = arg as Record<string, unknown>;
-      if ("type" in record && (record.type === "WEB_ADMIN" || record.type === "LOCAL_OPERATOR")) {
-        actor = record as unknown as AdminActor;
-        continue;
-      }
-      if (typeof record.email === "string") email = record.email;
-      if (typeof record.userId === "string" && !actor.userId) actor = { ...actor, userId: record.userId };
-      if (typeof record.targetEmail === "string") email = record.targetEmail;
-      if (typeof record.accountEmail === "string") email = record.accountEmail;
-    }
-  }
-  if (!db) throw new Error("A PrismaClient is required.");
-  return { db, actor: actor ?? { type: "LOCAL_OPERATOR" }, email };
+function resolveEmailArgument(actorOrEmail: AdminActor | string, maybeEmail?: string): string | null {
+  if (typeof actorOrEmail === "string") return normalizeEmail(actorOrEmail);
+  if (typeof maybeEmail === "string") return normalizeEmail(maybeEmail);
+  return null;
 }
 
-export async function bootstrapAdmin(...args: OperatorArgs): Promise<AdminMutationResult<{ userId: string; role: "ADMIN" }>> {
-  const { db, actor, email } = parseOperatorArgs(args);
-  const normalizedEmail = normalizeEmail(email);
+export async function bootstrapAdmin(db: PrismaClient, email: string): Promise<AdminMutationResult<{ userId: string; role: "ADMIN" }>>;
+export async function bootstrapAdmin(db: PrismaClient, actor: AdminActor, email: string): Promise<AdminMutationResult<{ userId: string; role: "ADMIN" }>>;
+export async function bootstrapAdmin(
+  db: PrismaClient,
+  actorOrEmail: AdminActor | string,
+  maybeEmail?: string,
+): Promise<AdminMutationResult<{ userId: string; role: "ADMIN" }>> {
+  const normalizedEmail = resolveEmailArgument(actorOrEmail, maybeEmail);
   if (!normalizedEmail) {
     return { ok: false, error: { error: "A valid account email is required.", code: "INVALID_INPUT" } };
   }
+  const actor: AdminActor = typeof actorOrEmail === "string" ? { type: "LOCAL_OPERATOR" } : actorOrEmail;
   const user = await db.user.findUnique({ where: { email: normalizedEmail }, select: { id: true, disabledAt: true } });
   if (!user) {
     return { ok: false, error: { error: "Account not found.", code: "NOT_FOUND" } };
@@ -587,12 +567,18 @@ export async function bootstrapAdmin(...args: OperatorArgs): Promise<AdminMutati
   });
 }
 
-export async function localRecoverAccount(...args: OperatorArgs): Promise<AdminMutationResult<{ userId: string; disabled: boolean }>> {
-  const { db, actor, email } = parseOperatorArgs(args);
-  const normalizedEmail = normalizeEmail(email);
+export async function localRecoverAccount(db: PrismaClient, email: string): Promise<AdminMutationResult<{ userId: string; disabled: boolean }>>;
+export async function localRecoverAccount(db: PrismaClient, actor: AdminActor, email: string): Promise<AdminMutationResult<{ userId: string; disabled: boolean }>>;
+export async function localRecoverAccount(
+  db: PrismaClient,
+  actorOrEmail: AdminActor | string,
+  maybeEmail?: string,
+): Promise<AdminMutationResult<{ userId: string; disabled: boolean }>> {
+  const normalizedEmail = resolveEmailArgument(actorOrEmail, maybeEmail);
   if (!normalizedEmail) {
     return { ok: false, error: { error: "A valid account email is required.", code: "INVALID_INPUT" } };
   }
+  const actor: AdminActor = typeof actorOrEmail === "string" ? { type: "LOCAL_OPERATOR" } : actorOrEmail;
   const user = await db.user.findUnique({ where: { email: normalizedEmail }, select: { id: true, disabledAt: true } });
   if (!user) {
     return { ok: false, error: { error: "Account not found.", code: "NOT_FOUND" } };
@@ -616,57 +602,3 @@ export async function localRecoverAccount(...args: OperatorArgs): Promise<AdminM
     return { value: { userId: ctx.target.id, disabled: false }, details: { reason: "RECOVERED" } };
   });
 }
-
-// Backward/alternative names used by operator scripts and possible tests.
-export const bootstrapAccount = bootstrapAdmin;
-export const promoteToAdmin = bootstrapAdmin;
-export const bootstrapAdminAccount = bootstrapAdmin;
-export const adminBootstrap = bootstrapAdmin;
-export const bootstrap = bootstrapAdmin;
-export const adminBootstrapAccount = bootstrapAdmin;
-
-export const recoverDisabledAccount = localRecoverAccount;
-export const recoverAccount = localRecoverAccount;
-export const reenableAccount = localRecoverAccount;
-export const adminLocalRecovery = localRecoverAccount;
-export const localRecovery = localRecoverAccount;
-export const recover = localRecoverAccount;
-export const adminRecover = localRecoverAccount;
-export const adminRecoverAccount = localRecoverAccount;
-
-const SETUP_TOKEN_TTL_MS_SHARED = 24 * 60 * 60 * 1000;
-
-function parseSetupArgs(args: unknown[]): { db: PrismaClient; userId: string } {
-  let db: PrismaClient | null = null;
-  let userId: string | null = null;
-  for (const arg of args) {
-    if (arg && typeof arg === "object" && typeof (arg as { $transaction?: unknown }).$transaction === "function") { db = arg as PrismaClient; continue; }
-    if (typeof arg === "string") { userId = arg; continue; }
-    if (arg && typeof arg === "object") {
-      const record = arg as Record<string, unknown>;
-      if (typeof record.userId === "string") userId = record.userId;
-      if (typeof record.id === "string" && userId === null) userId = record.id;
-    }
-  }
-  if (!db || !userId) throw new Error("A PrismaClient and userId are required.");
-  return { db, userId };
-}
-
-export async function issueSetupLink(...args: unknown[]): Promise<{ token: string; expiresAt: Date }> {
-  const { db, userId } = parseSetupArgs(args);
-  const token = newToken();
-  const tokenHashValue = tokenHash(token);
-  let expiresAt = new Date(Date.now() + SETUP_TOKEN_TTL_MS_SHARED);
-  await withAccountLifecycleLock(db, async (tx) => {
-    const user = await requireActiveAccount(tx, userId);
-    const now = new Date();
-    expiresAt = new Date(now.getTime() + SETUP_TOKEN_TTL_MS_SHARED);
-    await tx.accountSetup.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: now } });
-    await tx.accountSetup.create({ data: { tokenHash: tokenHashValue, userId: user.id, expiresAt } });
-  });
-  return { token, expiresAt };
-}
-
-export const createSetupLink = issueSetupLink;
-export const issueAccountSetup = issueSetupLink;
-export const createAccountSetupLink = issueSetupLink;

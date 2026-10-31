@@ -1,1 +1,0 @@
-export { bootstrapAdmin, bootstrapAccount, promoteToAdmin, bootstrapAdminAccount, adminBootstrap, bootstrap, adminBootstrapAccount } from "./admin-accounts";
