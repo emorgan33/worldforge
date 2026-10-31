@@ -433,7 +433,8 @@ export async function importWorldV2(
   data: WorldExportV2 | WorldExportV3 | WorldExportV4,
   ownerUserId: string,
   existingSlugCheck: (slug: string) => Promise<boolean>,
-  identity?: { worldId: string; assetId(sourceId: string): string; completionRequestId?: string; completionPayloadHash?: string }
+  identity?: { worldId: string; assetId(sourceId: string): string; completionRequestId?: string; completionPayloadHash?: string },
+  testHooks?: { afterEligibility?: () => Promise<void> },
 ): Promise<ImportV2Result> {
   const warnings: string[] = [];
   const articleIdMap = new Map((data.articles || []).map((article) => [article.id, randomUUID()]));
@@ -454,6 +455,7 @@ export async function importWorldV2(
   try {
   await withAccountLifecycleLock(prisma, async (tx) => {
     await requireActiveAuthor(tx, ownerUserId);
+    await testHooks?.afterEligibility?.();
     await tx.world.create({
       data: {
         id: newWorldId, slug, title: data.world.title,

@@ -1,13 +1,14 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import type { PrismaClient as PrismaClientType } from "@prisma/client";
-import { randomUUID } from "node:crypto";
+import { PrismaClient, type PrismaClient as PrismaClientType } from "@prisma/client";
+import { createHash, randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { deleteTestUsers } from "./auth-fixture";
+import { deleteAccount, setAccountStatus } from "../src/lib/admin-accounts";
 
 let db: PrismaClientType;
 let exportService: typeof import("../src/lib/world-export");
@@ -65,6 +66,38 @@ test("v4 roundtrip preserves timeline eras and ordered ink/erase/ink drawings", 
   assert.equal(restoredTimeline.events[0].eraId, restoredTimeline.eras[0].id);
   const restoredMap = await db.map.findFirstOrThrow({ where: { worldId: restored.worldId, title: `Ordered map ${stamp}` }, include: { elements: { orderBy: { order: "asc" } } } });
   assert.deepEqual(restoredMap.elements.map(element => element.style), ["{\"color\":\"red\",\"strokeWidth\":3}", "{\"erase\":true,\"strokeWidth\":16}", "{\"color\":\"#3b82f6\"}"]);
+
+  const importTarget = await db.user.create({ data: { name: "Import deletion race", email: `import-race-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
+  const admin = await db.user.create({ data: { name: "Import race admin", email: `import-race-admin-${randomUUID()}@example.invalid`, role: "ADMIN" } });
+  const adminSession = await db.authSession.create({ data: { userId: admin.id, tokenHash: createHash("sha256").update(randomUUID()).digest("hex"), expiresAt: new Date(Date.now() + 60_000) } });
+  const actor = { type: "WEB_ADMIN" as const, userId: admin.id, sessionId: adminSession.id };
+  const adminClient = new PrismaClient();
+  try {
+    let signalEntered!: () => void;
+    let release!: () => void;
+    const entered = new Promise<void>(resolve => { signalEntered = resolve; });
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const importing = exportService.importWorldV2(bundle, importTarget.id, async slug => !!await db.world.findUnique({ where: { slug } }), undefined, {
+      afterEligibility: async () => { signalEntered(); await held; },
+    });
+    await entered;
+    const disabling = setAccountStatus(adminClient, actor, { userId: importTarget.id, expectedVersion: 0 }, { disabled: true });
+    await Promise.resolve();
+    release();
+    const [importResult, disableResult] = await Promise.all([importing, disabling]);
+    assert.equal(importResult.success, true);
+    assert.equal(disableResult.ok, true);
+    if (!importResult.success || !importResult.worldId) throw new Error("Import did not produce its committed root world.");
+    const imported = await db.world.findUniqueOrThrow({ where: { id: importResult.worldId } });
+    const target = await db.user.findUniqueOrThrow({ where: { id: importTarget.id } });
+    const deletion = await deleteAccount(adminClient, actor, { userId: target.id, expectedVersion: target.accountVersion }, { confirmEmail: target.email, backupAcknowledged: true });
+    assert.equal(deletion.ok, false);
+    if (!deletion.ok) assert.equal(deletion.error.code, "OWNS_WORLDS");
+    assert.ok(await db.world.findUnique({ where: { id: imported.id } }), "a competing account deletion cannot remove the imported world");
+  } finally {
+    await adminClient.$disconnect();
+    await deleteTestUsers(db, importTarget.id, admin.id);
+  }
 });
 after(async () => {
   if (!db) { if (tempDir) await rm(tempDir, { recursive: true, force: true }); return; }

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { createHash, randomBytes } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { writeAsset, removeAssetFile } from "../src/lib/asset-storage";
+import { AccessError } from "../src/lib/access";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
@@ -470,8 +472,29 @@ test("preview sessions resolve one shared actor and stay confined to the declare
   const outsideBody = await outsidePreview.text();
   assert(!outsideBody.includes(foreignWorld.title));
   await db.user.update({ where: { id: player.id }, data: { disabledAt: new Date() } });
+  const previewsBeforeDisabledIssue = await db.previewSession.count({ where: { worldId: world.id, userId: player.id } });
+  const disabledIssue = await gmFetch(`${origin}/api/worlds/${world.id}/preview`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: player.id }),
+  });
+  assert.equal(disabledIssue.status, 403);
+  assert.equal(await db.previewSession.count({ where: { worldId: world.id, userId: player.id } }), previewsBeforeDisabledIssue, "disabled subjects receive no latent preview capability");
+  const revokedIssuerToken = randomBytes(32).toString("base64url");
+  const revokedIssuerHash = createHash("sha256").update(revokedIssuerToken).digest("hex");
+  await db.authSession.create({ data: { userId: owner.id, tokenHash: revokedIssuerHash, expiresAt: new Date(Date.now() + 60_000) } });
+  await db.authSession.deleteMany({ where: { tokenHash: revokedIssuerHash } });
+  await assert.rejects(
+    () => import("../src/lib/membership").then(({ issuePreviewSession }) => issuePreviewSession(world.id, player.id, owner.id, revokedIssuerHash)),
+    (error: unknown) => error instanceof AccessError && error.status === 401,
+    "an issuer whose session was revoked before the lifecycle transaction cannot create a preview",
+  );
   assert.equal((await fetch(`${origin}/c/${world.slug}/a/${article.slug}`, { headers: previewCookie })).status, 404, "disabled preview subject loses capability immediately");
   await db.user.update({ where: { id: player.id }, data: { disabledAt: null } });
   await db.user.update({ where: { id: owner.id }, data: { disabledAt: new Date() } });
+  const previewsBeforeDisabledIssuer = await db.previewSession.count({ where: { worldId: world.id, userId: player.id } });
+  const disabledIssuerRequest = await gmFetch(`${origin}/api/worlds/${world.id}/preview`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: player.id }),
+  });
+  assert.equal(disabledIssuerRequest.status, 401);
+  assert.equal(await db.previewSession.count({ where: { worldId: world.id, userId: player.id } }), previewsBeforeDisabledIssuer, "disabled issuers cannot create latent previews");
   assert.equal((await fetch(`${origin}/c/${world.slug}/a/${article.slug}`, { headers: previewCookie })).status, 404, "disabled preview issuer loses capability immediately");
 });

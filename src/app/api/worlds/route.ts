@@ -7,7 +7,7 @@ import { assertImageReference, validateImageReference, ImageReferenceError } fro
 import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { RPG_SYSTEMS } from "@/lib/rpg";
 import { createWorld, normalizeWorldCreation } from "@/lib/world-creation";
-import { AccountEligibilityError } from "@/lib/account-lifecycle";
+import { AccountEligibilityError, AccountLifecycleConflictError } from "@/lib/account-lifecycle";
 
 const WORLD_PROJECTION = {
   id: true, slug: true, title: true, description: true, genre: true, system: true,
@@ -61,6 +61,7 @@ async function postHandler(request: Request, _context: unknown, { user }: { user
     return NextResponse.json(world, { status: result.created ? 201 : 200 });
   } catch (error) {
     if (error instanceof AccountEligibilityError) return NextResponse.json({ error: error.message }, { status: 403 });
+    if (error instanceof AccountLifecycleConflictError) return NextResponse.json({ error: error.message }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "2" } });
     console.error("Failed to create world:", error);
     return NextResponse.json({ error: "Failed to create world" }, { status: 500 });
   }

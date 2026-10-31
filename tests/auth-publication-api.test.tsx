@@ -7,7 +7,7 @@ import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./a
 import { removeAssetFile } from "../src/lib/asset-storage";
 import { tokenHash } from "../src/lib/passwords";
 import { hashPassword } from "../src/lib/passwords";
-import { setAccountStatus } from "../src/lib/admin-accounts";
+import { revokeAllTargetSessions, setAccountStatus } from "../src/lib/admin-accounts";
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -90,7 +90,7 @@ test("one-time account setup, local sign-in, CSRF checks, expiration and logout 
   assert.equal(blocked.status, 429, "spoofing a generic forwarding header does not evade the source limit");
   const legitimate = await fetch(`${origin}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin!, "X-WorldForge-Client-IP": "192.0.2.11" }, body: JSON.stringify({ email, password }) });
   assert.equal(legitimate.status, 200, "another source can sign in to the targeted account");
-  const repeatSource = "198.51.100.20";
+  const repeatSource = `198.51.100.${Math.floor(Math.random() * 200) + 1}`;
   const repeatHeaders = { "Content-Type": "application/json", Origin: origin!, "X-WorldForge-Client-IP": repeatSource };
   const priorFailure = await fetch(`${origin}/api/auth/login`, { method: "POST", headers: repeatHeaders, body: JSON.stringify({ email, password: "Incorrect fixture passphrase" }) });
   assert.equal(priorFailure.status, 401);
@@ -199,4 +199,32 @@ test("login and setup races with disable cannot leave sessions on a disabled acc
   if (setupResponse.status === 200) assert.equal(finalSetupTarget.disabledAt, null, "setup winning the lock makes the stale disable fail rather than leave a disabled live session");
   if (setupMutation.ok) assert.ok(finalSetupTarget.disabledAt);
   else assert.ok(["STALE_ACCOUNT", "CONCURRENCY_CONFLICT"].includes(setupMutation.error.code));
+});
+
+test("a credential snapshot cannot issue a session after password reset or revoke-all", { skip: !origin }, async context => {
+  const db = new PrismaClient();
+  const stamp = randomUUID();
+  const admin = await db.user.create({ data: { name: "Snapshot admin", email: `snapshot-admin-${stamp}@example.invalid`, role: "ADMIN" } });
+  const adminToken = randomBytes(32).toString("base64url");
+  const adminSession = await db.authSession.create({ data: { userId: admin.id, tokenHash: digest(adminToken), expiresAt: new Date(Date.now() + 60_000) } });
+  const actor = { type: "WEB_ADMIN" as const, userId: admin.id, sessionId: adminSession.id };
+  const oldPassword = "Before reset passphrase 915!";
+  const resetUser = await db.user.create({ data: { name: "Reset snapshot", email: `reset-snapshot-${stamp}@example.invalid`, passwordHash: await hashPassword(oldPassword) } });
+  const setupToken = randomBytes(32).toString("base64url");
+  await db.accountSetup.create({ data: { userId: resetUser.id, tokenHash: digest(setupToken), expiresAt: new Date(Date.now() + 60_000) } });
+  const revokedUser = await db.user.create({ data: { name: "Revoked snapshot", email: `revoked-snapshot-${stamp}@example.invalid`, passwordHash: await hashPassword(oldPassword) } });
+  context.after(async () => { await deleteTestUsers(db, admin.id, resetUser.id, revokedUser.id); await db.$disconnect(); });
+
+  const resetSnapshot = { passwordHash: resetUser.passwordHash!, accountVersion: resetUser.accountVersion };
+  const reset = await fetch(`${origin}/api/auth/setup`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin! }, body: JSON.stringify({ token: setupToken, email: resetUser.email, password: "After reset passphrase 916!" }) });
+  assert.equal(reset.status, 200);
+  const { issueSession } = await import("../src/lib/auth");
+  assert.equal(await issueSession(resetUser.id, new Request(origin!), resetSnapshot), false, "a login verified against the pre-reset hash cannot issue afterward");
+  assert.equal(await db.authSession.count({ where: { userId: resetUser.id } }), 1, "only the setup transaction's session remains");
+
+  const revokedSnapshot = { passwordHash: revokedUser.passwordHash!, accountVersion: revokedUser.accountVersion };
+  const revokeAll = await revokeAllTargetSessions(db, actor, { userId: revokedUser.id, expectedVersion: 0 });
+  assert.equal(revokeAll.ok, true);
+  assert.equal(await issueSession(revokedUser.id, new Request(origin!), revokedSnapshot), false, "a pre-revocation login decision cannot recreate access");
+  assert.equal(await db.authSession.count({ where: { userId: revokedUser.id } }), 0);
 });

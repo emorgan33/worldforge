@@ -21,8 +21,10 @@ async function fixture(context: TestContext) {
     await db.$disconnect();
   });
   const article = await db.article.create({ data: { worldId: world.id, title: "R14 shared article", slug: `r14-article-${randomUUID()}` } });
+  const ownerSessionHash = tokenHash(randomUUID());
+  await db.authSession.create({ data: { userId: owner.id, tokenHash: ownerSessionHash, expiresAt: new Date(Date.now() + 60_000) } });
   const gmFetch = await authorFetch(db, owner.id, origin!);
-  return { db, owner, playerA, playerB, world, article, gmFetch };
+  return { db, owner, playerA, playerB, world, article, gmFetch, ownerSessionHash };
 }
 
 async function withFailure(db: PrismaClient, sql: string, operation: () => Promise<unknown>) {
@@ -77,10 +79,10 @@ test("preview issue and revocation roll back with their audit events", { skip: !
     ["AccessAuditEvent", "INSERT", `NEW.worldId = '${f.world.id}' AND NEW.action = 'issue_preview'`, "issue_preview"],
   ] as const) {
     const before = await memberState(f.db, f.world.id, f.playerA.id);
-    await withFailure(f.db, failureTrigger(table, op, condition, action), () => issuePreviewSession(f.world.id, f.playerA.id, f.owner.id));
+    await withFailure(f.db, failureTrigger(table, op, condition, action), () => issuePreviewSession(f.world.id, f.playerA.id, f.owner.id, f.ownerSessionHash));
     assert.deepEqual(await memberState(f.db, f.world.id, f.playerA.id), before, `${action} ${table} failure rolls back`);
   }
-  const issued = await issuePreviewSession(f.world.id, f.playerA.id, f.owner.id);
+  const issued = await issuePreviewSession(f.world.id, f.playerA.id, f.owner.id, f.ownerSessionHash);
   const hash = tokenHash(issued.token);
   await assert.rejects(revokePreviewSession(hash, "another-world", f.owner.id), /Preview session not found/);
   assert.equal((await f.db.previewSession.findUniqueOrThrow({ where: { tokenHash: hash } })).revokedAt, null);

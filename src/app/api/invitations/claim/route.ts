@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { sessionUser, sameOrigin, createSessionRecord, setSessionCookie, AccessError } from "@/lib/auth";
+import { sameOrigin, createSessionRecord, setSessionCookie, AccessError } from "@/lib/auth";
 import { hashPassword, newToken, tokenHash, validPassword } from "@/lib/passwords";
 import { validInviteToken } from "@/lib/player-invitations";
-import { SESSION_SECONDS } from "@/lib/auth-constants";
-import { withAccountLifecycleLock } from "@/lib/account-lifecycle";
+import { SESSION_COOKIE, SESSION_SECONDS } from "@/lib/auth-constants";
+import { AccountLifecycleConflictError, findActiveSessionActor, withAccountLifecycleLock } from "@/lib/account-lifecycle";
 
 async function findInvitation(token: string) {
   if (!validInviteToken(token)) return null;
@@ -20,11 +20,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => null);
     const invitation = await findInvitation(body?.token);
     if (!invitation || invitation.claimedAt || invitation.cancelledAt || invitation.expiresAt <= new Date() || invitation.world.deletedAt) throw new AccessError("This invitation is invalid or expired.", 404);
-    const signedIn = await sessionUser();
+    const existingSessionToken = request.cookies.get(SESSION_COOKIE)?.value;
     const passwordHash = validPassword(body?.password) ? await hashPassword(body.password) : null;
     const sessionToken = newToken();
     const sessionExpiresAt = new Date(Date.now() + SESSION_SECONDS * 1000);
     const claim = await withAccountLifecycleLock(prisma, async (tx) => {
+      const signedIn = existingSessionToken ? await findActiveSessionActor(tx, tokenHash(existingSessionToken)) : null;
+      if (existingSessionToken && !signedIn) throw new AccessError("Your sign-in session is no longer valid. Sign in again to claim this invitation.", 401);
       const current = await tx.playerInvitation.findUnique({ where: { id: invitation.id }, select: { id: true, email: true, worldId: true, expiresAt: true, claimedAt: true, cancelledAt: true, world: { select: { deletedAt: true, slug: true } } } });
       if (!current || current.claimedAt || current.cancelledAt || current.expiresAt <= new Date() || current.world.deletedAt) throw new AccessError("This invitation is invalid or expired.", 404);
       const existing = await tx.user.findUnique({ where: { email: current.email }, select: { id: true, disabledAt: true } });
@@ -42,6 +44,7 @@ export async function POST(request: NextRequest) {
     if (claim.newAccount) await setSessionCookie(sessionToken, request);
     return NextResponse.json({ success: true, worldSlug: claim.worldSlug }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
+    if (error instanceof AccountLifecycleConflictError) return NextResponse.json({ error: error.message }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "2" } });
     return NextResponse.json({ error: error instanceof AccessError ? error.message : "Unable to claim this invitation." }, { status: error instanceof AccessError ? error.status : 400, headers: { "Cache-Control": "no-store" } });
   }
 }

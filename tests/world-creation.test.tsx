@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { setAccountRole } from "../src/lib/admin-accounts";
+import { deleteAccount, setAccountStatus } from "../src/lib/admin-accounts";
 import { assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 test("world creation validates, retries concurrent requests, and allocates collision-safe slugs", { skip: !process.env.WORLD_CREATION_TEST_DATABASE_URL }, async () => {
@@ -67,20 +67,29 @@ test("world creation validates, retries concurrent requests, and allocates colli
     const session = await prisma.authSession.create({ data: { userId: admin.id, tokenHash: createHash("sha256").update(sessionToken).digest("hex"), expiresAt: new Date(Date.now() + 60_000) } });
     const actor = { type: "WEB_ADMIN" as const, userId: admin.id, sessionId: session.id };
     const racePayload = { ...payload, title: "Eligibility-race world", requestId: randomUUID() };
-    const [creation, demotion] = await Promise.allSettled([
-      createWorld(eligibleTarget.id, racePayload, undefined, undefined, db2),
-      setAccountRole(prisma, actor, { userId: eligibleTarget.id, expectedVersion: 0 }, { role: "PLAYER" }),
-    ]);
+    let signalEntered!: () => void;
+    let release!: () => void;
+    const entered = new Promise<void>(resolve => { signalEntered = resolve; });
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const creation = createWorld(eligibleTarget.id, racePayload, undefined, undefined, db2, {
+      afterEligibility: async () => { signalEntered(); await held; },
+    });
+    await entered;
+    const disabling = setAccountStatus(prisma, actor, { userId: eligibleTarget.id, expectedVersion: 0 }, { disabled: true });
+    await Promise.resolve();
+    release();
+    const createdWorld = await creation;
+    const disableResult = await disabling;
     const finalTarget = await prisma.user.findUniqueOrThrow({ where: { id: eligibleTarget.id } });
     const ownedWorlds = await prisma.world.findMany({ where: { ownerId: eligibleTarget.id } });
-    assert.ok(finalTarget.role !== "PLAYER" || ownedWorlds.length === 0, "a demoted PLAYER cannot own a newly created world");
-    assert.ok(creation.status === "fulfilled" || creation.reason instanceof Error);
-    if (creation.status === "fulfilled") assert.equal(creation.value.created, true);
-    assert.equal(demotion.status, "fulfilled");
-    if (demotion.status === "fulfilled") {
-      if (demotion.value.ok) assert.equal(finalTarget.role, "PLAYER");
-      else assert.equal(demotion.value.error.code, "OWNS_WORLDS");
-    }
+    assert.equal(createdWorld.created, true);
+    assert.equal(disableResult.ok, true);
+    assert.ok(finalTarget.disabledAt);
+    assert.equal(ownedWorlds.length, 1, "the writer commits before the queued lifecycle mutation");
+    const deletion = await deleteAccount(prisma, actor, { userId: eligibleTarget.id, expectedVersion: finalTarget.accountVersion }, { confirmEmail: finalTarget.email, backupAcknowledged: true });
+    assert.equal(deletion.ok, false);
+    if (!deletion.ok) assert.equal(deletion.error.code, "OWNS_WORLDS");
+    assert.ok(await prisma.world.findUnique({ where: { id: createdWorld.world.id } }), "the competing account deletion cannot remove the committed world");
   } finally {
     await db2.$disconnect();
     await deleteTestUsers(prisma, owner.id, otherOwner.id, ...additionalUserIds);

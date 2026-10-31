@@ -2,7 +2,7 @@ import { sameOrigin, createSessionRecord, setSessionCookie, AccessError } from "
 import { prisma } from "@/lib/db";
 import { newToken, tokenHash, hashPassword, validPassword } from "@/lib/passwords";
 import { normalizeEmail } from "@/lib/admin-policy";
-import { AccountEligibilityError, requireActiveAccount, withAccountLifecycleLock } from "@/lib/account-lifecycle";
+import { AccountEligibilityError, AccountLifecycleConflictError, requireActiveAccount, withAccountLifecycleLock } from "@/lib/account-lifecycle";
 import { SESSION_SECONDS } from "@/lib/auth-constants";
 export async function POST(request: Request) {
   try {
@@ -33,5 +33,8 @@ export async function POST(request: Request) {
     }
     await setSessionCookie(sessionToken, request);
     return Response.json({ success: true }, { headers: { "Cache-Control": "no-store" } });
-  } catch (error) { return Response.json({ error: error instanceof AccessError ? error.message : "Unable to set up this account. The email may already be in use." }, { status: error instanceof AccessError ? error.status : 400 }); }
+  } catch (error) {
+    if (error instanceof AccountLifecycleConflictError) return Response.json({ error: error.message }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "2" } });
+    return Response.json({ error: error instanceof AccessError ? error.message : "Unable to set up this account. The email may already be in use." }, { status: error instanceof AccessError ? error.status : 400, headers: { "Cache-Control": "no-store" } });
+  }
 }

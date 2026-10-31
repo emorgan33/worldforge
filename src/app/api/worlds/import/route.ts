@@ -5,7 +5,7 @@ import { importWorldTransfer } from "@/lib/world-transfer-execution";
 import { readWorldTransferJson } from "@/lib/world-transfer-adapters";
 import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
-import { AccountEligibilityError, requireActiveAuthor, withAccountLifecycleLock } from "@/lib/account-lifecycle";
+import { AccountEligibilityError, AccountLifecycleConflictError, requireActiveAuthor, withAccountLifecycleLock } from "@/lib/account-lifecycle";
 
 const activeImports = new Set<string>();
 
@@ -109,6 +109,7 @@ export const POST = withAuthor({ target: "account" }, async (request: Request, _
     }
     if (error instanceof AccessError) return NextResponse.json({ error: error.message }, { status: error.status });
     if (error instanceof AccountEligibilityError) return NextResponse.json({ error: error.message }, { status: 403 });
+    if (error instanceof AccountLifecycleConflictError) return NextResponse.json({ error: error.message }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "2" } });
     console.error("Failed to import world:", error);
     return NextResponse.json({ error: "Failed to import world" }, { status: 500 });
   }

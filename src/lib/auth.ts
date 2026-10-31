@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { prisma } from "./db";
 import type { Prisma } from "@prisma/client";
-import { AccountEligibilityError, requireActiveAccount, withAccountLifecycleLock } from "./account-lifecycle";
+import { AccountEligibilityError, AccountLifecycleConflictError, requireActiveAccount, withAccountLifecycleLock } from "./account-lifecycle";
 import { newToken, tokenHash } from "./passwords";
 import { SESSION_COOKIE, SESSION_SECONDS } from "./auth-constants";
 import { AccessError, resolveResourceWorld, sameOrigin, sessionUser, type ResourceKind } from "./authorization-core";
@@ -22,19 +22,27 @@ export async function ownedArchivedWorld(worldId: unknown, userId?: string) {
   if (typeof worldId !== "string" || !await prisma.world.findFirst({ where: { id: worldId, ownerId: actor, deletedAt: { not: null } }, select: { id: true } })) throw new AccessError("Not found.");
 }
 
-export async function issueSession(userId: string, request: Request) {
+export async function issueSession(
+  userId: string,
+  request: Request,
+  credentialSnapshot: { passwordHash: string; accountVersion: number },
+) {
   const token = newToken();
   const expiresAt = new Date(Date.now() + SESSION_SECONDS * 1000);
+  let issued: boolean;
   try {
-    await withAccountLifecycleLock(prisma, async (tx) => {
-      await requireActiveAccount(tx, userId);
+    issued = await withAccountLifecycleLock(prisma, async (tx) => {
+      const user = await requireActiveAccount(tx, userId);
+      if (user.passwordHash !== credentialSnapshot.passwordHash || user.accountVersion !== credentialSnapshot.accountVersion) return false;
       await createSessionRecord(tx, userId, token, expiresAt);
+      return true;
     });
   } catch (error) {
     if (error instanceof AccountEligibilityError) return false;
     throw error;
   }
-  setSessionCookie(token, request);
+  if (!issued) return false;
+  await setSessionCookie(token, request);
   return true;
 }
 
@@ -157,6 +165,7 @@ export function withAuthor<C = unknown>(
     } catch (error) {
       unstable_rethrow(error);
       if (!(error instanceof AccessError)) console.error("Author request failed", error);
+      if (error instanceof AccountLifecycleConflictError) return Response.json({ error: error.message }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "2" } });
       return Response.json({ error: error instanceof AccessError ? error.message : "Unable to complete this request." }, { status: error instanceof AccessError ? error.status : 500, headers: { "Cache-Control": "no-store" } });
     }
   };

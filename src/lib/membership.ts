@@ -2,6 +2,7 @@ import { prisma } from "./db";
 import { AccessError } from "./access";
 import { recordAuditEvent } from "./audit";
 import { newToken, tokenHash } from "./passwords";
+import { AccountEligibilityError, findActiveSessionActor, requireActiveAccount, requireActiveAuthor, withAccountLifecycleLock } from "./account-lifecycle";
 
 const PREVIEW_EXPIRY_SECONDS = 15 * 60; // 15 minutes
 
@@ -128,10 +129,17 @@ export async function revokePolicy(worldId: string, resourceKind: string, resour
 // ---------------------------------------------------------------------------
 // Preview sessions
 // ---------------------------------------------------------------------------
-export async function issuePreviewSession(worldId: string, userId: string, actorId: string) {
+export async function issuePreviewSession(worldId: string, userId: string, actorId: string, sessionTokenHash: string) {
   const token = newToken();
   const hash = tokenHash(token);
-  await prisma.$transaction(async tx => {
+  try {
+    await withAccountLifecycleLock(prisma, async tx => {
+    const actor = await findActiveSessionActor(tx, sessionTokenHash);
+    if (!actor || actor.id !== actorId || !["ADMIN", "AUTHOR", "GM"].includes(actor.role)) throw new AccessError("Sign in to manage this world.", 401);
+    await requireActiveAuthor(tx, actorId);
+    await requireActiveAccount(tx, userId);
+    const world = await tx.world.findFirst({ where: { id: worldId, ownerId: actorId, deletedAt: null }, select: { id: true } });
+    if (!world) throw new AccessError("World not found.", 404);
     const member = await tx.worldMember.findUnique({
       where: { worldId_userId: { worldId, userId } }, select: { status: true },
     });
@@ -140,7 +148,11 @@ export async function issuePreviewSession(worldId: string, userId: string, actor
       data: { tokenHash: hash, userId, worldId, issuedById: actorId, memberAtGrant: true, expiresAt: new Date(Date.now() + PREVIEW_EXPIRY_SECONDS * 1000) },
     });
     await recordAuditEvent({ worldId, action: "issue_preview", actorId, afterJson: JSON.stringify({ userId }) }, tx);
-  });
+    });
+  } catch (error) {
+    if (error instanceof AccountEligibilityError) throw new AccessError("Preview access is unavailable for this account.", 403);
+    throw error;
+  }
   return { token, expiresIn: PREVIEW_EXPIRY_SECONDS };
 }
 

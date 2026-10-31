@@ -66,7 +66,7 @@ test("existing author invitation preserves role and ownership; cancelled links c
     await db.$disconnect();
   });
   const gmFetch = await authorFetch(db, owner.id, origin!);
-  const invitedFetch = await authorFetch(db, invited.id, origin!);
+  let invitedFetch = await authorFetch(db, invited.id, origin!);
   assert.equal((await invitedFetch(`${origin}/api/worlds/${world.id}/invitations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: invited.email }) })).status, 404);
   const create = async () => {
     const response = await gmFetch(`${origin}/api/worlds/${world.id}/invitations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: invited.email }) });
@@ -81,6 +81,12 @@ test("existing author invitation preserves role and ownership; cancelled links c
   const active = await create();
   assert.equal((await fetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin! }, body: JSON.stringify({ token: active.token }) })).status, 403);
   assert.equal((await gmFetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: active.token }) })).status, 403);
+  await db.authSession.deleteMany({ where: { userId: invited.id } });
+  const staleSessionClaim = await invitedFetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: active.token }) });
+  assert.equal(staleSessionClaim.status, 401, "a session revoked before the claim transaction cannot authorize membership");
+  assert.equal((await db.playerInvitation.findUniqueOrThrow({ where: { id: active.id } })).claimedAt, null);
+  assert.equal(await db.worldMember.count({ where: { worldId: world.id, userId: invited.id } }), 0);
+  invitedFetch = await authorFetch(db, invited.id, origin!);
   assert.equal((await invitedFetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: active.token }) })).status, 200);
   assert.equal((await db.user.findUniqueOrThrow({ where: { id: invited.id } })).role, "AUTHOR");
   assert.equal((await db.world.findUniqueOrThrow({ where: { id: ownWorld.id } })).ownerId, invited.id);
