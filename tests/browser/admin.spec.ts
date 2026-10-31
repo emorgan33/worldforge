@@ -647,3 +647,92 @@ test("incomplete recovery responses refresh state and report uncertainty", async
     await db.$disconnect();
   }
 });
+
+test("truncated self revoke-all clears local identity after commit", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = new PrismaClient();
+  let adminId: string | undefined;
+  try {
+    const admin = await createAdminSession(db);
+    adminId = admin.user.id;
+    await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+
+    await page.route("**/api/admin/users/*/sessions/revoke-all", async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ response, body: "{truncated" });
+    });
+
+    await page.goto(`/admin/users/${admin.user.id}`);
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Revoke all access" }).click();
+    await expect(page).toHaveURL(/\/login$/);
+
+    const cookies = await context.cookies();
+    expect(cookies.find((cookie) => cookie.name === SESSION_COOKIE)).toBeUndefined();
+    expect(await db.authSession.count({ where: { userId: admin.user.id } })).toBe(0);
+  } finally {
+    if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
+test("late recovery responses do not restore secrets after client-side link navigation", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = new PrismaClient();
+  let adminId: string | undefined;
+  let targetId: string | undefined;
+  try {
+    const admin = await createAdminSession(db);
+    adminId = admin.user.id;
+    const target = await db.user.create({ data: { name: "Late Recovery", email: `late-recovery-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
+    targetId = target.id;
+    await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+
+    let releaseRecovery!: () => void;
+    const recoveryGate = new Promise<void>((resolve) => { releaseRecovery = resolve; });
+    await page.route("**/api/admin/users/*/recovery", async (route) => {
+      const response = await route.fetch();
+      await recoveryGate;
+      await route.fulfill({ response });
+    });
+
+    await page.goto(`/admin/users/${target.id}`);
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Issue recovery link" }).click();
+    await page.getByRole("link", { name: "Audit" }).click();
+    await expect(page).toHaveURL(/\/admin\/audit$/);
+    releaseRecovery();
+    await page.waitForTimeout(300);
+    await page.goBack();
+    await expect(page.getByRole("status").getByRole("textbox")).toHaveCount(0);
+  } finally {
+    if (targetId) await db.user.delete({ where: { id: targetId } }).catch(() => undefined);
+    if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
+test("expired admin sessions are redirected from every admin page", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = new PrismaClient();
+  let adminId: string | undefined;
+  let targetId: string | undefined;
+  try {
+    const admin = await db.user.create({ data: { name: "Expired Admin", email: `expired-admin-${randomUUID()}@example.invalid`, role: "ADMIN" } });
+    adminId = admin.id;
+    const target = await db.user.create({ data: { name: "Expired Target", email: `expired-target-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
+    targetId = target.id;
+    const token = randomBytes(32).toString("base64url");
+    await db.authSession.create({ data: { userId: admin.id, tokenHash: createHash("sha256").update(token).digest("hex"), expiresAt: new Date(Date.now() - 60_000) } });
+    await context.addCookies([{ name: SESSION_COOKIE, value: token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+
+    for (const path of ["/admin/users", `/admin/users/${target.id}`, "/admin/audit"]) {
+      await page.goto(path);
+      await expect(page).toHaveURL(/\/login$/);
+    }
+  } finally {
+    if (targetId) await db.user.delete({ where: { id: targetId } }).catch(() => undefined);
+    if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
