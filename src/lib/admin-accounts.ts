@@ -228,7 +228,7 @@ export async function createAccount(
   const token = newToken();
   const tokenHashValue = tokenHash(token);
 
-  return runAdminMutation(db, actor, { userId }, "ACCOUNT_CREATE", async (ctx) => {
+  return runAdminMutation<CreateAccountResult>(db, actor, { userId }, "ACCOUNT_CREATE", async (ctx) => {
     const existing = await ctx.tx.user.findUnique({ where: { email: input.email } });
     if (existing) {
       return { error: "An account with this email already exists.", code: "DUPLICATE_EMAIL" };
@@ -260,7 +260,7 @@ export async function issueRecovery(
 ): Promise<AdminMutationResult<IssueRecoveryResult>> {
   const token = newToken();
   const tokenHashValue = tokenHash(token);
-  return runAdminMutation(db, actor, target, "ACCOUNT_RECOVERY", async (ctx) => {
+  return runAdminMutation<IssueRecoveryResult>(db, actor, target, "ACCOUNT_RECOVERY", async (ctx) => {
     if (ctx.target.disabledAt !== null) {
       return { error: "Account is disabled.", code: "ACCOUNT_DISABLED" };
     }
@@ -408,7 +408,7 @@ export async function revokeTargetSession(
   target: AdminMutationTarget,
   sessionId: string,
 ): Promise<AdminMutationResult<{ revoked: number }>> {
-  return runAdminMutation(db, actor, target, "SESSION_REVOKE", async ({ tx, target: user }) => {
+  return runAdminMutation<{ revoked: number }>(db, actor, target, "SESSION_REVOKE", async ({ tx, target: user }) => {
     const deleted = await tx.authSession.deleteMany({ where: { id: sessionId, userId: user.id } });
     if (deleted.count === 0) return { error: "Session not found.", code: "NOT_FOUND" };
     return { value: { revoked: deleted.count } };
