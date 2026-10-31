@@ -256,6 +256,18 @@ test("create returns a safe DTO and one-time setup link and rejects injected fie
   assert.equal(await db.user.count({ where: { email: { contains: `hash-${stamp}` } } }), 0);
   assert.equal(await db.user.count({ where: { email: { contains: `token-${stamp}` } } }), 0);
 
+  // A valid JSON body with a non-JSON content type is rejected before parsing.
+  const wrongContentTypeEmail = `wrong-content-type-${stamp}@example.invalid`;
+  const wrongContentType = await send(
+    "POST",
+    "/api/admin/users",
+    { email: wrongContentTypeEmail, name: "Wrong content type", role: "AUTHOR" },
+    { token: admin.token, headers: { "Content-Type": "text/plain" } },
+  );
+  assert.equal(wrongContentType.status, 400);
+  assert.equal((await wrongContentType.json()).code, "INVALID_INPUT");
+  assert.equal(await db.user.count({ where: { email: wrongContentTypeEmail } }), 0);
+
   // A created PLAYER has no author rights.
   const playerEmail = `player-${stamp}@example.invalid`;
   const playerCreated = await send("POST", "/api/admin/users", { email: playerEmail, name: "Player", role: "PLAYER" }, { token: admin.token });
@@ -566,6 +578,43 @@ test("session revocation is scoped to the target and revoke-all clears preview c
   assert.equal(selfRevoke.status, 200);
   const afterRevoke = await send("GET", "/api/admin/users", undefined, { token: admin.token });
   assert.equal(afterRevoke.status, 401);
+});
+
+test("an administrator can revoke a single own session without revoking the acting session", { skip: !origin }, async context => {
+  const db = new PrismaClient();
+  const createdUserIds: string[] = [];
+  context.after(async () => {
+    await deleteTestUsers(db, ...createdUserIds);
+    await db.$disconnect();
+  });
+
+  const admin = await createUserWithSession(db, { role: "ADMIN" });
+  createdUserIds.push(admin.user.id);
+
+  const secondToken = randomBytes(32).toString("base64url");
+  const secondSession = await db.authSession.create({
+    data: {
+      userId: admin.user.id,
+      tokenHash: digest(secondToken),
+      expiresAt: new Date(Date.now() + 60_000),
+    },
+  });
+
+  const revoked = await send(
+    "DELETE",
+    `/api/admin/users/${admin.user.id}/sessions/${secondSession.id}`,
+    { expectedVersion: admin.user.accountVersion },
+    { token: admin.token },
+  );
+  assert.equal(revoked.status, 200);
+  assert.deepEqual(await revoked.json(), { revoked: 1 });
+  assert.equal(await db.authSession.count({ where: { id: secondSession.id } }), 0);
+
+  const revokedToken = await send("GET", "/api/admin/users", undefined, { token: secondToken });
+  assert.equal(revokedToken.status, 401, "only the revoked self session stops working");
+
+  const acting = await send("GET", "/api/admin/users", undefined, { token: admin.token });
+  assert.equal(acting.status, 200, "the acting session remains valid");
 });
 
 test("deletion requires a disabled account, matching email, and no durable blockers", { skip: !origin }, async context => {
