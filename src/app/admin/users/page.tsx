@@ -26,31 +26,36 @@ export default function AdminUsersPage() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ email: "", name: "", role: "AUTHOR" });
   const [setupLink, setSetupLink] = useState<SetupLink | null>(null);
+  const createSeq = useRef(0);
+  const createInvalidated = useRef(false);
 
   useEffect(() => {
     if (error) errorRef.current?.focus();
   }, [error]);
 
   useEffect(() => {
-    if (!setupLink) return;
     const clear = () => setSetupLink(null);
+    const invalidate = () => {
+      createInvalidated.current = true;
+      setSetupLink(null);
+    };
     const onPageShow = (event: PageTransitionEvent) => {
-      if (event.persisted) clear();
+      if (event.persisted) invalidate();
     };
     const onClick = (event: MouseEvent) => {
-      if ((event.target as Element | null)?.closest("a[href]")) clear();
+      if ((event.target as Element | null)?.closest("a[href]")) invalidate();
     };
-    window.addEventListener("pagehide", clear);
+    window.addEventListener("pagehide", invalidate);
     window.addEventListener("pageshow", onPageShow);
-    window.addEventListener("popstate", clear);
+    window.addEventListener("popstate", invalidate);
     document.addEventListener("click", onClick, true);
     return () => {
-      window.removeEventListener("pagehide", clear);
+      window.removeEventListener("pagehide", invalidate);
       window.removeEventListener("pageshow", onPageShow);
-      window.removeEventListener("popstate", clear);
+      window.removeEventListener("popstate", invalidate);
       document.removeEventListener("click", onClick, true);
     };
-  }, [setupLink]);
+  }, []);
 
   async function loadUsers(cursor?: string | null, replace = true, filters = { search, role, status }) {
     const requestId = ++requestSeq.current;
@@ -89,7 +94,7 @@ export default function AdminUsersPage() {
           setNextCursor(data.nextCursor ?? null);
         }
       } catch {
-        // Leave the current list in place; controls are restored below.
+        // Leave current list
       }
     } finally {
       if (requestId === requestSeq.current) {
@@ -113,6 +118,8 @@ export default function AdminUsersPage() {
 
   async function createAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const createId = ++createSeq.current;
+    createInvalidated.current = false;
     setCreating(true);
     setError("");
     try {
@@ -133,20 +140,28 @@ export default function AdminUsersPage() {
         setError(data.error || "Unable to create account.");
         return;
       }
-      if (parseFailed || !data.user || !data.setup?.url) {
+      if (createId !== createSeq.current || createInvalidated.current) {
+        await loadUsers();
+        setError("Unable to confirm whether account creation succeeded because the request was invalidated. The list has been refreshed; do not resubmit until you verify whether it succeeded.");
+        return;
+      }
+      if (parseFailed || !data.user || !data.setup?.url || !data.setup?.expiresAt) {
         await loadUsers();
         setError("Unable to confirm whether account creation succeeded. The list has been refreshed; do not resubmit until you verify whether it succeeded.");
         return;
       }
       setUsers((previous) => [data.user as SafeAccount, ...previous]);
-      if (data.setup) setSetupLink(data.setup);
+      setSetupLink(data.setup);
       setForm({ email: "", name: "", role: "AUTHOR" });
       setShowCreate(false);
     } catch {
+      if (createId !== createSeq.current || createInvalidated.current) return;
       await loadUsers();
       setError("Unable to confirm account creation. The list has been refreshed; do not resubmit until you verify whether it succeeded.");
     } finally {
-      setCreating(false);
+      if (createId === createSeq.current) {
+        setCreating(false);
+      }
     }
   }
 
