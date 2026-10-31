@@ -233,6 +233,9 @@ describe("auth:setup CLI", () => {
       const user = await db.user.findUnique({ where: { email: "lorekeeper@worldforge.dev" } });
       assert.equal(user?.role, "GM");
       assert.equal(user?.disabledAt, null);
+      const audits = await db.installationAuditEvent.findMany({ where: { targetIdSnapshot: user?.id, action: "ACCOUNT_CREATE" } });
+      assert.equal(audits.length, 1);
+      assert.equal(JSON.parse(audits[0].detailsJson).role, "GM");
     } finally {
       await cleanup();
     }

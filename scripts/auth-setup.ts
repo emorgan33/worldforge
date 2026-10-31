@@ -1,5 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { createAccount, issueRecovery } from "../src/lib/admin-accounts";
+import { appendInstallationAuditEvent } from "../src/lib/admin-audit";
+import { withAccountLifecycleLock } from "../src/lib/account-lifecycle";
 import { normalizeEmail, validName } from "../src/lib/admin-policy";
 
 const db = new PrismaClient();
@@ -12,7 +14,7 @@ function nameFromEmail(email: string): string {
   const validated = validName(trimmed);
   if (validated) return validated;
   // Very long local parts would fail the 1–120 name policy; truncate safely.
-  return trimmed.slice(0, 120).trim() || "Worldkeeper";
+  return trimmed.slice(0, 120).trim();
 }
 
 async function printSetupUrl(email: string, token: string) {
@@ -46,10 +48,23 @@ async function main() {
   const normalizedEmail = emailArg ? normalizeEmail(emailArg) : null;
   let user = normalizedEmail ? await db.user.findUnique({ where: { email: normalizedEmail } }) : (await db.world.findFirst({ orderBy: { createdAt: "asc" }, select: { owner: true } }))?.owner;
 
-  // Legacy zero-argument fresh-installation path: create the first GM account.
-  if (!user && !emailArg && (await db.user.count()) === 0) {
-    user = await db.user.create({
-      data: { name: "Lorekeeper", email: DEFAULT_GM_EMAIL, role: "GM" },
+  // Legacy zero-argument fresh-installation path: create the first GM account
+  // under the lifecycle lock so the count-and-create window is serialized.
+  if (!user && !emailArg) {
+    user = await withAccountLifecycleLock(db, async (tx) => {
+      if (await tx.user.count() !== 0) return null;
+      const seeded = await tx.user.create({
+        data: { name: "Lorekeeper", email: DEFAULT_GM_EMAIL, role: "GM" },
+      });
+      await appendInstallationAuditEvent(tx, {
+        actorType: "LOCAL_OPERATOR",
+        actorIdSnapshot: null,
+        targetIdSnapshot: seeded.id,
+        action: "ACCOUNT_CREATE",
+        outcome: "SUCCESS",
+        details: { role: "GM" },
+      });
+      return seeded;
     });
   }
 
