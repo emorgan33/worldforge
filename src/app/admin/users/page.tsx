@@ -27,7 +27,7 @@ export default function AdminUsersPage() {
   const [form, setForm] = useState({ email: "", name: "", role: "AUTHOR" });
   const [setupLink, setSetupLink] = useState<SetupLink | null>(null);
   const createSeq = useRef(0);
-  const createInvalidated = useRef(false);
+  const departureSeq = useRef(0);
 
   useEffect(() => {
     if (error) errorRef.current?.focus();
@@ -35,24 +35,24 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     const clear = () => setSetupLink(null);
-    const invalidate = () => {
-      createInvalidated.current = true;
+    const depart = () => {
+      departureSeq.current += 1;
       setSetupLink(null);
     };
     const onPageShow = (event: PageTransitionEvent) => {
-      if (event.persisted) invalidate();
+      if (event.persisted) depart();
     };
     const onClick = (event: MouseEvent) => {
-      if ((event.target as Element | null)?.closest("a[href]")) invalidate();
+      if ((event.target as Element | null)?.closest("a[href]")) depart();
     };
-    window.addEventListener("pagehide", invalidate);
+    window.addEventListener("pagehide", depart);
     window.addEventListener("pageshow", onPageShow);
-    window.addEventListener("popstate", invalidate);
+    window.addEventListener("popstate", depart);
     document.addEventListener("click", onClick, true);
     return () => {
-      window.removeEventListener("pagehide", invalidate);
+      window.removeEventListener("pagehide", depart);
       window.removeEventListener("pageshow", onPageShow);
-      window.removeEventListener("popstate", invalidate);
+      window.removeEventListener("popstate", depart);
       document.removeEventListener("click", onClick, true);
     };
   }, []);
@@ -119,7 +119,7 @@ export default function AdminUsersPage() {
   async function createAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const createId = ++createSeq.current;
-    createInvalidated.current = false;
+    const departureAtStart = departureSeq.current;
     setCreating(true);
     setError("");
     try {
@@ -140,7 +140,7 @@ export default function AdminUsersPage() {
         setError(data.error || "Unable to create account.");
         return;
       }
-      if (createId !== createSeq.current || createInvalidated.current) {
+      if (createId !== createSeq.current || departureSeq.current !== departureAtStart) {
         await loadUsers();
         setError("Unable to confirm whether account creation succeeded because the request was invalidated. The list has been refreshed; do not resubmit until you verify whether it succeeded.");
         return;
@@ -155,7 +155,7 @@ export default function AdminUsersPage() {
       setForm({ email: "", name: "", role: "AUTHOR" });
       setShowCreate(false);
     } catch {
-      if (createId !== createSeq.current || createInvalidated.current) return;
+      if (createId !== createSeq.current || departureSeq.current !== departureAtStart) return;
       await loadUsers();
       setError("Unable to confirm account creation. The list has been refreshed; do not resubmit until you verify whether it succeeded.");
     } finally {
