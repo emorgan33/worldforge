@@ -52,6 +52,7 @@ interface SidebarProps {
   onRefreshWorlds?: () => Promise<void> | void;
   actorId?: string | null;
   isAdmin?: boolean;
+  onNavigateAdmin?: () => void;
   onManageWorld?: (action: "archive" | "duplicate" | "restore" | "purge" | "export" | "import", worldId?: string, summary?: WorldSummary) => void;
   onBeforeManageAction?: () => boolean;
   collapsed?: boolean;
@@ -88,6 +89,7 @@ export function Sidebar({
   onRefreshWorlds,
   actorId,
   isAdmin = false,
+  onNavigateAdmin,
   onManageWorld,
   onBeforeManageAction,
   collapsed = false,
@@ -147,11 +149,19 @@ export function Sidebar({
       {!mobile && collapsed && <div className="hidden md:block"><button type="button" onClick={() => setShowTemplateModal(true)} aria-label="New article" title="New article" className="group relative mx-2 mt-3 flex h-11 w-11 items-center justify-center rounded-lg bg-[#9b8cfa] text-[#111318] hover:bg-violet-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"><Plus className="h-4 w-4" /><span aria-hidden="true" className="pointer-events-none absolute left-full top-1/2 z-40 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-100 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">New article</span></button></div>}
       {isAdmin && (
         <div className={`px-3 pb-2 ${collapsed && !mobile ? "md:px-2" : ""}`}>
-          <Link href="/admin/users" title="Administration" className={`${navItemClass(false, mobile)} ${collapsed && !mobile ? "md:mx-auto md:h-11 md:min-h-11 md:w-11 md:justify-center md:px-0" : ""}`}>
-            <ShieldCheck aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[#a9afbb]" />
-            <span className={collapsed && !mobile ? "md:hidden" : ""}>Administration</span>
-            {collapsed && !mobile && <span aria-hidden="true" className="pointer-events-none absolute left-full top-1/2 z-40 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-100 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">Administration</span>}
-          </Link>
+          {onNavigateAdmin ? (
+            <button type="button" onClick={onNavigateAdmin} title="Administration" className={`${navItemClass(false, mobile)} ${collapsed && !mobile ? "md:mx-auto md:h-11 md:min-h-11 md:w-11 md:justify-center md:px-0" : ""}`}>
+              <ShieldCheck aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[#a9afbb]" />
+              <span className={collapsed && !mobile ? "md:hidden" : ""}>Administration</span>
+              {collapsed && !mobile && <span aria-hidden="true" className="pointer-events-none absolute left-full top-1/2 z-40 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-100 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">Administration</span>}
+            </button>
+          ) : (
+            <Link href="/admin/users" title="Administration" className={`${navItemClass(false, mobile)} ${collapsed && !mobile ? "md:mx-auto md:h-11 md:min-h-11 md:w-11 md:justify-center md:px-0" : ""}`}>
+              <ShieldCheck aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[#a9afbb]" />
+              <span className={collapsed && !mobile ? "md:hidden" : ""}>Administration</span>
+              {collapsed && !mobile && <span aria-hidden="true" className="pointer-events-none absolute left-full top-1/2 z-40 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-100 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">Administration</span>}
+            </Link>
+          )}
         </div>
       )}
       <div className={`mt-auto ${mobile ? "px-4 pb-5 pt-3" : "p-3"} ${collapsed && !mobile ? "md:hidden" : ""}`}><button type="button" onClick={() => setShowTemplateModal(true)} aria-label="New article" className={`flex min-h-11 w-full items-center gap-3 rounded-lg bg-[#9b8cfa] px-4 text-left text-sm font-bold text-[#111318] hover:bg-violet-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 ${mobile ? "h-[50px]" : ""}`}><Plus className="h-[18px] w-[18px]" /><span>New article</span></button></div>
