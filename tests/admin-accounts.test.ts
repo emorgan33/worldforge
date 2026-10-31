@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
+import { PrismaClient } from "@prisma/client";
 import { runAdminMutation, type AdminMutateContext } from "../src/lib/admin-accounts";
 import { appendInstallationAuditEvent, recordFailedAdminAttempt, sanitizeAuditDetails } from "../src/lib/admin-audit";
 import { isAdminError } from "../src/lib/admin-policy";
@@ -82,11 +83,12 @@ describe("admin-accounts mutation core", () => {
     }
   });
 
-  it("records a rejected audit when the actor session is revoked before the transaction", async () => {
+  it("does not write a failure audit for an unauthorized (revoked) actor", async () => {
     const { db, cleanup } = await createIsolatedDatabase();
     try {
       const { actor, sessionId } = await createAdminActor(db);
       const target = await createTargetUser(db);
+      const before = await db.user.findUniqueOrThrow({ where: { id: target.id } });
       await db.authSession.delete({ where: { id: sessionId } });
 
       const result = await runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate);
@@ -95,21 +97,23 @@ describe("admin-accounts mutation core", () => {
       if (result.ok) return;
       assert.equal(result.error.code, "UNAUTHORIZED");
 
+      const after = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      assert.equal(after.accountVersion, before.accountVersion);
+      assert.equal(after.name, before.name);
+
       const audits = await db.installationAuditEvent.findMany({ where: { targetIdSnapshot: target.id } });
-      assert.equal(audits.length, 1);
-      assert.equal(audits[0].outcome, "REJECTED");
-      assert.equal(audits[0].reasonCode, "UNAUTHORIZED");
-      assert.equal(audits[0].actorIdSnapshot, actor.userId);
+      assert.equal(audits.length, 0);
     } finally {
       await cleanup();
     }
   });
 
-  it("rejects a disabled admin inside the transaction", async () => {
+  it("rejects a disabled admin inside the transaction and leaves no audit row", async () => {
     const { db, cleanup } = await createIsolatedDatabase();
     try {
       const { actor, user } = await createAdminActor(db);
       const target = await createTargetUser(db);
+      const before = await db.user.findUniqueOrThrow({ where: { id: target.id } });
       await db.user.update({ where: { id: user.id }, data: { disabledAt: new Date() } });
 
       const result = await runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate);
@@ -117,18 +121,21 @@ describe("admin-accounts mutation core", () => {
       assert.equal(result.ok, false);
       if (result.ok) return;
       assert.equal(result.error.code, "UNAUTHORIZED");
-      const audit = await db.installationAuditEvent.findFirst({ where: { targetIdSnapshot: target.id } });
-      assert.equal(audit?.outcome, "REJECTED");
+      const after = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      assert.equal(after.accountVersion, before.accountVersion);
+      const audits = await db.installationAuditEvent.findMany({ where: { targetIdSnapshot: target.id } });
+      assert.equal(audits.length, 0);
     } finally {
       await cleanup();
     }
   });
 
-  it("rejects a demoted admin inside the transaction", async () => {
+  it("rejects a demoted admin inside the transaction and leaves no audit row", async () => {
     const { db, cleanup } = await createIsolatedDatabase();
     try {
       const { actor, user } = await createAdminActor(db);
       const target = await createTargetUser(db);
+      const before = await db.user.findUniqueOrThrow({ where: { id: target.id } });
       await db.user.update({ where: { id: user.id }, data: { role: "AUTHOR" } });
 
       const result = await runAdminMutation(db, actor, { userId: target.id }, "ROLE_CHANGE", successMutate);
@@ -136,26 +143,31 @@ describe("admin-accounts mutation core", () => {
       assert.equal(result.ok, false);
       if (result.ok) return;
       assert.equal(result.error.code, "UNAUTHORIZED");
-      const audit = await db.installationAuditEvent.findFirst({ where: { targetIdSnapshot: target.id } });
-      assert.equal(audit?.outcome, "REJECTED");
+      const after = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      assert.equal(after.accountVersion, before.accountVersion);
+      const audits = await db.installationAuditEvent.findMany({ where: { targetIdSnapshot: target.id } });
+      assert.equal(audits.length, 0);
     } finally {
       await cleanup();
     }
   });
 
-  it("rejects an expired admin session inside the transaction", async () => {
+  it("rejects an expired admin session inside the transaction and leaves no audit row", async () => {
     const { db, cleanup } = await createIsolatedDatabase();
     try {
       const { actor } = await createAdminActor(db, { expired: true });
       const target = await createTargetUser(db);
+      const before = await db.user.findUniqueOrThrow({ where: { id: target.id } });
 
       const result = await runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate);
 
       assert.equal(result.ok, false);
       if (result.ok) return;
       assert.equal(result.error.code, "UNAUTHORIZED");
-      const audit = await db.installationAuditEvent.findFirst({ where: { targetIdSnapshot: target.id } });
-      assert.equal(audit?.outcome, "REJECTED");
+      const after = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      assert.equal(after.accountVersion, before.accountVersion);
+      const audits = await db.installationAuditEvent.findMany({ where: { targetIdSnapshot: target.id } });
+      assert.equal(audits.length, 0);
     } finally {
       await cleanup();
     }
@@ -198,17 +210,21 @@ describe("admin-accounts mutation core", () => {
     }
   });
 
-  it("returns STALE_ACCOUNT when expectedVersion does not match", async () => {
+  it("returns STALE_ACCOUNT when expectedVersion does not match and leaves target untouched", async () => {
     const { db, cleanup } = await createIsolatedDatabase();
     try {
       const { actor } = await createAdminActor(db);
       const target = await createTargetUser(db);
+      const before = await db.user.findUniqueOrThrow({ where: { id: target.id } });
 
       const result = await runAdminMutation(db, actor, { userId: target.id, expectedVersion: 999 }, "STATUS_CHANGE", successMutate);
 
       assert.equal(result.ok, false);
       if (result.ok) return;
       assert.equal(result.error.code, "STALE_ACCOUNT");
+      const after = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      assert.equal(after.accountVersion, before.accountVersion);
+      assert.equal(after.name, before.name);
       const audit = await db.installationAuditEvent.findFirst({ where: { targetIdSnapshot: target.id } });
       assert.equal(audit?.outcome, "REJECTED");
       assert.equal(audit?.reasonCode, "STALE_ACCOUNT");
@@ -219,7 +235,7 @@ describe("admin-accounts mutation core", () => {
 
   it("serializes two independent clients on the singleton", async () => {
     const { db: db1, databaseUrl, cleanup: cleanup1 } = await createIsolatedDatabase();
-    const db2 = new (await import("@prisma/client")).PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
     try {
       const { actor: actor1 } = await createAdminActor(db1);
       const { actor: actor2 } = await createAdminActor(db2);
@@ -249,19 +265,12 @@ describe("admin-accounts mutation core", () => {
       }, {
         checkpoint: async (ctx) => {
           secondVersion = ctx.singleton.version;
-          barrier.b.enter();
-          await withTimeout(barrier.b.wait(), 5000);
         },
       });
 
       barrier.releaseA();
-      await withTimeout(barrier.bEntered(), 5000);
-      barrier.releaseB();
+      await Promise.all([first, second]);
 
-      const [result1, result2] = await Promise.all([first, second]);
-
-      assert.equal(result1.ok, true);
-      assert.equal(result2.ok, true);
       assert.equal(typeof firstVersion, "number");
       assert.equal(typeof secondVersion, "number");
       assert.equal(secondVersion, (firstVersion as number) + 1);
@@ -273,6 +282,206 @@ describe("admin-accounts mutation core", () => {
     } finally {
       await db2.$disconnect();
       await cleanup1();
+    }
+  });
+
+  it("rejects an actor whose session expires while the mutation holds the singleton lock", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      // Session expires 100 ms after creation.
+      const { actor } = await createAdminActor(db, { expiresInMs: 100 });
+      const target = await createTargetUser(db);
+      const before = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+
+      const barrier = makeBarrier();
+      const first = runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, {
+        checkpoint: async () => {
+          barrier.a.enter();
+          await withTimeout(barrier.a.wait(), 5000);
+        },
+      });
+
+      await withTimeout(barrier.aEntered(), 5000);
+      // Wait past the session expiry while the mutation still holds the lock.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      barrier.releaseA();
+
+      const result = await first;
+
+      assert.equal(result.ok, false);
+      if (result.ok) return;
+      assert.equal(result.error.code, "UNAUTHORIZED");
+      const after = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      assert.equal(after.accountVersion, before.accountVersion);
+      assert.equal(after.name, before.name);
+      // Unauthorized attempt must not write a failure audit row.
+      const audits = await db.installationAuditEvent.findMany({ where: { targetIdSnapshot: target.id } });
+      assert.equal(audits.length, 0);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("serializes LOCAL_OPERATOR mutations on the singleton", async () => {
+    const { db: db1, databaseUrl, cleanup: cleanup1 } = await createIsolatedDatabase();
+    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    try {
+      const target1 = await createTargetUser(db1);
+      const target2 = await createTargetUser(db2);
+      const actor1 = { type: "LOCAL_OPERATOR" as const, userId: "operator-a" };
+      const actor2 = { type: "LOCAL_OPERATOR" as const, userId: "operator-b" };
+
+      const barrier = makeBarrier();
+      let firstVersion: number | null = null;
+      let secondVersion: number | null = null;
+
+      const first = runAdminMutation(db1, actor1, { userId: target1.id }, "BOOTSTRAP", async (ctx) => {
+        await ctx.tx.user.update({ where: { id: ctx.target.id }, data: { name: "First" } });
+        return { value: {} };
+      }, {
+        checkpoint: async (ctx) => {
+          firstVersion = ctx.singleton.version;
+          barrier.a.enter();
+          await withTimeout(barrier.a.wait(), 5000);
+        },
+      });
+
+      await withTimeout(barrier.aEntered(), 5000);
+
+      const second = runAdminMutation(db2, actor2, { userId: target2.id }, "BOOTSTRAP", async (ctx) => {
+        await ctx.tx.user.update({ where: { id: ctx.target.id }, data: { name: "Second" } });
+        return { value: {} };
+      }, {
+        checkpoint: async (ctx) => {
+          secondVersion = ctx.singleton.version;
+        },
+      });
+
+      barrier.releaseA();
+      await Promise.all([first, second]);
+
+      assert.equal(secondVersion, (firstVersion as number) + 1);
+    } finally {
+      await db2.$disconnect();
+      await cleanup1();
+    }
+  });
+
+  it("supports create mode without a pre-existing target row", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const newId = randomUUID();
+      const email = `new-${randomUUID()}@example.invalid`;
+
+      const result = await runAdminMutation(
+        db,
+        actor,
+        { userId: newId },
+        "ACCOUNT_CREATE",
+        async (ctx) => {
+          await ctx.tx.user.create({
+            data: { id: ctx.target.id, name: "New", email, role: "AUTHOR" },
+          });
+          return { value: { id: newId }, details: { role: "AUTHOR" } };
+        },
+        { mode: "create" },
+      );
+
+      assert.equal(result.ok, true);
+      const created = await db.user.findUniqueOrThrow({ where: { id: newId } });
+      assert.equal(created.email, email);
+      assert.equal(created.role, "AUTHOR");
+      const audit = await db.installationAuditEvent.findFirstOrThrow({ where: { targetIdSnapshot: newId } });
+      assert.equal(audit.outcome, "SUCCESS");
+      assert.equal(audit.action, "ACCOUNT_CREATE");
+      const details = JSON.parse(audit.detailsJson);
+      assert.equal(details.role, "AUTHOR");
+      assert.equal(details.targetVersion, undefined);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("supports delete mode without a post-mutate version increment", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const target = await createTargetUser(db);
+
+      const result = await runAdminMutation(
+        db,
+        actor,
+        { userId: target.id },
+        "ACCOUNT_DELETE",
+        async (ctx) => {
+          await ctx.tx.user.delete({ where: { id: ctx.target.id } });
+          return { value: {} };
+        },
+        { mode: "delete" },
+      );
+
+      assert.equal(result.ok, true);
+      assert.equal(await db.user.count({ where: { id: target.id } }), 0);
+      const audit = await db.installationAuditEvent.findFirstOrThrow({ where: { targetIdSnapshot: target.id } });
+      assert.equal(audit.outcome, "SUCCESS");
+      assert.equal(audit.action, "ACCOUNT_DELETE");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("returns CONCURRENCY_CONFLICT for a transaction-conflict error", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const target = await createTargetUser(db);
+
+      const conflictAppend = async () => {
+        const err = new Error("transaction conflict") as Error & { code: string };
+        err.code = "P2034";
+        throw err;
+      };
+
+      const result = await runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, {
+        appendAudit: conflictAppend as unknown as typeof appendInstallationAuditEvent,
+      });
+
+      assert.equal(result.ok, false);
+      if (result.ok) return;
+      assert.equal(result.error.code, "CONCURRENCY_CONFLICT");
+      const audit = await db.installationAuditEvent.findFirst({ where: { targetIdSnapshot: target.id } });
+      assert.equal(audit?.outcome, "FAILED");
+      assert.equal(audit?.reasonCode, "CONCURRENCY_CONFLICT");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("returns INTERNAL_ERROR for a transaction timeout, not a retryable conflict", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const target = await createTargetUser(db);
+
+      const timeoutAppend = async () => {
+        const err = new Error("Transaction API error: timeout") as Error & { code: string };
+        err.code = "P2028";
+        throw err;
+      };
+
+      const result = await runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, {
+        appendAudit: timeoutAppend as unknown as typeof appendInstallationAuditEvent,
+      });
+
+      assert.equal(result.ok, false);
+      if (result.ok) return;
+      assert.equal(result.error.code, "INTERNAL_ERROR");
+      const audit = await db.installationAuditEvent.findFirst({ where: { targetIdSnapshot: target.id } });
+      assert.equal(audit?.outcome, "FAILED");
+      assert.equal(audit?.reasonCode, "INTERNAL_ERROR");
+    } finally {
+      await cleanup();
     }
   });
 
@@ -303,6 +512,7 @@ describe("admin-accounts mutation core", () => {
     try {
       const { actor } = await createAdminActor(db);
       const target = await createTargetUser(db);
+      const before = await db.user.findUniqueOrThrow({ where: { id: target.id } });
 
       const result = await runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", async () => {
         return { error: "Not allowed.", code: "SELF_CHANGE" };
@@ -311,6 +521,8 @@ describe("admin-accounts mutation core", () => {
       assert.equal(result.ok, false);
       if (result.ok) return;
       assert.equal(result.error.code, "SELF_CHANGE");
+      const after = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      assert.equal(after.accountVersion, before.accountVersion);
       const audit = await db.installationAuditEvent.findFirst({ where: { targetIdSnapshot: target.id } });
       assert.equal(audit?.outcome, "REJECTED");
       assert.equal(audit?.reasonCode, "SELF_CHANGE");
@@ -321,33 +533,28 @@ describe("admin-accounts mutation core", () => {
 });
 
 describe("admin-audit sanitization", () => {
-  it("removes sensitive keys and redacts token-like strings from audit details", async () => {
+  it("drops disallowed keys from audit details", async () => {
     const { cleanup } = await createIsolatedDatabase();
     try {
-      const sensitive = {
-        token: "abc123",
-        body: "request body text",
-        hash: "x".repeat(64),
-        password: "secret",
-        safeKey: "visible",
-        nested: { tokenHash: "yyy", bearer: "Bearer abc" },
-        tokenUrl: "https://example.com/setup#token=abc",
+      const adversarial = {
+        exception: "TypeError: Cannot read properties of undefined (reading 'tokenHash')",
+        sessionId: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+        cookieValue: "wf_session=eyJhbGciOi",
+        requestBody: "email=admin@example.com&password=hunter2",
+        stack: "at runAdminMutation (src/lib/admin-accounts.ts:85:5)",
+        tokenHash: "a".repeat(64),
+        setupUrl: "https://example.com/setup#token=secret",
       };
-      const sanitized = sanitizeAuditDetails(sensitive);
-      assert.equal((sanitized as Record<string, unknown>).token, undefined);
-      assert.equal((sanitized as Record<string, unknown>).body, undefined);
-      assert.equal((sanitized as Record<string, unknown>).hash, undefined);
-      assert.equal((sanitized as Record<string, unknown>).password, undefined);
-      assert.equal((sanitized as Record<string, unknown>).safeKey, "visible");
-      assert.equal((sanitized.nested as Record<string, unknown>).tokenHash, undefined);
-      assert.equal((sanitized.nested as Record<string, unknown>).bearer, "[REDACTED]");
-      assert.equal(sanitized.tokenUrl, "[REDACTED]");
+      const sanitized = sanitizeAuditDetails("STATUS_CHANGE", adversarial);
+      for (const key of Object.keys(adversarial)) {
+        assert.equal((sanitized as Record<string, unknown>)[key], undefined, `key ${key} must be dropped`);
+      }
     } finally {
       await cleanup();
     }
   });
 
-  it("stores only sanitized details in audit rows", async () => {
+  it("keeps only action-allowlisted detail keys", async () => {
     const { db, cleanup } = await createIsolatedDatabase();
     try {
       const { actor } = await createAdminActor(db);
@@ -355,19 +562,24 @@ describe("admin-audit sanitization", () => {
       const tokenLike = randomBytes(32).toString("base64url");
 
       const result = await runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", async () => {
-        return { value: {}, details: { note: "ok", leaked: tokenLike, hash: "h".repeat(64) } };
+        return {
+          value: {},
+          details: {
+            reason: "reviewed",
+            note: "ok",
+            leaked: tokenLike,
+          },
+        };
       });
 
       assert.equal(result.ok, true);
       const audit = await db.installationAuditEvent.findFirstOrThrow({ where: { targetIdSnapshot: target.id } });
       const stored = JSON.parse(audit.detailsJson);
-      assert.equal(stored.note, "ok");
-      assert.equal(stored.leaked, "[REDACTED]");
-      assert.equal(stored.hash, undefined);
+      assert.equal(stored.reason, "reviewed");
+      assert.equal(stored.note, undefined);
+      assert.equal(stored.leaked, undefined);
     } finally {
       await cleanup();
     }
   });
 });
-
-

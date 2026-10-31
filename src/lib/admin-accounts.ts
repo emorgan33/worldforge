@@ -1,13 +1,21 @@
 import type { PrismaClient, User, InstallationAdminState, Prisma } from "@prisma/client";
 import type { AdminError, InstallationAuditAction } from "./admin-policy";
 import { activeAdmin } from "./admin-policy";
-import { appendInstallationAuditEvent, recordFailedAdminAttempt, type AuditInput, type AuditDetails } from "./admin-audit";
+import {
+  appendInstallationAuditEvent,
+  recordFailedAdminAttempt,
+  logSanitizedAuditFailure,
+  type AuditInput,
+  type AuditDetails,
+} from "./admin-audit";
 
 export type AdminActor =
   | { type: "WEB_ADMIN"; userId: string; sessionId: string }
   | { type: "LOCAL_OPERATOR"; userId?: string | null };
 
 export type AdminMutationTarget = { userId: string; expectedVersion?: number };
+
+export type AdminMutationMode = "default" | "create" | "delete";
 
 export type AdminMutationResult<T> = { ok: true; value: T } | { ok: false; error: AdminError };
 
@@ -25,6 +33,7 @@ export type AdminMutateFn<T> = (ctx: AdminMutateContext) => Promise<AdminMutateR
 export type AdminMutationCheckpoint = (ctx: AdminMutateContext) => Promise<void>;
 
 export type AdminMutationOptions = {
+  mode?: AdminMutationMode;
   appendAudit?: typeof appendInstallationAuditEvent;
   recordFailure?: typeof recordFailedAdminAttempt;
   checkpoint?: AdminMutationCheckpoint;
@@ -36,6 +45,8 @@ export class AdminMutationRejection extends Error {
     this.name = "AdminMutationRejection";
   }
 }
+
+const TRANSACTION_OPTIONS = { maxWait: 5000, timeout: 30000 };
 
 function actorIdSnapshot(actor: AdminActor): string | null {
   if (actor.type === "LOCAL_OPERATOR") return actor.userId ?? null;
@@ -65,8 +76,9 @@ function isConcurrencyError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   const prismaCode = (error as { code?: string }).code;
   if (prismaCode === "P2034" || prismaCode === "P2024") return true;
+  if (prismaCode === "P2028") return false; // timeout, not a retryable conflict
   const message = String((error as { message?: unknown }).message ?? "");
-  return /database is locked|busy|transaction|deadlock/i.test(message);
+  return /database is locked|busy|deadlock/i.test(message);
 }
 
 export async function runAdminMutation<T>(
@@ -77,6 +89,7 @@ export async function runAdminMutation<T>(
   mutate: AdminMutateFn<T>,
   options?: AdminMutationOptions,
 ): Promise<AdminMutationResult<T>> {
+  const mode = options?.mode ?? "default";
   const append = options?.appendAudit ?? appendInstallationAuditEvent;
   const recordFailure = options?.recordFailure ?? recordFailedAdminAttempt;
   const checkpoint = options?.checkpoint;
@@ -87,6 +100,12 @@ export async function runAdminMutation<T>(
         where: { id: 1 },
         data: { version: { increment: 1 } },
       });
+
+      // Test-only hook placed after the singleton lock and before the actor recheck.
+      // It lets tests prove the recheck is evaluated inside the transaction.
+      if (checkpoint) {
+        await checkpoint({ tx, actor, target: { id: target.userId } as User, singleton });
+      }
 
       if (actor.type === "WEB_ADMIN") {
         const session = await tx.authSession.findUnique({
@@ -101,46 +120,52 @@ export async function runAdminMutation<T>(
         }
       }
 
-      const targetUser = await tx.user.findUnique({ where: { id: target.userId } });
-      if (!targetUser) {
-        throw new AdminMutationRejection({ error: "Account not found.", code: "NOT_FOUND" });
-      }
-      if (target.expectedVersion !== undefined && targetUser.accountVersion !== target.expectedVersion) {
-        throw new AdminMutationRejection({ error: "Account state changed. Please refresh.", code: "STALE_ACCOUNT" });
+      let targetUser: User | null = null;
+      if (mode !== "create") {
+        targetUser = await tx.user.findUnique({ where: { id: target.userId } });
+        if (!targetUser) {
+          throw new AdminMutationRejection({ error: "Account not found.", code: "NOT_FOUND" });
+        }
+        if (target.expectedVersion !== undefined && targetUser.accountVersion !== target.expectedVersion) {
+          throw new AdminMutationRejection({ error: "Account state changed. Please refresh.", code: "STALE_ACCOUNT" });
+        }
       }
 
-      const ctx: AdminMutateContext = { tx, actor, target: targetUser, singleton };
-      if (checkpoint) await checkpoint(ctx);
+      const ctxTarget = targetUser ?? ({ id: target.userId } as User);
+      const ctx: AdminMutateContext = { tx, actor, target: ctxTarget, singleton };
 
       const mutateResult = await mutate(ctx);
       if ("code" in mutateResult) {
         throw new AdminMutationRejection(mutateResult);
       }
 
-      const updatedTarget = await tx.user.update({
-        where: { id: targetUser.id },
-        data: { accountVersion: { increment: 1 } },
-      });
+      const auditDetails: AuditDetails = { ...mutateResult.details };
+      if (mode === "default") {
+        const previousVersion = targetUser!.accountVersion;
+        const updatedTarget = await tx.user.update({
+          where: { id: targetUser!.id },
+          data: { accountVersion: { increment: 1 } },
+        });
+        auditDetails.previousVersion = previousVersion;
+        auditDetails.targetVersion = updatedTarget.accountVersion;
+      }
 
-      const auditDetails: AuditDetails = {
-        ...mutateResult.details,
-        previousVersion: targetUser.accountVersion,
-        targetVersion: updatedTarget.accountVersion,
-      };
-
-      await append(tx, buildAuditInput(actor, targetUser.id, action, "SUCCESS", mutateResult.reasonCode, auditDetails));
+      await append(tx, buildAuditInput(actor, target.userId, action, "SUCCESS", mutateResult.reasonCode, auditDetails));
 
       return mutateResult.value;
-    });
+    }, TRANSACTION_OPTIONS);
 
     return { ok: true, value };
   } catch (error) {
     if (error instanceof AdminMutationRejection) {
-      const failureInput = buildAuditInput(actor, target.userId, action, "REJECTED", error.adminError.code);
-      try {
-        await recordFailure(db, failureInput);
-      } catch {
-        // Best-effort failure audit failed; return sanitized error below.
+      // Unauthorized traffic receives no failure audit and no account detail.
+      if (error.adminError.code !== "UNAUTHORIZED") {
+        const failureInput = buildAuditInput(actor, target.userId, action, "REJECTED", error.adminError.code);
+        try {
+          await recordFailure(db, failureInput);
+        } catch {
+          logSanitizedAuditFailure(action, error.adminError.code);
+        }
       }
       return { ok: false, error: error.adminError };
     }
@@ -151,7 +176,7 @@ export async function runAdminMutation<T>(
     try {
       await recordFailure(db, failureInput);
     } catch {
-      // Failure audit persistence failed; fall through to generic error.
+      logSanitizedAuditFailure(action, reasonCode);
     }
 
     if (concurrent) {

@@ -56,18 +56,23 @@ export async function createIsolatedDatabase(): Promise<{
 
 export async function createAdminActor(
   db: PrismaClient,
-  opts: { disabled?: boolean; expired?: boolean } = {},
+  opts: { disabled?: boolean; expired?: boolean; role?: string; expiresInMs?: number } = {},
 ): Promise<{ user: { id: string; email: string; role: string }; actor: AdminActor; sessionId: string }> {
   const user = await db.user.create({
     data: {
       name: "Admin",
       email: `admin-${randomUUID()}@example.invalid`,
-      role: "ADMIN",
+      role: opts.role ?? "ADMIN",
       disabledAt: opts.disabled ? new Date() : null,
     },
   });
   const token = randomBytes(32).toString("base64url");
-  const expiresAt = opts.expired ? new Date(Date.now() - 60_000) : new Date(Date.now() + 60_000);
+  let expiresAt: Date;
+  if (opts.expiresInMs !== undefined) {
+    expiresAt = new Date(Date.now() + opts.expiresInMs);
+  } else {
+    expiresAt = opts.expired ? new Date(Date.now() - 60_000) : new Date(Date.now() + 60_000);
+  }
   const session = await db.authSession.create({
     data: { userId: user.id, tokenHash: tokenHash(token), expiresAt },
   });
@@ -122,3 +127,6 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms)),
   ]);
 }
+
+// Re-export the shared cleanup helper so P2.2–P2.6 fixtures can use it alongside this harness.
+export { deleteTestUsers } from "./auth-fixture";
