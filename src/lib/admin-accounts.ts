@@ -430,3 +430,91 @@ export async function revokeAllTargetSessions(
     return { value, details: value };
   });
 }
+
+export type DeletionPreview = {
+  accountVersion: number;
+  disabled: boolean;
+  worlds: { id: string; title: string; deletedAt: Date | null }[];
+  revisionIds: string[];
+  foundryImportIds: string[];
+  pendingImportIds: string[];
+  membershipCount: number;
+  grantCount: number;
+  sessionCount: number;
+  setupCount: number;
+  previewCount: number;
+  allowed: boolean;
+};
+
+export type DeletionError = AdminError & {
+  blockers?: {
+    worlds?: DeletionPreview["worlds"];
+    revisionIds?: string[];
+    foundryImportIds?: string[];
+    pendingImportIds?: string[];
+  };
+};
+
+async function loadDeletionPreview(tx: Prisma.TransactionClient, user: Pick<User, "id" | "accountVersion" | "disabledAt">): Promise<DeletionPreview> {
+  const worlds = await tx.world.findMany({ where: { ownerId: user.id }, select: { id: true, title: true, deletedAt: true }, orderBy: { id: "asc" } });
+  const revisions = await tx.articleRevision.findMany({ where: { userId: user.id }, select: { id: true }, orderBy: { id: "asc" } });
+  const foundryImports = await tx.foundryImportRun.findMany({ where: { authorId: user.id }, select: { id: true }, orderBy: { id: "asc" } });
+  // Unknown states are conservatively treated as nonterminal.
+  const pendingImports = await tx.worldTransferImport.findMany({ where: { ownerId: user.id, status: { notIn: ["COMPLETED", "FAILED"] } }, select: { id: true }, orderBy: { id: "asc" } });
+  const membershipCount = await tx.worldMember.count({ where: { userId: user.id } });
+  const grantCount = await tx.audienceGrant.count({ where: { userId: user.id } });
+  const sessionCount = await tx.authSession.count({ where: { userId: user.id } });
+  const setupCount = await tx.accountSetup.count({ where: { userId: user.id } });
+  const previewCount = await tx.previewSession.count({ where: { OR: [{ userId: user.id }, { issuedById: user.id }] } });
+  return {
+    accountVersion: user.accountVersion, disabled: user.disabledAt !== null, worlds,
+    revisionIds: revisions.map((item) => item.id), foundryImportIds: foundryImports.map((item) => item.id),
+    pendingImportIds: pendingImports.map((item) => item.id), membershipCount, grantCount, sessionCount, setupCount, previewCount,
+    allowed: user.disabledAt !== null && worlds.length === 0 && revisions.length === 0 && foundryImports.length === 0 && pendingImports.length === 0,
+  };
+}
+
+export async function deletionPreview(db: PrismaClient, actor: AdminActor, targetUserId: string): Promise<AdminMutationResult<DeletionPreview>> {
+  try {
+    return await db.$transaction(async (tx) => {
+      if (actor.type === "WEB_ADMIN") {
+        const session = await tx.authSession.findUnique({ where: { id: actor.sessionId }, select: { expiresAt: true, user: { select: { id: true, role: true, disabledAt: true } } } });
+        if (!session || session.expiresAt <= new Date() || session.user.id !== actor.userId || !activeAdmin(session.user)) {
+          return { ok: false as const, error: { error: "Admin session is no longer valid.", code: "UNAUTHORIZED" as const } };
+        }
+      }
+      const user = await tx.user.findUnique({ where: { id: targetUserId }, select: { id: true, accountVersion: true, disabledAt: true } });
+      if (!user) return { ok: false as const, error: { error: "Account not found.", code: "NOT_FOUND" as const } };
+      const preview = await loadDeletionPreview(tx, user);
+      return { ok: true as const, value: { ...preview, allowed: preview.allowed && actor.userId !== user.id } };
+    }, TRANSACTION_OPTIONS);
+  } catch {
+    return { ok: false, error: { error: "Unable to complete this request.", code: "INTERNAL_ERROR" } };
+  }
+}
+
+export async function deleteAccount(
+  db: PrismaClient,
+  actor: AdminActor,
+  target: AdminMutationTarget,
+  body: Record<string, unknown>,
+): Promise<{ ok: true; value: { userId: string } } | { ok: false; error: DeletionError }> {
+  if (!Number.isInteger(target.expectedVersion) || (target.expectedVersion ?? -1) < 0 || typeof body.confirmEmail !== "string" || body.backupAcknowledged !== true) {
+    return { ok: false, error: { error: "Account version, email confirmation and backup acknowledgement are required.", code: "INVALID_INPUT" } };
+  }
+  return runAdminMutation<{ userId: string }>(db, actor, target, "ACCOUNT_DELETE", async ({ tx, target: user }) => {
+    if (actor.userId != null && actor.userId === user.id) return { error: "You cannot delete your own account.", code: "SELF_CHANGE" };
+    if (user.disabledAt === null) return { error: "Disable the account before deleting it.", code: "INVALID_INPUT" };
+    if (body.confirmEmail !== user.email) return { error: "Email confirmation does not match.", code: "INVALID_INPUT" };
+    const preview = await loadDeletionPreview(tx, user);
+    if (preview.worlds.length) return { error: "The account owns worlds.", code: "OWNS_WORLDS", blockers: { worlds: preview.worlds } };
+    if (preview.revisionIds.length || preview.foundryImportIds.length || preview.pendingImportIds.length) {
+      return { error: "The account has records that prevent deletion.", code: "HAS_DURABLE_RECORDS", blockers: { revisionIds: preview.revisionIds, foundryImportIds: preview.foundryImportIds, pendingImportIds: preview.pendingImportIds } };
+    }
+    await tx.foundryPreview.deleteMany({ where: { authorId: user.id } });
+    await tx.worldTransferImport.deleteMany({ where: { ownerId: user.id, status: { in: ["COMPLETED", "FAILED"] } } });
+    await tx.previewSession.updateMany({ where: { issuedById: user.id, revokedAt: null }, data: { revokedAt: new Date() } });
+    await tx.user.delete({ where: { id: user.id } });
+    return { value: { userId: user.id }, details: { worldCount: 0, durableRecordCount: 0, membershipCount: preview.membershipCount, grantCount: preview.grantCount } };
+  }, { mode: "delete" });
+}

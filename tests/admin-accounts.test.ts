@@ -12,6 +12,8 @@ import {
   listTargetSessions,
   revokeTargetSession,
   revokeAllTargetSessions,
+  deletionPreview,
+  deleteAccount,
   type AdminMutateContext,
   type AdminMutationOptions,
 } from "../src/lib/admin-accounts";
@@ -1193,6 +1195,130 @@ describe("admin session services", () => {
       assert.equal(await db.authSession.findUnique({ where: { id: sessionId } }), null);
       assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).accountVersion, 1);
     } finally { await cleanup(); }
+  });
+});
+
+describe("admin account deletion", () => {
+  it("blocks active and archived owned worlds with preview identifiers", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      for (const archived of [false, true]) {
+        const user = await createTargetUser(db, { disabled: true });
+        const world = await db.world.create({ data: { ownerId: user.id, title: "Owned", slug: `delete-${randomUUID()}`, deletedAt: archived ? new Date() : null } });
+        const preview = await deletionPreview(db, actor, user.id);
+        assert.ok(preview.ok);
+        assert.equal(preview.value.allowed, false);
+        assert.equal(preview.value.worlds[0].id, world.id);
+        const result = await deleteAccount(db, actor, { userId: user.id, expectedVersion: 0 }, { confirmEmail: user.email, backupAcknowledged: true });
+        assert.ok(!result.ok);
+        assert.equal(result.error.code, "OWNS_WORLDS");
+        assert.ok(await db.world.findUnique({ where: { id: world.id } }));
+      }
+    } finally { await cleanup(); }
+  });
+
+  it("blocks durable revisions, foundry history and nonterminal imports", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor, user: owner } = await createAdminActor(db);
+      const user = await createTargetUser(db, { disabled: true });
+      const world = await db.world.create({ data: { ownerId: owner.id, title: "Other", slug: `delete-${randomUUID()}` } });
+      const article = await db.article.create({ data: { worldId: world.id, title: "Article", slug: "article" } });
+      const revision = await db.articleRevision.create({ data: { articleId: article.id, userId: user.id, title: "Article", slug: "article", publicationStatus: "DRAFT", visibility: "PRIVATE", state: "DRAFT", articleVersionAtSave: 1 } });
+      const run = await db.foundryImportRun.create({ data: { worldId: world.id, authorId: user.id, previewId: randomUUID(), idempotencyKey: randomUUID(), requestHash: "hash", outcomesJson: "[]" } });
+      const pending = await db.worldTransferImport.create({ data: { ownerId: user.id, requestKey: randomUUID(), payloadHash: "hash", payloadJson: "{}", status: "RUNNING" } });
+      const preview = await deletionPreview(db, actor, user.id);
+      assert.ok(preview.ok);
+      assert.deepEqual(preview.value.revisionIds, [revision.id]);
+      assert.deepEqual(preview.value.foundryImportIds, [run.id]);
+      assert.deepEqual(preview.value.pendingImportIds, [pending.id]);
+      for (const remove of [async () => db.articleRevision.delete({ where: { id: revision.id } }), async () => db.foundryImportRun.delete({ where: { id: run.id } }), async () => db.worldTransferImport.delete({ where: { id: pending.id } })]) {
+        const result = await deleteAccount(db, actor, { userId: user.id, expectedVersion: 0 }, { confirmEmail: user.email, backupAcknowledged: true });
+        assert.ok(!result.ok);
+        assert.equal(result.error.code, "HAS_DURABLE_RECORDS");
+        await remove();
+      }
+      assert.deepEqual(await db.article.findUniqueOrThrow({ where: { id: article.id } }), article);
+    } finally { await cleanup(); }
+  });
+
+  it("deletes a disabled player, cascades credentials and retains unrelated content and audit", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor, user: admin } = await createAdminActor(db);
+      const user = await createTargetUser(db, { role: "PLAYER", disabled: true });
+      const world = await db.world.create({ data: { ownerId: admin.id, title: "Other", slug: `delete-${randomUUID()}`, isPublic: true } });
+      const member = await db.worldMember.create({ data: { worldId: world.id, userId: user.id } });
+      const policy = await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "ARTICLE", resourceId: randomUUID(), createdById: user.id } });
+      const grant = await db.audienceGrant.create({ data: { policyId: policy.id, userId: user.id } });
+      const expiresAt = new Date(Date.now() + 60_000);
+      await db.authSession.create({ data: { userId: user.id, tokenHash: tokenHash(randomUUID()), expiresAt } });
+      await db.accountSetup.create({ data: { userId: user.id, tokenHash: tokenHash(randomUUID()), expiresAt } });
+      const preview = await deletionPreview(db, actor, user.id);
+      assert.ok(preview.ok && preview.value.allowed);
+      const result = await deleteAccount(db, actor, { userId: user.id, expectedVersion: 0 }, { confirmEmail: user.email, backupAcknowledged: true });
+      assert.ok(result.ok);
+      assert.equal(await db.user.findUnique({ where: { id: user.id } }), null);
+      assert.equal(await db.worldMember.findUnique({ where: { id: member.id } }), null);
+      assert.equal(await db.audienceGrant.findUnique({ where: { id: grant.id } }), null);
+      assert.equal(await db.authSession.count({ where: { userId: user.id } }), 0);
+      assert.equal(await db.accountSetup.count({ where: { userId: user.id } }), 0);
+      assert.equal((await db.audiencePolicy.findUniqueOrThrow({ where: { id: policy.id } })).createdById, null);
+      assert.deepEqual(await db.world.findUniqueOrThrow({ where: { id: world.id } }), world);
+      const audit = await db.installationAuditEvent.findFirstOrThrow({ where: { targetIdSnapshot: user.id, action: "ACCOUNT_DELETE" } });
+      assert.equal(audit.actorIdSnapshot, admin.id);
+      assert.equal(audit.outcome, "SUCCESS");
+    } finally { await cleanup(); }
+  });
+
+  it("requires disabled status, current version, exact email and acknowledgement", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const user = await createTargetUser(db);
+      for (const [target, body, code] of [
+        [{ userId: user.id, expectedVersion: 0 }, { confirmEmail: user.email, backupAcknowledged: true }, "INVALID_INPUT"],
+        [{ userId: user.id, expectedVersion: 0 }, { confirmEmail: user.email, backupAcknowledged: false }, "INVALID_INPUT"],
+        [{ userId: user.id, expectedVersion: 999 }, { confirmEmail: user.email, backupAcknowledged: true }, "STALE_ACCOUNT"],
+      ] as const) {
+        const result = await deleteAccount(db, actor, target, body);
+        assert.ok(!result.ok);
+        assert.equal(result.error.code, code);
+      }
+      await db.user.update({ where: { id: user.id }, data: { disabledAt: new Date() } });
+      const mismatch = await deleteAccount(db, actor, { userId: user.id, expectedVersion: 0 }, { confirmEmail: "wrong@example.invalid", backupAcknowledged: true });
+      assert.ok(!mismatch.ok);
+      assert.equal(mismatch.error.code, "INVALID_INPUT");
+      assert.ok(await db.user.findUnique({ where: { id: user.id } }));
+    } finally { await cleanup(); }
+  });
+
+  it("recomputes blockers after a competing world creation", async () => {
+    const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
+    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    try {
+      const { actor } = await createAdminActor(db);
+      const user = await createTargetUser(db, { disabled: true });
+      const barrier = makeBarrier();
+      const writer = _runAdminMutation(db, actor, { userId: user.id }, "BOOTSTRAP", async ({ tx }) => {
+        await tx.world.create({ data: { ownerId: user.id, title: "Concurrent", slug: `delete-${randomUUID()}` } });
+        return { value: {} };
+      }, { checkpoint: async () => { barrier.a.enter(); await withTimeout(barrier.a.wait(), 5000); } });
+      await withTimeout(barrier.aEntered(), 5000);
+      // The creator increments accountVersion, so deletion must reject either stale state or the new world.
+      const deletion = deleteAccount(db2, actor, { userId: user.id, expectedVersion: 0 }, { confirmEmail: user.email, backupAcknowledged: true });
+      barrier.releaseA();
+      assert.equal((await writer).ok, true);
+      const result = await deletion;
+      assert.ok(!result.ok);
+      assert.ok(result.error.code === "STALE_ACCOUNT" || result.error.code === "OWNS_WORLDS");
+      assert.ok(await db.user.findUnique({ where: { id: user.id } }));
+      assert.equal(await db.world.count({ where: { ownerId: user.id } }), 1);
+      const refreshed = await deleteAccount(db, actor, { userId: user.id, expectedVersion: 1 }, { confirmEmail: user.email, backupAcknowledged: true });
+      assert.ok(!refreshed.ok);
+      assert.equal(refreshed.error.code, "OWNS_WORLDS");
+    } finally { await db2.$disconnect(); await cleanup(); }
   });
 });
 
