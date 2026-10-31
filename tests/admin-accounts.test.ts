@@ -568,6 +568,26 @@ describe("admin-accounts mutation core", () => {
     }
   });
 
+  it("returns a generic error when a rejected mutation's failure audit cannot be persisted", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const target = await createTargetUser(db);
+      const result = await _runAdminMutation(db, actor, { userId: target.id }, "ACCOUNT_DELETE", async () => ({
+        error: "The account has records that prevent deletion.",
+        code: "HAS_DURABLE_RECORDS",
+        blockers: { revisionIds: ["retained-revision"] },
+      }), {
+        recordFailure: (() => { throw new Error("failure audit down"); }) as unknown as typeof recordFailedAdminAttempt,
+      });
+      assert.deepEqual(result, { ok: false, error: { error: "Unable to complete this request.", code: "INTERNAL_ERROR" } });
+      assert.equal(await db.installationAuditEvent.count({ where: { targetIdSnapshot: target.id } }), 0);
+      assert.ok(await db.user.findUnique({ where: { id: target.id } }));
+    } finally {
+      await cleanup();
+    }
+  });
+
   it("rejects policy violations thrown by the mutate callback and records a rejected audit", async () => {
     const { db, cleanup } = await createIsolatedDatabase();
     try {

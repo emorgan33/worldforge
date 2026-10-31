@@ -178,6 +178,7 @@ export async function _runAdminMutation<T>(
           await recordFailure(db, failureInput);
         } catch {
           logSanitizedAuditFailure(action, error.adminError.code);
+          return { ok: false, error: { error: "Unable to complete this request.", code: "INTERNAL_ERROR" } };
         }
       }
       return { ok: false, error: error.adminError };
