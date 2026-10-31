@@ -1,9 +1,19 @@
 import { PrismaClient } from "@prisma/client";
 import { createAccount, issueRecovery } from "../src/lib/admin-accounts";
-import { normalizeEmail } from "../src/lib/admin-policy";
+import { normalizeEmail, validName } from "../src/lib/admin-policy";
 
 const db = new PrismaClient();
 const LOCAL_OPERATOR = { type: "LOCAL_OPERATOR" as const };
+const DEFAULT_GM_EMAIL = "lorekeeper@worldforge.dev";
+
+function nameFromEmail(email: string): string {
+  const local = email.split("@")[0];
+  const trimmed = local.trim();
+  const validated = validName(trimmed);
+  if (validated) return validated;
+  // Very long local parts would fail the 1–120 name policy; truncate safely.
+  return trimmed.slice(0, 120).trim() || "Worldkeeper";
+}
 
 async function printSetupUrl(email: string, token: string) {
   const origin = process.env.WORLDFORGE_ORIGIN || "http://localhost:3033";
@@ -25,7 +35,7 @@ async function main() {
   if (create) {
     const result = await createAccount(db, LOCAL_OPERATOR, {
       email: emailArg,
-      name: emailArg!.split("@")[0],
+      name: nameFromEmail(emailArg!),
       role: "AUTHOR",
     });
     if (!result.ok) throw new Error(`${result.error.code}: ${result.error.error}`);
@@ -34,17 +44,26 @@ async function main() {
   }
 
   const normalizedEmail = emailArg ? normalizeEmail(emailArg) : null;
-  const user = normalizedEmail ? await db.user.findUnique({ where: { email: normalizedEmail } }) : (await db.world.findFirst({ orderBy: { createdAt: "asc" }, select: { owner: true } }))?.owner;
+  let user = normalizedEmail ? await db.user.findUnique({ where: { email: normalizedEmail } }) : (await db.world.findFirst({ orderBy: { createdAt: "asc" }, select: { owner: true } }))?.owner;
+
+  // Legacy zero-argument fresh-installation path: create the first GM account.
+  if (!user && !emailArg && (await db.user.count()) === 0) {
+    user = await db.user.create({
+      data: { name: "Lorekeeper", email: DEFAULT_GM_EMAIL, role: "GM" },
+    });
+  }
+
   if (!user && normalizedEmail && (await db.user.count()) === 0) {
     const result = await createAccount(db, LOCAL_OPERATOR, {
       email: normalizedEmail,
-      name: normalizedEmail.split("@")[0],
+      name: nameFromEmail(normalizedEmail),
       role: "AUTHOR",
     });
     if (!result.ok) throw new Error(`${result.error.code}: ${result.error.error}`);
     await printSetupUrl(normalizedEmail, result.value.token);
     return;
   }
+
   if (!user) throw new Error(emailArg
     ? `No user found with email ${emailArg}. Run auth:setup -- --create ${emailArg} to add a new account.`
     : "No world owner found. Pass an existing user's email, or use --create to add a new account.");

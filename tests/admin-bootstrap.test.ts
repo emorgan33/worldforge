@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { bootstrapAdmin, localRecoverAccount } from "../src/lib/admin-accounts";
@@ -156,6 +157,110 @@ describe("localRecoverAccount", () => {
       assert.equal(result.ok, false);
       if (result.ok) return;
       assert.equal(result.error.code, "INVALID_INPUT");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("revokes preview capabilities where the target is the issuer", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const target = await createTargetUser(db, { role: "AUTHOR" });
+      const other = await createTargetUser(db, { role: "AUTHOR" });
+      const world = await db.world.create({
+        data: { ownerId: other.id, title: "Issuer preview world", slug: `issuer-preview-${other.id}` },
+      });
+      await db.previewSession.create({
+        data: { userId: other.id, worldId: world.id, issuedById: target.id, tokenHash: tokenHash("preview-issuer"), expiresAt: new Date(Date.now() + 60_000) },
+      });
+
+      const result = await bootstrapAdmin(db, target.email);
+      assert.equal(result.ok, true);
+      assert.equal(await db.previewSession.count({ where: { issuedById: target.id, revokedAt: null } }), 0);
+    } finally {
+      await cleanup();
+    }
+  });
+});
+
+describe("auth:setup CLI", () => {
+  function runAuthSetup(databaseUrl: string, extraArgs: string[]) {
+    const result = spawnSync("pnpm", ["exec", "tsx", "scripts/auth-setup.ts", "--", ...extraArgs], {
+      cwd: process.cwd(),
+      env: { ...process.env, DATABASE_URL: databaseUrl, WORLDFORGE_ORIGIN: "http://localhost:3131" },
+      encoding: "utf-8",
+    });
+    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  }
+
+  it("creates an AUTHOR account with --create and prints a post-commit setup URL", async () => {
+    const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
+    try {
+      const { status, stdout } = runAuthSetup(databaseUrl, ["--create", "cli-create@example.com"]);
+      assert.equal(status, 0);
+      assert.match(stdout, /Set up or recover cli-create@example\.com/);
+      assert.match(stdout, /http:\/\/localhost:3131\/setup#token=[A-Za-z0-9_-]{43}/);
+
+      const user = await db.user.findUnique({ where: { email: "cli-create@example.com" } });
+      assert.equal(user?.role, "AUTHOR");
+      assert.equal(user?.disabledAt, null);
+      const audits = await db.installationAuditEvent.findMany({ where: { targetIdSnapshot: user?.id, action: "ACCOUNT_CREATE" } });
+      assert.equal(audits.length, 1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("rejects duplicate --create with DUPLICATE_EMAIL", async () => {
+    const { databaseUrl, cleanup } = await createIsolatedDatabase();
+    try {
+      runAuthSetup(databaseUrl, ["--create", "dup@example.com"]);
+      const { status, stderr } = runAuthSetup(databaseUrl, ["--create", "dup@example.com"]);
+      assert.notEqual(status, 0);
+      assert.match(stderr, /DUPLICATE_EMAIL/);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("creates the first GM account with no arguments", async () => {
+    const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
+    try {
+      const { status, stdout } = runAuthSetup(databaseUrl, []);
+      assert.equal(status, 0);
+      assert.match(stdout, /Set up or recover lorekeeper@worldforge\.dev/);
+
+      const user = await db.user.findUnique({ where: { email: "lorekeeper@worldforge.dev" } });
+      assert.equal(user?.role, "GM");
+      assert.equal(user?.disabledAt, null);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("issues a recovery link for an existing active account", async () => {
+    const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
+    try {
+      const target = await createTargetUser(db, { role: "AUTHOR" });
+      const { status, stdout } = runAuthSetup(databaseUrl, [target.email]);
+      assert.equal(status, 0);
+      assert.match(stdout, /Set up or recover/);
+      assert.match(stdout, /http:\/\/localhost:3131\/setup#token=[A-Za-z0-9_-]{43}/);
+
+      const audits = await db.installationAuditEvent.findMany({ where: { targetIdSnapshot: target.id, action: "ACCOUNT_RECOVERY" } });
+      assert.equal(audits.length, 1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("refuses to issue a link for a disabled account", async () => {
+    const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
+    try {
+      const target = await createTargetUser(db, { role: "AUTHOR", disabled: true });
+      const { status, stderr } = runAuthSetup(databaseUrl, [target.email]);
+      assert.notEqual(status, 0);
+      assert.match(stderr, /disabled/);
     } finally {
       await cleanup();
     }
