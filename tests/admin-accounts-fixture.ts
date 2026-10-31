@@ -31,7 +31,9 @@ function assertAdminTestIsolation(): void {
 
 async function ensureBaseDatabase(): Promise<{ dir: string; baseDb: string }> {
   if (baseDatabase) return baseDatabase;
-  // Re-use the shared isolation backstop; admin unit tests do not need WORLD_CREATION_TEST_DATABASE_URL.
+  // WORLD_CREATION_TEST_DATABASE_URL is not required, but standalone runs on configured
+  // machines must export DATABASE_URL and WORLDFORGE_ASSET_DIR to temporary paths as
+  // documented in CONTRIBUTING.md because @prisma/client loads the repository .env.
   assertAdminTestIsolation();
   const tmpRoot = process.env.WORLD_TEST_TMP_ROOT || tmpdir();
   const dir = await mkdtemp(join(tmpRoot, "worldforge-admin-base-"));

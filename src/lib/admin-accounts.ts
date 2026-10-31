@@ -32,14 +32,15 @@ export type AdminMutateFn<T> = (ctx: AdminMutateContext) => Promise<AdminMutateR
 
 export type AdminMutationOptions = {
   mode?: AdminMutationMode;
-  appendAudit?: typeof appendInstallationAuditEvent;
-  recordFailure?: typeof recordFailedAdminAttempt;
 };
 
 export type AdminMutationCheckpoint = (ctx: AdminMutateContext) => Promise<void>;
 
 /** @internal Test-only hooks; never pass from production callers. */
 export type AdminMutationTestOptions = AdminMutationOptions & {
+  appendAudit?: typeof appendInstallationAuditEvent;
+  recordFailure?: typeof recordFailedAdminAttempt;
+  beforeTransaction?: (ctx: { actor: AdminActor; targetId: string }) => Promise<void>;
   checkpoint?: AdminMutationCheckpoint;
 };
 
@@ -97,9 +98,14 @@ export async function _runAdminMutation<T>(
   const mode = options?.mode ?? "default";
   const append = options?.appendAudit ?? appendInstallationAuditEvent;
   const recordFailure = options?.recordFailure ?? recordFailedAdminAttempt;
+  const beforeTransaction = options?.beforeTransaction;
   const checkpoint = options?.checkpoint;
 
   try {
+    if (beforeTransaction) {
+      await beforeTransaction({ actor, targetId: target.userId });
+    }
+
     const value = await db.$transaction(async (tx) => {
       const singleton = await tx.installationAdminState.update({
         where: { id: 1 },
@@ -191,7 +197,7 @@ export async function _runAdminMutation<T>(
   }
 }
 
-/** Production entry point for admin mutations. Tests needing ordering hooks should import `_runAdminMutation`. */
+/** Production entry point for admin mutations. Tests needing hooks should import `_runAdminMutation`. */
 export async function runAdminMutation<T>(
   db: PrismaClient,
   actor: AdminActor,
@@ -200,5 +206,6 @@ export async function runAdminMutation<T>(
   mutate: AdminMutateFn<T>,
   options?: AdminMutationOptions,
 ): Promise<AdminMutationResult<T>> {
-  return _runAdminMutation(db, actor, target, action, mutate, options);
+  // Forward only production options so runtime-cast test hooks cannot execute here.
+  return _runAdminMutation(db, actor, target, action, mutate, { mode: options?.mode });
 }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { runAdminMutation, _runAdminMutation, type AdminMutateContext } from "../src/lib/admin-accounts";
+import { runAdminMutation, _runAdminMutation, type AdminMutateContext, type AdminMutationOptions } from "../src/lib/admin-accounts";
 import { appendInstallationAuditEvent, recordFailedAdminAttempt, sanitizeAuditDetails } from "../src/lib/admin-audit";
 import { isAdminError } from "../src/lib/admin-policy";
 import {
@@ -49,6 +49,32 @@ describe("admin-accounts mutation core", () => {
     }
   });
 
+  it("production entry ignores runtime-cast test hooks", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const target = await createTargetUser(db);
+      let checkpointCalls = 0;
+      let appendCalls = 0;
+      const options = {
+        beforeTransaction: async () => { checkpointCalls += 1; },
+        checkpoint: async () => { checkpointCalls += 1; },
+        appendAudit: async () => { appendCalls += 1; },
+      } as unknown as AdminMutationOptions;
+
+      const result = await runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, options);
+
+      assert.equal(result.ok, true);
+      assert.equal(checkpointCalls, 0);
+      assert.equal(appendCalls, 0);
+      const audits = await db.installationAuditEvent.findMany({ where: { targetIdSnapshot: target.id } });
+      assert.equal(audits.length, 1);
+      assert.equal(audits[0].outcome, "SUCCESS");
+    } finally {
+      await cleanup();
+    }
+  });
+
   it("rolls back the mutation when audit insertion fails and records a failure audit", async () => {
     const { db, cleanup } = await createIsolatedDatabase();
     try {
@@ -62,7 +88,7 @@ describe("admin-accounts mutation core", () => {
         throw new Error("audit storage unavailable");
       };
 
-      const result = await runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, {
+      const result = await _runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, {
         appendAudit: failingAppend as unknown as typeof appendInstallationAuditEvent,
       });
 
@@ -243,8 +269,8 @@ describe("admin-accounts mutation core", () => {
       const target2 = await createTargetUser(db2);
 
       const barrier = makeBarrier();
-      let firstVersion: number | null = null;
-      let secondVersion: number | null = null;
+      let firstVersion = 0;
+      let secondVersion = 0;
 
       const first = _runAdminMutation(db1, actor1, { userId: target1.id }, "STATUS_CHANGE", async (ctx) => {
         await ctx.tx.user.update({ where: { id: ctx.target.id }, data: { name: "First" } });
@@ -263,17 +289,27 @@ describe("admin-accounts mutation core", () => {
         await ctx.tx.user.update({ where: { id: ctx.target.id }, data: { name: "Second" } });
         return { value: {} };
       }, {
+        beforeTransaction: async () => {
+          barrier.b.enter();
+          await withTimeout(barrier.b.wait(), 5000);
+        },
         checkpoint: async (ctx) => {
           secondVersion = ctx.singleton.version;
         },
       });
 
+      // The second transaction is started and released toward the singleton UPDATE
+      // before the first lock holder is allowed to continue.
+      await withTimeout(barrier.bEntered(), 5000);
+      barrier.releaseB();
       barrier.releaseA();
-      await Promise.all([first, second]);
+      const [result1, result2] = await Promise.all([first, second]);
 
-      assert.equal(typeof firstVersion, "number");
-      assert.equal(typeof secondVersion, "number");
-      assert.equal(secondVersion, (firstVersion as number) + 1);
+      assert.equal(result1.ok, true);
+      assert.equal(result2.ok, true);
+      assert.ok(firstVersion > 0);
+      assert.ok(secondVersion > 0);
+      assert.equal(secondVersion, firstVersion + 1);
 
       const after1 = await db1.user.findUniqueOrThrow({ where: { id: target1.id } });
       const after2 = await db2.user.findUniqueOrThrow({ where: { id: target2.id } });
@@ -332,8 +368,8 @@ describe("admin-accounts mutation core", () => {
       const actor2 = { type: "LOCAL_OPERATOR" as const, userId: "operator-b" };
 
       const barrier = makeBarrier();
-      let firstVersion: number | null = null;
-      let secondVersion: number | null = null;
+      let firstVersion = 0;
+      let secondVersion = 0;
 
       const first = _runAdminMutation(db1, actor1, { userId: target1.id }, "BOOTSTRAP", async (ctx) => {
         await ctx.tx.user.update({ where: { id: ctx.target.id }, data: { name: "First" } });
@@ -352,15 +388,25 @@ describe("admin-accounts mutation core", () => {
         await ctx.tx.user.update({ where: { id: ctx.target.id }, data: { name: "Second" } });
         return { value: {} };
       }, {
+        beforeTransaction: async () => {
+          barrier.b.enter();
+          await withTimeout(barrier.b.wait(), 5000);
+        },
         checkpoint: async (ctx) => {
           secondVersion = ctx.singleton.version;
         },
       });
 
+      await withTimeout(barrier.bEntered(), 5000);
+      barrier.releaseB();
       barrier.releaseA();
-      await Promise.all([first, second]);
+      const [result1, result2] = await Promise.all([first, second]);
 
-      assert.equal(secondVersion, (firstVersion as number) + 1);
+      assert.equal(result1.ok, true);
+      assert.equal(result2.ok, true);
+      assert.ok(firstVersion > 0);
+      assert.ok(secondVersion > 0);
+      assert.equal(secondVersion, firstVersion + 1);
     } finally {
       await db2.$disconnect();
       await cleanup1();
@@ -443,7 +489,7 @@ describe("admin-accounts mutation core", () => {
         throw err;
       };
 
-      const result = await runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, {
+      const result = await _runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, {
         appendAudit: conflictAppend as unknown as typeof appendInstallationAuditEvent,
       });
 
@@ -470,7 +516,7 @@ describe("admin-accounts mutation core", () => {
         throw err;
       };
 
-      const result = await runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, {
+      const result = await _runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, {
         appendAudit: timeoutAppend as unknown as typeof appendInstallationAuditEvent,
       });
 
@@ -491,7 +537,7 @@ describe("admin-accounts mutation core", () => {
       const { actor } = await createAdminActor(db);
       const target = await createTargetUser(db);
 
-      const result = await runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, {
+      const result = await _runAdminMutation(db, actor, { userId: target.id }, "STATUS_CHANGE", successMutate, {
         appendAudit: (() => { throw new Error("audit down"); }) as unknown as typeof appendInstallationAuditEvent,
         recordFailure: (() => { throw new Error("failure audit down"); }) as unknown as typeof recordFailedAdminAttempt,
       });
