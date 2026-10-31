@@ -158,10 +158,10 @@ export function adminErrorStatus(code: AdminErrorCode): number {
 }
 
 export function adminErrorResponse(error: AdminError, status?: number): Response {
-  return Response.json(
-    { error: error.error, code: error.code },
-    { status: status ?? adminErrorStatus(error.code), headers: { "Cache-Control": "private, no-store" } },
-  );
+  const resolved = status ?? adminErrorStatus(error.code);
+  const headers: Record<string, string> = { "Cache-Control": "private, no-store" };
+  if (resolved === 503) headers["Retry-After"] = "2";
+  return Response.json({ error: error.error, code: error.code }, { status: resolved, headers });
 }
 
 export function isAdminError(value: unknown): value is AdminError {

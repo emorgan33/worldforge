@@ -230,6 +230,12 @@ export async function listAdminUsers(db: PrismaClient, query: AdminUserListQuery
   };
 }
 
+/** Re-read the safe projection after a mutation so responses carry the new version. */
+export async function getSafeAccount(db: PrismaClient, userId: string): Promise<SafeAccount | null> {
+  const row = await db.user.findUnique({ where: { id: userId }, select: ACCOUNT_SELECT });
+  return row ? toSafeAccount(row) : null;
+}
+
 /**
  * Detail is a display-only snapshot: the account row is read first and the
  * counts run in parallel, so concurrent writes can make the counts
