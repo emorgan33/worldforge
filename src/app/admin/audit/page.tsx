@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type AuditEntry = {
   id: string;
@@ -17,33 +17,60 @@ type AuditEntry = {
 export default function AdminAuditPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState("");
+  const errorRef = useRef<HTMLParagraphElement>(null);
+
+  const [targetDraft, setTargetDraft] = useState("");
+  const [actionDraft, setActionDraft] = useState("");
   const [targetId, setTargetId] = useState("");
   const [action, setAction] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  async function load(cursor?: string | null, replace = true) {
-    setLoading(true);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+
+  async function load(cursor?: string | null, replace = true, filters = { targetId, action }) {
+    if (cursor) setLoadingMore(true);
+    else setLoading(true);
     setError("");
     const params = new URLSearchParams();
-    if (targetId.trim()) params.set("targetId", targetId.trim());
-    if (action) params.set("action", action);
+    if (filters.targetId.trim()) params.set("targetId", filters.targetId.trim());
+    if (filters.action) params.set("action", filters.action);
     if (cursor) params.set("cursor", cursor);
-    const response = await fetch(`/api/admin/audit?${params.toString()}`);
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error || "Unable to load audit events.");
+    try {
+      const response = await fetch(`/api/admin/audit?${params.toString()}`);
+      let data: { entries?: AuditEntry[]; nextCursor?: string | null; error?: string } = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+      if (!response.ok) {
+        setError(data.error || "Unable to load audit events.");
+        return;
+      }
+      setEntries((previous) => (replace ? data.entries || [] : [...previous, ...(data.entries || [])]));
+      setNextCursor(data.nextCursor ?? null);
+    } catch {
+      setError("Unable to load audit events. Retry the request.");
+    } finally {
       setLoading(false);
-      return;
+      setLoadingMore(false);
     }
-    setEntries((previous) => (replace ? data.entries : [...previous, ...data.entries]));
-    setNextCursor(data.nextCursor);
-    setLoading(false);
   }
 
   useEffect(() => {
     void load();
   }, []);
+
+  async function applyFilters(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setTargetId(targetDraft);
+    setAction(actionDraft);
+    await load(null, true, { targetId: targetDraft, action: actionDraft });
+  }
 
   return (
     <section className="space-y-6">
@@ -54,36 +81,37 @@ export default function AdminAuditPage() {
 
       <form
         className="grid gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 md:grid-cols-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void load(null, true);
-        }}
+        onSubmit={applyFilters}
       >
         <label className="text-sm font-medium text-zinc-200">
           Target account ID
           <input
-            value={targetId}
-            onChange={(event) => setTargetId(event.target.value)}
+            value={targetDraft}
+            onChange={(event) => setTargetDraft(event.target.value)}
             className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
           />
         </label>
         <label className="text-sm font-medium text-zinc-200">
           Action
           <input
-            value={action}
-            onChange={(event) => setAction(event.target.value)}
+            value={actionDraft}
+            onChange={(event) => setActionDraft(event.target.value)}
             placeholder="ACCOUNT_CREATE"
             className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
           />
         </label>
         <div className="flex items-end">
-          <button type="submit" className="w-full rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">
+          <button type="submit" disabled={loading} className="w-full rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">
             Apply filters
           </button>
         </div>
       </form>
 
-      {error && <p role="alert" className="rounded-lg border border-red-800 bg-red-950/30 px-4 py-3 text-sm text-red-300">{error}</p>}
+      {error && (
+        <p ref={errorRef} tabIndex={-1} role="alert" className="rounded-lg border border-red-800 bg-red-950/30 px-4 py-3 text-sm text-red-300 focus:outline-none">
+          {error}
+        </p>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-zinc-800">
         <table className="w-full min-w-[720px] text-left text-sm">
@@ -117,10 +145,11 @@ export default function AdminAuditPage() {
       {nextCursor && (
         <button
           type="button"
+          disabled={loading || loadingMore}
           onClick={() => void load(nextCursor, false)}
-          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
         >
-          Load more
+          {loadingMore ? "Loading…" : "Load more"}
         </button>
       )}
     </section>

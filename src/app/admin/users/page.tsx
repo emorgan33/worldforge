@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { SafeAccount } from "@/lib/admin-policy";
 
@@ -10,64 +10,124 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<SafeAccount[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const errorRef = useRef<HTMLParagraphElement>(null);
+
+  const [searchDraft, setSearchDraft] = useState("");
+  const [roleDraftFilter, setRoleDraftFilter] = useState("");
+  const [statusDraft, setStatusDraft] = useState("");
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("");
   const [status, setStatus] = useState("");
+
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ email: "", name: "", role: "AUTHOR" });
   const [setupLink, setSetupLink] = useState<SetupLink | null>(null);
 
-  async function loadUsers(cursor?: string | null, replace = true) {
-    setLoading(true);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+
+  useEffect(() => {
+    if (!setupLink) return;
+    const clear = () => setSetupLink(null);
+    window.addEventListener("pagehide", clear);
+    window.addEventListener("pageshow", (event) => {
+      if (event.persisted) clear();
+    });
+    window.addEventListener("popstate", clear);
+    return () => {
+      window.removeEventListener("pagehide", clear);
+      window.removeEventListener("pageshow", clear);
+      window.removeEventListener("popstate", clear);
+    };
+  }, [setupLink]);
+
+  async function loadUsers(cursor?: string | null, replace = true, filters = { search, role, status }) {
+    if (cursor) setLoadingMore(true);
+    else setLoading(true);
     setError("");
     const params = new URLSearchParams();
-    if (search.trim()) params.set("search", search.trim());
-    if (role) params.set("role", role);
-    if (status) params.set("status", status);
+    if (filters.search.trim()) params.set("search", filters.search.trim());
+    if (filters.role) params.set("role", filters.role);
+    if (filters.status) params.set("status", filters.status);
     if (cursor) params.set("cursor", cursor);
-    const response = await fetch(`/api/admin/users?${params.toString()}`);
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error || "Unable to load accounts.");
+    try {
+      const response = await fetch(`/api/admin/users?${params.toString()}`);
+      let data: { users?: SafeAccount[]; nextCursor?: string | null; error?: string } = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+      if (!response.ok) {
+        setError(data.error || "Unable to load accounts.");
+        return;
+      }
+      setUsers((previous) => (replace ? data.users || [] : [...previous, ...(data.users || [])]));
+      setNextCursor(data.nextCursor ?? null);
+    } catch {
+      setError("Unable to confirm this request. The account list has been refreshed; retry if needed.");
+      try {
+        const response = await fetch("/api/admin/users");
+        const data = await response.json();
+        if (response.ok) {
+          setUsers(data.users || []);
+          setNextCursor(data.nextCursor ?? null);
+        }
+      } catch {
+        // Leave the current list in place; controls are restored below.
+      }
+    } finally {
       setLoading(false);
-      return;
+      setLoadingMore(false);
     }
-    setUsers((previous) => (replace ? data.users : [...previous, ...data.users]));
-    setNextCursor(data.nextCursor);
-    setLoading(false);
   }
 
   useEffect(() => {
     void loadUsers();
   }, []);
 
+  async function applyFilters(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSearch(searchDraft);
+    setRole(roleDraftFilter);
+    setStatus(statusDraft);
+    await loadUsers(null, true, { search: searchDraft, role: roleDraftFilter, status: statusDraft });
+  }
+
   async function createAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreating(true);
     setError("");
-    const response = await fetch("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error || "Unable to create account.");
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      let data: { user?: SafeAccount; setup?: SetupLink; error?: string } = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+      if (!response.ok) {
+        setError(data.error || "Unable to create account.");
+        return;
+      }
+      if (data.user) setUsers((previous) => [data.user as SafeAccount, ...previous]);
+      if (data.setup) setSetupLink(data.setup);
+      setForm({ email: "", name: "", role: "AUTHOR" });
+      setShowCreate(false);
+    } catch {
+      await loadUsers();
+      setError("Unable to confirm account creation. The list has been refreshed; do not resubmit until you verify whether it succeeded.");
+    } finally {
       setCreating(false);
-      return;
     }
-    setUsers((previous) => [data.user, ...previous]);
-    setSetupLink(data.setup);
-    setForm({ email: "", name: "", role: "AUTHOR" });
-    setShowCreate(false);
-    setCreating(false);
-  }
-
-  async function applyFilters(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await loadUsers(null, true);
   }
 
   return (
@@ -95,6 +155,7 @@ export default function AdminUsersPage() {
           <div className="mt-3 flex flex-col gap-2 md:flex-row">
             <input
               readOnly
+              aria-label="One-time setup link"
               value={setupLink.url}
               onFocus={(event) => event.currentTarget.select()}
               className="min-w-0 flex-1 rounded-lg border border-emerald-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100"
@@ -168,8 +229,8 @@ export default function AdminUsersPage() {
         <label className="text-sm font-medium text-zinc-200 md:col-span-2">
           Search
           <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            value={searchDraft}
+            onChange={(event) => setSearchDraft(event.target.value)}
             placeholder="Email or name"
             className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
           />
@@ -177,8 +238,8 @@ export default function AdminUsersPage() {
         <label className="text-sm font-medium text-zinc-200">
           Role
           <select
-            value={role}
-            onChange={(event) => setRole(event.target.value)}
+            value={roleDraftFilter}
+            onChange={(event) => setRoleDraftFilter(event.target.value)}
             className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
           >
             <option value="">All roles</option>
@@ -191,8 +252,8 @@ export default function AdminUsersPage() {
         <label className="text-sm font-medium text-zinc-200">
           Status
           <select
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
+            value={statusDraft}
+            onChange={(event) => setStatusDraft(event.target.value)}
             className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
           >
             <option value="">All statuses</option>
@@ -211,7 +272,11 @@ export default function AdminUsersPage() {
         </div>
       </form>
 
-      {error && <p role="alert" className="rounded-lg border border-red-800 bg-red-950/30 px-4 py-3 text-sm text-red-300">{error}</p>}
+      {error && (
+        <p ref={errorRef} tabIndex={-1} role="alert" className="rounded-lg border border-red-800 bg-red-950/30 px-4 py-3 text-sm text-red-300 focus:outline-none">
+          {error}
+        </p>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-zinc-800">
         <table className="w-full min-w-[760px] text-left text-sm">
@@ -251,10 +316,11 @@ export default function AdminUsersPage() {
       {nextCursor && (
         <button
           type="button"
+          disabled={loading || loadingMore}
           onClick={() => void loadUsers(nextCursor, false)}
-          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
         >
-          Load more
+          {loadingMore ? "Loading…" : "Load more"}
         </button>
       )}
     </section>

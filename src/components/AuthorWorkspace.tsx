@@ -795,6 +795,7 @@ export default function WorldForgeApp() {
         onRefreshWorlds={refreshWorlds}
         actorId={actorId}
         isAdmin={isAdmin}
+        onNavigateAdmin={() => { if (!canNavigate()) return; clearConfirmedLeave(); router.push("/admin/users"); }}
         onBeforeManageAction={beforeWorldManagementAction}
         onManageWorld={completeWorldManagementAction}
         collapsed={sidebarCollapsed}
