@@ -1304,6 +1304,7 @@ describe("admin account deletion", () => {
       const member = await db.worldMember.create({ data: { worldId: world.id, userId: user.id } });
       const policy = await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "ARTICLE", resourceId: randomUUID(), createdById: user.id } });
       const grant = await db.audienceGrant.create({ data: { policyId: policy.id, userId: admin.id, grantedById: user.id } });
+      const targetGrant = await db.audienceGrant.create({ data: { policyId: policy.id, userId: user.id, grantedById: admin.id } });
       const invitation = await db.playerInvitation.create({ data: { worldId: world.id, email: user.email, tokenHash: tokenHash(randomUUID()), expiresAt: new Date(Date.now() + 60_000), issuedById: user.id } });
       const accessAudit = await db.accessAuditEvent.create({ data: { worldId: world.id, actorId: user.id, action: "TEST" } });
       const issuedPreviewHash = tokenHash(randomUUID());
@@ -1315,16 +1316,17 @@ describe("admin account deletion", () => {
       await db.accountSetup.create({ data: { userId: user.id, tokenHash: tokenHash(randomUUID()), expiresAt } });
       const preview = await deletionPreview(db, actor, user.id);
       assert.ok(preview.ok && preview.value.allowed);
+      assert.equal(preview.value.grantCount, 1);
       const result = await deleteAccount(db, actor, { userId: user.id, expectedVersion: 0 }, { confirmEmail: user.email, backupAcknowledged: true });
       assert.ok(result.ok);
       assert.equal(await db.user.findUnique({ where: { id: user.id } }), null);
       assert.equal(await db.worldMember.findUnique({ where: { id: member.id } }), null);
-      assert.ok(await db.audienceGrant.findUnique({ where: { id: grant.id } }));
+      assert.equal(await db.audienceGrant.findUnique({ where: { id: targetGrant.id } }), null);
       assert.equal(await db.authSession.count({ where: { userId: user.id } }), 0);
       assert.equal(await db.accountSetup.count({ where: { userId: user.id } }), 0);
       assert.equal((await db.audiencePolicy.findUniqueOrThrow({ where: { id: policy.id } })).createdById, null);
-      const survivingGrant = await db.audienceGrant.findFirstOrThrow({ where: { policyId: policy.id } });
-      assert.equal(survivingGrant.grantedById, null);
+      const survivingGrant = await db.audienceGrant.findUniqueOrThrow({ where: { id: grant.id } });
+      assert.deepEqual(survivingGrant, { ...grant, grantedById: null });
       assert.equal((await db.playerInvitation.findUniqueOrThrow({ where: { id: invitation.id } })).issuedById, null);
       assert.equal((await db.accessAuditEvent.findUniqueOrThrow({ where: { id: accessAudit.id } })).actorId, null);
       const survivingPreview = await db.previewSession.findUniqueOrThrow({ where: { tokenHash: issuedPreviewHash } });
