@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
-import { withAuthor, sessionUser } from "@/lib/auth";
+import { withAuthor } from "@/lib/auth";
 import { archiveWorld } from "@/lib/world-management";
 
 // DELETE /api/worlds/[id] - Soft delete a world (archive it)
-export const DELETE = withAuthor(async (_request: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withAuthor({ target: "world-param" }, async (_request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   const { id: worldId } = await params;
-  const user = await sessionUser();
-  if (!user) return NextResponse.json({ error: "Sign in to delete your world." }, { status: 401 });
   
   try {
     const result = await archiveWorld(worldId, user.id);

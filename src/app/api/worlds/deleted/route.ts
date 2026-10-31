@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import { withAuthor, sessionUser } from "@/lib/auth";
+import { withAuthor } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { drainAssetCleanupJobs } from "@/lib/world-management";
 
 // GET /api/worlds/deleted - List soft-deleted worlds for current user
-export const GET = withAuthor(async () => {
-  const user = await sessionUser();
+export const GET = withAuthor({ target: "account" }, async (_request, _context, { user }) => {
   if (!user) return NextResponse.json({ error: "Sign in to view deleted worlds." }, { status: 401 });
 
   try {

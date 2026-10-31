@@ -36,8 +36,10 @@ Both views come from the optional Aethelgard demo seed and show the author works
   search across article bodies and metadata.
 - **World appearance** — preset themes, backgrounds, accent colors and reading
   widths, with live author preview.
-- **Image library** — upload, normalize to WebP, reuse across articles and
-  worlds, with archive and safe deletion.
+- **Image library** — upload and normalize to WebP, reuse images within their
+  owning world, hide images without breaking existing placements, and safely
+  delete only assets with no persistent references. See the
+  [image library guide](docs/image-library.md).
 - **Curated stock art** — browse a local fantasy-art catalog, inspect source and
   rights details, preview placements, preserve provenance through world
   backups, and show credits to readers. The installed candidates are still
@@ -55,7 +57,7 @@ Both views come from the optional Aethelgard demo seed and show the author works
 - **Interactive maps** — multiple maps per world with layers, pins linked to
   articles, labels, lines, circles, rectangles, freehand drawing and a
   paint-style eraser. See [interactive maps](docs/interactive-maps.md).
-- **Timelines and variable macros** (`[prefix:key]`).
+- **Timelines and [variable macros](docs/variable-macros.md)** (`[prefix:key]`).
 - **Public and campaign reader pages** with breadcrumbs, expandable category
   navigation, mobile browsing controls and search scoped to readable articles.
 - **Responsive campaign navigation** with a collapsible desktop sidebar and a
@@ -89,6 +91,10 @@ docker compose up -d --build
 ```
 
 Open http://localhost:3033. The container applies database migrations on start.
+Set `WORLDFORGE_HOST_PORT` to change the host-side port and set
+`WORLDFORGE_ORIGIN` to the URL used in the browser. See the
+[deployment configuration guide](docs/deployment-configuration.md) and
+[backup and restore guide](docs/backup-restore.md) for operational details.
 
 Generate a one-time setup link for the first GM account, then open the printed
 `/setup#token=...` URL in your browser to set an email and password. On an empty
@@ -136,6 +142,7 @@ Copy `.env.example` to `.env`. Variables:
 | --- | --- | --- |
 | `DATABASE_URL` | yes | SQLite path. Relative paths resolve from `prisma/`, so `file:./dev.db` → `prisma/dev.db`. |
 | `WORLDFORGE_ORIGIN` | production | Public origin used for same-origin/CSRF checks. Must match the browser URL or writes return 403. |
+| `WORLDFORGE_TRUSTED_PROXY` | public HTTPS | Set to `1` only behind a private proxy that overwrites `X-WorldForge-Client-IP`. |
 | `WORLDFORGE_ASSET_DIR` | no | Uploaded-image directory. Defaults to `./data/assets`. |
 
 ## Local development

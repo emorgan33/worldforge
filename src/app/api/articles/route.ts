@@ -1,12 +1,16 @@
 import { publicationFields } from "@/lib/publication";
-import { withAuthor, sessionUser } from "@/lib/auth";
+import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
-import { syncArticleMentions } from "@/lib/article-mention-index";
-import { validateImageReference } from "@/lib/asset-validation";
+import { syncArticleAssetReferences, syncArticleMentions } from "@/lib/article-mention-index";
+import { assertDocumentImageReferences, assertImageReference, ImageReferenceError } from "@/lib/asset-validation";
 import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { prisma } from "@/lib/db";
 import { validateCharacterRows } from "@/lib/character-sheet";
+import { validateMetadataReferences } from "@/lib/metadata-references";
+import { validTransferSlug } from "@/lib/world-transfer-adapters";
+
+const ARTICLE_LIST_PAGE_SIZE = 200;
 
 async function getHandler(req: NextRequest) {
   try {
@@ -15,6 +19,7 @@ async function getHandler(req: NextRequest) {
     const categoryId = searchParams.get("categoryId");
     const template = searchParams.get("template");
     const query = searchParams.get("q");
+    const cursor = searchParams.get("cursor");
 
     const where: Prisma.ArticleWhereInput = {};
     if (worldId) where.worldId = worldId;
@@ -27,32 +32,59 @@ async function getHandler(req: NextRequest) {
         { tags: { contains: query } },
       ];
     }
+    if (cursor && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cursor)) {
+      return NextResponse.json({ error: "Invalid article-list cursor." }, { status: 400 });
+    }
 
-    // Capped at 2000 articles for safety — frontend uses client-side tree filtering
-    const MAX_ARTICLES = 2000;
+    // Resolve the cursor inside the filtered result set before using it. This
+    // keeps a foreign or stale cursor from shifting the requested list page.
+    if (cursor && !await prisma.article.findFirst({ where: { ...where, id: cursor }, select: { id: true } })) {
+      return NextResponse.json({ error: "Invalid article-list cursor." }, { status: 400 });
+    }
+
     const articles = await prisma.article.findMany({
       where,
-      include: {
+      // The workspace list needs summaries only. Keep article bodies, metadata,
+      // tags, versioning and relation collections on the selected detail route.
+      select: {
+        id: true,
+        worldId: true,
+        categoryId: true,
+        template: true,
+        title: true,
+        slug: true,
+        excerpt: true,
+        publicationStatus: true,
+        visibility: true,
+        state: true,
+        isPinned: true,
+        order: true,
+        wordCount: true,
+        coverImage: true,
+        coverImageAlt: true,
+        portraitImage: true,
+        portraitImageAlt: true,
+        createdAt: true,
+        updatedAt: true,
         category: {
           select: { id: true, name: true, icon: true },
         },
       },
       orderBy: [{ order: "asc" }, { id: "asc" }],
-      take: MAX_ARTICLES,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      take: ARTICLE_LIST_PAGE_SIZE + 1,
     });
 
-    return NextResponse.json(articles);
+    const hasMore = articles.length > ARTICLE_LIST_PAGE_SIZE;
+    return NextResponse.json(hasMore ? articles.slice(0, ARTICLE_LIST_PAGE_SIZE) : articles);
   } catch (error: unknown) {
     console.error("Failed to list articles:", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process article." }, { status: 500 });
   }
 }
 
-async function postHandler(req: NextRequest) {
+async function postHandler(req: NextRequest, _context: unknown, { user }: { user: { id: string } }) {
   try {
-    const user = await sessionUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    
     const body = await req.json();
     const {
       worldId,
@@ -77,19 +109,14 @@ async function postHandler(req: NextRequest) {
     if (!worldId || !title) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+    if (typeof contentJson === "string") return NextResponse.json({ error: "Article content must be a document object, not a serialized string." }, { status: 400 });
+    const referenceError = validateMetadataReferences(metadata);
+    if (referenceError) return NextResponse.json({ error: referenceError }, { status: 400 });
     const sheetError = validateCharacterRows(metadata);
     if (sheetError) return NextResponse.json({ error: sheetError }, { status: 400 });
 
     let publication;
     try { publication = publicationFields({ state, publicationStatus, visibility }); } catch { return NextResponse.json({ error: "Invalid publication status or visibility" }, { status: 400 }); }
-    if (coverImage !== undefined) {
-      const error = await validateImageReference(coverImage, worldId);
-      if (error) return NextResponse.json({ error }, { status: 400 });
-    }
-    if (portraitImage !== undefined) {
-      const error = await validateImageReference(portraitImage, worldId);
-      if (error) return NextResponse.json({ error }, { status: 400 });
-    }
     const altError = validatePlacementAlt(coverImageAlt) || validatePlacementAlt(portraitImageAlt);
     if (altError) return NextResponse.json({ error: altError }, { status: 400 });
     if (categoryId && !await prisma.category.findFirst({ where: { id: categoryId, worldId }, select: { id: true } })) {
@@ -102,9 +129,14 @@ async function postHandler(req: NextRequest) {
       title
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "");
+        .replace(/(^-|-$)/g, "")
+        .slice(0, 100) || "article";
+    if (!validTransferSlug(generatedSlug) || generatedSlug.length > 100) return NextResponse.json({ error: "Article slug must contain only letters, numbers, underscores or hyphens." }, { status: 400 });
 
     const article = await prisma.$transaction(async tx => {
+      if (coverImage !== undefined) await assertImageReference(coverImage, worldId, tx);
+      if (portraitImage !== undefined) await assertImageReference(portraitImage, worldId, tx);
+      await assertDocumentImageReferences(contentJson, contentHtml, worldId, tx);
       const created = await tx.article.create({
         data: {
           worldId,
@@ -153,15 +185,17 @@ async function postHandler(req: NextRequest) {
       });
 
       await syncArticleMentions(tx, worldId, created.id, contentJson, contentHtml || "");
+      await syncArticleAssetReferences(tx, created.id, contentJson, contentHtml || "", created.coverImage, created.portraitImage);
       return created;
     });
 
     return NextResponse.json(article, { status: 201 });
   } catch (error: unknown) {
+    if (error instanceof ImageReferenceError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error("Failed to create article:", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process article." }, { status: 500 });
   }
 }
 
-export const GET = withAuthor(getHandler);
-export const POST = withAuthor(postHandler);
+export const GET = withAuthor({ target: "world-query", field: "worldId" }, getHandler);
+export const POST = withAuthor({ target: "world-body", field: "worldId" }, postHandler);

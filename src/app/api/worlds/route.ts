@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { withAuthor, sessionUser } from "@/lib/auth";
+import { withAuthor } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { validateAppearance } from "@/lib/world-appearance";
-import { validateImageReference } from "@/lib/asset-validation";
+import type { WorldAppearance } from "@/lib/world-appearance";
+import { assertImageReference, validateImageReference, ImageReferenceError } from "@/lib/asset-validation";
 import { validatePlacementAlt, normalizePlacementAlt } from "@/lib/image-placement";
 import { RPG_SYSTEMS } from "@/lib/rpg";
 import { createWorld, normalizeWorldCreation } from "@/lib/world-creation";
@@ -15,9 +16,9 @@ const WORLD_PROJECTION = {
   _count: { select: { articles: true, maps: true, timelines: true, secrets: true, variableCollections: true } },
 } as const;
 
-async function getHandler() {
+async function getHandler(_request: Request, _context: unknown, { user }: { user: { id: string } }) {
   try {
-    const worlds = await prisma.world.findMany({ where: { ownerId: (await sessionUser())!.id, deletedAt: null }, select: WORLD_PROJECTION, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+    const worlds = await prisma.world.findMany({ where: { ownerId: user.id, deletedAt: null }, select: WORLD_PROJECTION, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
     return NextResponse.json(worlds);
   } catch (error) {
     console.error("Failed to fetch worlds:", error);
@@ -25,7 +26,7 @@ async function getHandler() {
   }
 }
 
-async function postHandler(request: Request) {
+async function postHandler(request: Request, _context: unknown, { user }: { user: { id: string } }) {
   const length = Number(request.headers.get("content-length") || 0);
   if (length > 64 * 1024) return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
   let raw: string;
@@ -51,7 +52,7 @@ async function postHandler(request: Request) {
   const payload = normalizeWorldCreation(body);
   if (!payload) return NextResponse.json({ error: "Provide a title, supported system and valid request ID; description must be up to 10,000 characters." }, { status: 400 });
   try {
-    const ownerId = (await sessionUser())!.id;
+    const ownerId = user.id;
     const result = await createWorld(ownerId, payload);
     if (result.conflict) return NextResponse.json({ error: "This request ID was already used for different world details." }, { status: 409 });
     const world = await prisma.world.findUnique({ where: { id: result.world.id }, select: WORLD_PROJECTION });
@@ -77,7 +78,7 @@ async function patchHandler(request: Request) {
   }
   const altError = validatePlacementAlt(body.coverImageAlt) || validatePlacementAlt(body.bannerImageAlt);
   if (altError) return NextResponse.json({ error: altError }, { status: 400 });
-  let appearance;
+  let appearance: WorldAppearance | undefined;
   if (body.appearance !== undefined) {
     try { appearance = validateAppearance(body.appearance); } catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 400 }); }
     const error = await validateImageReference(appearance.backgroundImage, body.id);
@@ -86,17 +87,24 @@ async function patchHandler(request: Request) {
   try {
     const existing = await prisma.world.findUnique({ where: { id: body.id }, select: { id: true } });
     if (!existing) return NextResponse.json({ error: "World not found" }, { status: 404 });
-    await prisma.world.update({
-      where: { id: body.id },
-      data: { ...(body.isPublic !== undefined ? { isPublic: body.isPublic } : {}), ...(body.system !== undefined ? { system: body.system } : {}), ...(appearance ? { appearance: JSON.stringify(appearance) } : {}), title: body.title.trim(), description: body.description.trim(), coverImage: body.coverImage.trim() || null, bannerImage: body.bannerImage.trim() || null, ...(body.coverImageAlt !== undefined ? { coverImageAlt: normalizePlacementAlt(body.coverImageAlt) } : {}), ...(body.bannerImageAlt !== undefined ? { bannerImageAlt: normalizePlacementAlt(body.bannerImageAlt) } : {}) },
-    });    const world = await prisma.world.findUnique({ where: { id: body.id }, select: WORLD_PROJECTION });
+    await prisma.$transaction(async tx => {
+      await assertImageReference(body.coverImage, body.id, tx);
+      await assertImageReference(body.bannerImage, body.id, tx);
+      if (appearance) await assertImageReference(appearance.backgroundImage, body.id, tx);
+      await tx.world.update({
+        where: { id: body.id },
+        data: { ...(body.isPublic !== undefined ? { isPublic: body.isPublic } : {}), ...(body.system !== undefined ? { system: body.system } : {}), ...(appearance ? { appearance: JSON.stringify(appearance) } : {}), title: body.title.trim(), description: body.description.trim(), coverImage: body.coverImage.trim() || null, bannerImage: body.bannerImage.trim() || null, ...(body.coverImageAlt !== undefined ? { coverImageAlt: normalizePlacementAlt(body.coverImageAlt) } : {}), ...(body.bannerImageAlt !== undefined ? { bannerImageAlt: normalizePlacementAlt(body.bannerImageAlt) } : {}) },
+      });
+    });
+    const world = await prisma.world.findUnique({ where: { id: body.id }, select: WORLD_PROJECTION });
     return NextResponse.json(world);
   } catch (error) {
+    if (error instanceof ImageReferenceError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error("Failed to update world:", error);
     return NextResponse.json({ error: "Failed to update world" }, { status: 500 });
   }
 }
 
-export const GET = withAuthor(getHandler);
-export const POST = withAuthor(postHandler);
-export const PATCH = withAuthor(patchHandler);
+export const GET = withAuthor({ target: "account" }, getHandler);
+export const POST = withAuthor({ target: "account" }, postHandler);
+export const PATCH = withAuthor({ target: "world-body", field: "id" }, patchHandler);

@@ -8,8 +8,8 @@ import { test } from "node:test";
 
 test("world archive preserves settings, settings duplicate is private and empty, purge cascades with retryable file cleanup", async () => {
   const databaseFilename = `.worldforge-management-${randomUUID()}.db`;
-  const databasePath = path.join(process.cwd(), "prisma", databaseFilename);
   const assetDir = await mkdtemp(path.join(os.tmpdir(), "worldforge-assets-"));
+  const databasePath = path.join(assetDir, databaseFilename);
   process.env.DATABASE_URL = `file:${databasePath}`;
   process.env.WORLDFORGE_ASSET_DIR = assetDir;
   await writeFile(databasePath, "");
@@ -81,11 +81,18 @@ test("world archive preserves settings, settings duplicate is private and empty,
     assert.equal(await prisma.world.findUnique({ where: { id: world.id } }), null);
     assert.equal(await prisma.article.count({ where: { worldId: world.id } }), 0);
     assert.equal(await prisma.imageAsset.count({ where: { worldId: world.id } }), 0);
+    const failedCleanup = await drainAssetCleanupJobs(50, async () => { throw new Error("simulated unlink failure"); });
+    assert.equal(failedCleanup.pending, 1);
+    const retainedJob = await prisma.assetCleanupJob.findUniqueOrThrow({ where: { assetId } });
+    assert.equal(retainedJob.attempts, 1);
+    assert.match(retainedJob.lastError || "", /simulated unlink failure/);
+    assert.equal(await readFile(path.join(assetDir, `${assetId}.webp`), "utf8"), "asset bytes");
     const concurrentCleanup = await Promise.all([drainAssetCleanupJobs(), drainAssetCleanupJobs()]);
     assert.ok(concurrentCleanup.every(result => result.pending === 0));
     await assert.rejects(readFile(path.join(assetDir, `${assetId}.webp`)));
     assert.equal(await prisma.assetCleanupJob.count(), 0);
   } finally {
+    await prisma.world.deleteMany({ where: { ownerId: owner.id } });
     await prisma.user.delete({ where: { id: owner.id } });
     await prisma.$disconnect();
     await rm(databasePath, { force: true });

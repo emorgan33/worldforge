@@ -101,6 +101,7 @@ export interface ArticleListItem {
 }
 
 export interface ArticleDetail extends ArticleListItem {
+  version: number;
   contentHtml?: string | null;
   contentJson?: string | null;
   sidebarJson?: string | null;

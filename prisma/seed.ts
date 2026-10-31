@@ -4,6 +4,8 @@ const prisma = new PrismaClient();
 
 async function main() {
   console.log("Cleaning existing records...");
+  await prisma.installationAuditEvent.deleteMany();
+  await prisma.installationAdminState.deleteMany();
   await prisma.articleMention.deleteMany();
   await prisma.marker.deleteMany();
   await prisma.markerGroup.deleteMany();
@@ -519,6 +521,8 @@ async function main() {
       },
     },
   });
+
+  await prisma.installationAdminState.create({ data: { id: 1, version: 1 } });
 
   console.log("Database seeded successfully!");
 }

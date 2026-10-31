@@ -6,8 +6,11 @@ import { articleStatblockKey, articleBlockCategory } from "./article-template-co
 import { getArticleTemplate } from "./templates";
 import type { ArticleTemplateType } from "@/types";
 import { readerCharacterRows } from "./character-sheet";
+import { projectReaderMetadata } from "./metadata-references";
 import { articleImageAssetIds } from "./asset-references";
 import { readerCreditsForAssets } from "./stock-credits";
+import { categoryAncestors } from "./category-tree";
+import type { PrismaClient } from "@prisma/client";
 
 export async function publicWorld(slug: string) {
   const world = await prisma.world.findFirst({ where: { slug, isPublic: true, deletedAt: null }, select: { id: true, slug: true, title: true, system: true, description: true, coverImage: true, coverImageAlt: true, bannerImage: true, bannerImageAlt: true, appearance: true } });
@@ -20,7 +23,8 @@ export async function publicWorld(slug: string) {
   const assetIds = new Set(assets.map(asset => asset.id));
   const appearance = parseAppearance(world.appearance);
   appearance.backgroundImage = publicImage(appearance.backgroundImage, assetIds) || "";
-  const visibleCategories = categories.map(category => ({ ...category, iconImage: publicImage(category.iconImage, assetIds) }));
+  const visibleCategoryIds = new Set(articles.flatMap(article => categoryAncestors(categories, article.categoryId).map(category => category.id)));
+  const visibleCategories = categories.filter(category => visibleCategoryIds.has(category.id)).map(category => ({ ...category, iconImage: publicImage(category.iconImage, assetIds) }));
   const coverImage = publicImage(world.coverImage, assetIds);
   const decorations = [coverImage, appearance.backgroundImage, ...visibleCategories.map(category => category.iconImage)];
   const credits = await readerCreditsForAssets(world.id, decorations.flatMap(url => { const id = url && localAssetId(url); return id ? [id] : []; }));
@@ -36,13 +40,22 @@ export async function publicArticle(worldSlug: string, articleSlug: string) {
   let rawMetadata: Record<string, unknown> = {}; try { const value = JSON.parse(article.metadata || "{}"); if (value && typeof value === "object" && !Array.isArray(value)) rawMetadata = value; } catch {}
   const system = typeof rawMetadata.rulesSystem === "string" ? rawMetadata.rulesSystem : world.system;
   const definition = getArticleTemplate(article.template as ArticleTemplateType, system);
-  const metadata: Record<string, unknown> = Object.fromEntries(definition.fields.filter(field => typeof rawMetadata[field.key] === "string").map(field => [field.key, rawMetadata[field.key]]));
-  metadata.rulesSystem = system;
-  if (article.template === "CHARACTER") Object.assign(metadata, readerCharacterRows(system, rawMetadata));
+  // Public metadata can reference only blocks already surfaced by this article's
+  // public document or its validated article-level statblock link.
+  const publicBlockIds = documentReferences(doc, "campaignStatblock", "blockId");
   const linkedId = rawMetadata[articleStatblockKey(system)];
   const linked = blocks.find(block => block.id === linkedId && block.system === system && block.category === articleBlockCategory(article.template));
+  if (linked) publicBlockIds.add(linked.id);
+  const metadata = projectReaderMetadata(
+    rawMetadata,
+    definition,
+    system,
+    new Set(world.articles.map(candidate => candidate.id)),
+    publicBlockIds,
+  );
+  if (article.template === "CHARACTER") Object.assign(metadata, readerCharacterRows(system, rawMetadata));
   if (linked) metadata[articleStatblockKey(system)] = linked.id;
-  const usedBlocks = documentReferences(doc, "campaignStatblock", "blockId"); if (linked) usedBlocks.add(linked.id);
+  const usedBlocks = publicBlockIds;
   const ownCover = publicImage(article.coverImage, world.assetIds);
   const coverImage = ownCover || world.bannerImage;
   const coverImageAlt = ownCover ? article.coverImageAlt : world.bannerImageAlt;
@@ -52,46 +65,63 @@ export async function publicArticle(worldSlug: string, articleSlug: string) {
   // Variables remain literal on public pages: private macro collections never enter the reader payload.
   return { world, summary, doc, metadata, system, coverImage, coverImageAlt, portraitImage, portraitImageAlt: article.portraitImageAlt, credits, blocks: blocks.filter(block => usedBlocks.has(block.id)) };
 }
-export async function assetIsPublic(id: string, worldId: string) {
-  const world = await prisma.world.findFirst({ where: { id: worldId, isPublic: true, deletedAt: null }, select: { slug: true, coverImage: true, bannerImage: true, appearance: true } });
+export async function assetIsPublic(id: string, worldId: string, client: PrismaClient = prisma) {
+  const world = await client.world.findFirst({ where: { id: worldId, isPublic: true, deletedAt: null }, select: { slug: true, coverImage: true, bannerImage: true, appearance: true } });
   if (!world) return false;
-  const assetUrlPattern = `/api/assets/${id}/file`;
-  if ([world.coverImage, world.bannerImage, parseAppearance(world.appearance).backgroundImage].some(value => value && localAssetId(value) === id)) return true;
+  const ids = new Set([id]);
+  const referencesAsset = (value: string | null) => localAssetId(publicImage(value, ids) || "") === id;
+  if ([world.coverImage, world.bannerImage, parseAppearance(world.appearance).backgroundImage].some(referencesAsset)) return true;
 
-  const iconCategory = await prisma.category.findFirst({ where: { worldId, iconImage: assetUrlPattern }, select: { id: true } });
-  if (iconCategory) return true;
+  const [categories, publicArticles] = await Promise.all([
+    client.category.findMany({ where: { worldId }, select: { id: true, name: true, parentId: true, order: true, iconImage: true } }),
+    client.article.findMany({ where: { worldId, ...publicArticleFilter, categoryId: { not: null } }, select: { categoryId: true } }),
+  ]);
+  const visibleCategoryIds = new Set(publicArticles.flatMap(article => categoryAncestors(categories, article.categoryId).map(category => category.id)));
+  if (categories.some(category => visibleCategoryIds.has(category.id) && referencesAsset(category.iconImage))) return true;
 
-  // First pass: efficient query-level filter using only cover/portrait (no contentHtml scan needed if not found)
-  const articles = await prisma.article.findMany({
-    where: {
-      worldId,
-      ...publicArticleFilter,
-      OR: [
-        { coverImage: assetUrlPattern },
-        { portraitImage: assetUrlPattern },
-        { contentHtml: { contains: assetUrlPattern } },
-        { contentJson: { contains: assetUrlPattern } },
-      ],
-    },
+  const indexedPlacement = await client.articleAssetReference.findFirst({
+    where: { assetId: id, sourceArticle: { worldId, ...publicArticleFilter, assetReferencesIndexed: true } },
+    select: { sourceArticleId: true },
+  });
+  if (indexedPlacement) return true;
+
+  // Articles not yet covered by the exact reference index retain the full
+  // reader projection scan, including entity-decoded HTML and escaped JSON.
+  const articles = await client.article.findMany({
+    where: { worldId, ...publicArticleFilter, assetReferencesIndexed: false },
     select: { contentJson: true, contentHtml: true, coverImage: true, portraitImage: true },
-    take: 10, // Enough to verify existence
   });
 
-  if (!articles.length) return false;
-
-  // Second pass: verify extracted local asset ID from parsed content
-  const ids = new Set([id]);
   return articles.some(article => {
-    if (article.coverImage && localAssetId(article.coverImage) === id) return true;
-    if (article.portraitImage && localAssetId(article.portraitImage) === id) return true;
-    // Only parse if a stored body field actually references the asset
-    if (!article.contentHtml?.includes(assetUrlPattern) && !article.contentJson?.includes(assetUrlPattern)) return false;
+    if (referencesAsset(article.coverImage) || referencesAsset(article.portraitImage)) return true;
     const doc = publicDocument(parseArticleDocument(article.contentJson, article.contentHtml), [], ids, new Set());
     return [...documentReferences(doc, "image", "src")].some(src => localAssetId(src) === id);
   });
 }
 
-export async function publicBacklinks(worldId: string, articles: { id: string; title: string }[], targetId: string) {
-  const sources = await prisma.article.findMany({ where: { worldId, ...publicArticleFilter }, select: { id: true, contentJson: true, contentHtml: true } });
-  return new Set(sources.filter(source => source.id !== targetId && documentReferences(publicDocument(parseArticleDocument(source.contentJson, source.contentHtml), articles, new Set(), new Set()), "articleLink", "articleId").has(targetId)).map(source => source.id));
+export async function publicBacklinks(worldId: string, articles: { id: string; title: string }[], targetId: string, client: PrismaClient = prisma) {
+  const [indexedSources, fallbackSources] = await Promise.all([
+    client.articleMention.findMany({
+      where: {
+        targetArticleId: targetId,
+        sourceArticle: { worldId, ...publicArticleFilter, mentionsIndexed: true, hasLegacyArticleLinks: false },
+      },
+      select: { sourceArticleId: true, sourceArticle: { select: { contentJson: true, contentHtml: true } } },
+    }),
+    client.article.findMany({
+      where: { worldId, ...publicArticleFilter, OR: [{ mentionsIndexed: false }, { hasLegacyArticleLinks: true }] },
+      select: { id: true, contentJson: true, contentHtml: true },
+    }),
+  ]);
+  const backlinks = new Set(indexedSources.filter(source => {
+    if (source.sourceArticleId === targetId) return false;
+    const doc = publicDocument(parseArticleDocument(source.sourceArticle.contentJson, source.sourceArticle.contentHtml), articles, new Set(), new Set());
+    return documentReferences(doc, "articleLink", "articleId").has(targetId);
+  }).map(source => source.sourceArticleId));
+  for (const source of fallbackSources) {
+    if (source.id !== targetId && documentReferences(publicDocument(parseArticleDocument(source.contentJson, source.contentHtml), articles, new Set(), new Set()), "articleLink", "articleId").has(targetId)) {
+      backlinks.add(source.id);
+    }
+  }
+  return backlinks;
 }

@@ -10,6 +10,8 @@ test("publication and visibility are independent and private world always overri
   assert.deepEqual(publicationFields({}), { publicationStatus: "DRAFT", visibility: "PRIVATE", state: "DRAFT" });
   assert.deepEqual(publicationFields({ publicationStatus: "PUBLISHED", visibility: "PRIVATE" }), { publicationStatus: "PUBLISHED", visibility: "PRIVATE", state: "PRIVATE" });
   assert.equal(publicationFields({ state: "PUBLISHED" }).visibility, "PRIVATE");
+  assert.equal(publicationFields({}, { publicationStatus: "DRAFT", visibility: "INHERITED" }).visibility, "PRIVATE");
+  assert.equal(publicationFields({}, { publicationStatus: "DRAFT", visibility: "PUBLIC" }).visibility, "PUBLIC");
   for (const publicationStatus of ["DRAFT", "WIP", "PUBLISHED"]) for (const visibility of ["PUBLIC", "PRIVATE"]) for (const isPublic of [true, false]) assert.equal(publiclyReadable({ publicationStatus, visibility }, { isPublic }), isPublic && publicationStatus === "PUBLISHED" && visibility === "PUBLIC");
   assert.throws(() => publicationFields({ visibility: "MEMBERS" }));
 });

@@ -45,5 +45,5 @@ async function postHandler(request: NextRequest) {
   }
 }
 
-export const GET = withAuthor(getHandler);
-export const POST = withAuthor(postHandler);
+export const GET = withAuthor({ target: "world-query", field: "worldId" }, getHandler);
+export const POST = withAuthor({ target: "world-body", field: "worldId" }, postHandler);

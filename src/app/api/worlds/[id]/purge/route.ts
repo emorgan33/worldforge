@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { sessionUser, withAuthor } from "@/lib/auth";
+import { withAuthor } from "@/lib/auth";
 import { drainAssetCleanupJobs, purgeArchivedWorld } from "@/lib/world-management";
 
-export const POST = withAuthor(async (_request: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const POST = withAuthor({ target: "world-param", archived: true }, async (_request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   try {
     const { id } = await params;
-    const ownerId = (await sessionUser())!.id;
-    const deleted = await purgeArchivedWorld(id, ownerId);
+    const deleted = await purgeArchivedWorld(id, user.id);
     if (!deleted) return NextResponse.json({ error: "Archived world not found." }, { status: 404 });
     const cleanup = await drainAssetCleanupJobs();
     return NextResponse.json({ success: true, purgedWorldId: deleted.id, purgedWorldTitle: deleted.title, assetCleanup: cleanup });

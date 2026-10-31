@@ -8,7 +8,12 @@
     "start": "next start",
     "serve:local": "bash scripts/serve-local.sh",
     "lint": "eslint",
-    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts tests/*.test.tsx",
+    "test": "node scripts/run-tests.mjs all",
+    "test:unit": "node scripts/run-tests.mjs unit",
+    "test:service": "node scripts/run-tests.mjs service",
+    "test:http": "node scripts/run-tests.mjs http",
+    "test:browser": "playwright test",
+    "test:production-auth": "node --import tsx --test --test-concurrency=1 tests/production-auth-smoke.test.ts",
     "auth:setup": "tsx scripts/auth-setup.ts",
     "db:generate": "prisma generate",
     "db:deploy": "prisma migrate deploy",
@@ -34,12 +39,15 @@
     "htmlparser2": "10.0.0",
     "lucide-react": "^1.57.0",
     "next": "16.4.1",
+    "postcss": "8.5.23",
+    "postcss-selector-parser": "7.1.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "sharp": "0.35.5",
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@prisma/client": "6.19.3",
     "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/turbopack": "^4",
@@ -52,6 +60,11 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "pnpm": {
+    "overrides": {
+      "@prisma/config>deepmerge-ts": "8.0.2"
+    }
   },
   "packageManager": "pnpm@10.14.0"
 }

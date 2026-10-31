@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
-import { withAuthor, sessionUser } from "@/lib/auth";
+import { withAuthor } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 // POST /api/worlds/[id]/restore - Restore a soft-deleted world
-export const POST = withAuthor(async (_request: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const POST = withAuthor({ target: "world-param", archived: true }, async (_request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   const { id: worldId } = await params;
-  const user = await sessionUser();
-  if (!user) return NextResponse.json({ error: "Sign in to restore your world." }, { status: 401 });
 
   const deletedWorld = await prisma.world.findUnique({
     where: { id: worldId, ownerId: user.id, deletedAt: { not: null } },

@@ -2,7 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const db = new PrismaClient();
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
@@ -14,6 +14,8 @@ let worldId: string;
 let stamp: number;
 
 before(async () => {
+  if (!origin) return;
+  assertIsolatedTestEnvironment();
   stamp = Date.now();
   ownerId = (await db.user.create({ data: { name: `Export Fixture ${stamp}`, email: `export-${stamp}@example.invalid` } })).id;
   if (origin) authenticatedFetch = await authorFetch(db, ownerId, origin);
@@ -21,8 +23,9 @@ before(async () => {
 });
 
 after(async () => {
-  await db.world.deleteMany({ where: { id: worldId } });
-  await db.user.deleteMany({ where: { id: ownerId } });
+  if (!origin) { await db.$disconnect(); return; }
+  if (worldId) await db.world.deleteMany({ where: { id: worldId } });
+  if (ownerId) await deleteTestUsers(db, ownerId);
   await db.$disconnect();
 });
 
@@ -31,12 +34,12 @@ function ownerFetch(path: string, options?: RequestInit) {
   return authenticatedFetch(`${origin}${path}`, { ...options, headers: { "Content-Type": "application/json", ...options?.headers } });
 }
 
-test("world export defaults to format 3 with a complete structure", { skip: !origin }, async () => {
+test("world export defaults to format 4 with a complete structure", { skip: !origin }, async () => {
   const res = await ownerFetch(`/api/worlds/${worldId}/export`);
   assert.equal(res.status, 200);
-  assert.equal(res.headers.get("Accept-Version"), "3");
+  assert.equal(res.headers.get("Accept-Version"), "4");
   const data = await res.json();
-  assert.equal(data.formatVersion, 3);
+  assert.equal(data.formatVersion, 4);
   assert.ok(data.exportedAt);
   assert.ok(data.world);
   assert.ok(Array.isArray(data.categories));
@@ -46,7 +49,7 @@ test("world export defaults to format 3 with a complete structure", { skip: !ori
   assert.equal(data.world.title, `Export World ${stamp}`);
 });
 
-test("format 3 rejects filtering flags instead of silently returning a partial backup", { skip: !origin }, async () => {
+test("format 4 rejects filtering flags instead of silently returning a partial backup", { skip: !origin }, async () => {
   for (const flag of ["includeAssets=false", "includePrivate=false"]) {
     const res = await ownerFetch(`/api/worlds/${worldId}/export?${flag}`);
     assert.equal(res.status, 400);
@@ -73,7 +76,7 @@ test("legacy export is refused when it would drop provenance or placement data",
   await db.imageAssetProvenance.create({ data: { assetId, catalogEntryId: "moonlit-keep", catalogVersion: 1, manifestDigest: "f".repeat(64), snapshotJson: "{}", verificationOrigin: "BUNDLED_REVIEW" } });
   const res = await ownerFetch(`/api/worlds/${worldId}/export?format=v2`);
   assert.equal(res.status, 400);
-  assert.match((await res.json()).error, /format=v3/i);
+  assert.match((await res.json()).error, /format=v4/i);
   await db.imageAssetProvenance.deleteMany({ where: { assetId } });
   await db.imageAsset.deleteMany({ where: { id: assetId } });
 });
@@ -82,7 +85,7 @@ test("v2 refuses filtering flags instead of including omitted private data", { s
   for (const flag of ["includeAssets=false", "includePrivate=false", "includePrivate=true"]) {
     const response = await ownerFetch(`/api/worlds/${worldId}/export?format=v2&${flag}`);
     assert.equal(response.status, 400);
-    assert.match((await response.json()).error, /format=v1/);
+    assert.match((await response.json()).error, /format 1 filtered exports are unavailable/i);
   }
 });
 
@@ -92,6 +95,29 @@ test("legacy v1 import does not silently discard attached provenance", { skip: !
   const response = await ownerFetch("/api/worlds/import", { method: "POST", body: JSON.stringify(bundle) });
   assert.equal(response.status, 400);
   assert.match((await response.json()).error, /cannot preserve image provenance/);
+});
+
+test("v2 and v3 retain empty world title compatibility while v1 rejects it", { skip: !origin }, async () => {
+  for (const format of ["v2", "v3"] as const) {
+    const exported = await ownerFetch(`/api/worlds/${worldId}/export?format=${format}`);
+    assert.equal(exported.status, 200);
+    const bundle = await exported.json();
+    bundle.world.title = "";
+    const response = await ownerFetch("/api/worlds/import", { method: "POST", body: JSON.stringify(bundle) });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.success, true);
+    const restored = await db.world.findUnique({ where: { id: result.worldId }, select: { title: true, isPublic: true } });
+    assert.deepEqual(restored, { title: "", isPublic: false });
+    await db.world.delete({ where: { id: result.worldId } });
+  }
+
+  const legacy = await ownerFetch(`/api/worlds/${worldId}/export?format=v1`);
+  const bundle = await legacy.json();
+  bundle.world.title = "";
+  const rejected = await ownerFetch("/api/worlds/import", { method: "POST", body: JSON.stringify(bundle) });
+  assert.equal(rejected.status, 400);
+  assert.match((await rejected.json()).error, /missing world information/i);
 });
 
 test("legacy API refuses a world whose new placement data exists only in history", { skip: !origin }, async () => {
@@ -112,19 +138,15 @@ test("world export is private by default regardless of original setting", { skip
   assert.equal(data.world.isPublic, false);
 });
 
-test("world export excludes private content when requested", { skip: !origin }, async () => {
+test("legacy v1 refuses filtered exports that cannot guarantee private content is removed", { skip: !origin }, async () => {
   // Create private article
   await db.article.create({ data: { worldId, slug: `private-${stamp}`, title: "Private", publicationStatus: "DRAFT", visibility: "PRIVATE", contentHtml: "secret" } });
   // Create public article
   await db.article.create({ data: { worldId, slug: `public-${stamp}`, title: "Public", publicationStatus: "PUBLISHED", visibility: "PUBLIC", contentHtml: "visible" } });
   
   const res = await ownerFetch(`/api/worlds/${worldId}/export?format=v1&includePrivate=false`);
-  assert.equal(res.status, 200);
-  const data = await res.json();
-  const articleTitles = data.articles.map((a: { title: string }) => a.title);
-  assert.ok(articleTitles.includes("Public"));
-  assert.ok(!articleTitles.includes("Private"));
-  assert.ok(data.articles.every((a: { publicationStatus: string }) => a.publicationStatus === "DRAFT"));
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /filtered legacy exports are unavailable/i);
 });
 
 test("world import creates new world with remapped IDs", { skip: !origin }, async () => {
@@ -154,6 +176,9 @@ test("world import creates new world with remapped IDs", { skip: !origin }, asyn
   assert.ok(importedWorld);
   assert.equal(importedWorld.title, `Export World ${stamp}`);
   assert.equal(importedWorld.isPublic, false);
+  const importedArticles = await db.article.findMany({ where: { worldId: importResult.worldId } });
+  assert.ok(importedArticles.length > 0);
+  assert.ok(importedArticles.every(article => article.publicationStatus === "DRAFT" && article.visibility === "PRIVATE"));
   
   // Verify category was imported with remapped ID
   const categories = await db.category.findMany({ where: { worldId: importResult.worldId } });
@@ -182,4 +207,48 @@ test("world import generates unique slug on conflict", { skip: !origin }, async 
   // Cleanup
   if (result1.worldId) await db.world.delete({ where: { id: result1.worldId } }).catch(() => {});
   if (result2.worldId) await db.world.delete({ where: { id: result2.worldId } }).catch(() => {});
+});
+
+test("keyed import replay preserves the completed world and rejects different content", { skip: !origin }, async () => {
+  const exported = await ownerFetch(`/api/worlds/${worldId}/export`);
+  const bundle = await exported.json();
+  const key = randomUUID();
+  const send = (content: unknown) => ownerFetch("/api/worlds/import", { method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify(content) });
+
+  const first = await send(bundle);
+  assert.equal(first.status, 200);
+  const firstResult = await first.json();
+  const replay = await send(bundle);
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json()).worldId, firstResult.worldId);
+
+  const changed = { ...bundle, exportedAt: new Date().toISOString() };
+  assert.equal((await send(changed)).status, 409);
+  assert.ok(await db.world.findUnique({ where: { id: firstResult.worldId } }), "a conflicting replay must not delete the completed world");
+  assert.equal(await db.world.count({ where: { ownerId, slug: { startsWith: bundle.world.slug } } }), 2);
+  await db.world.deleteMany({ where: { id: firstResult.worldId } });
+});
+
+test("failed keyed imports persist failure state and accept a corrected request", { skip: !origin }, async () => {
+  const exported = await ownerFetch(`/api/worlds/${worldId}/export`);
+  const validBundle = await exported.json();
+  const rejectedKey = randomUUID();
+  const unsupported = { ...validBundle, formatVersion: 99 };
+  const rejected = await ownerFetch("/api/worlds/import", { method: "POST", headers: { "Idempotency-Key": rejectedKey }, body: JSON.stringify(unsupported) });
+  assert.equal(rejected.status, 400);
+  const rejectedStatus = await ownerFetch("/api/worlds/import", { method: "GET", headers: { "Idempotency-Key": rejectedKey } });
+  assert.equal((await rejectedStatus.json()).status, "FAILED");
+
+  const throwingKey = randomUUID();
+  const malformed = { ...validBundle, categories: [null] };
+  const failed = await ownerFetch("/api/worlds/import", { method: "POST", headers: { "Idempotency-Key": throwingKey }, body: JSON.stringify(malformed) });
+  assert.equal(failed.status, 500);
+  const failureStatus = await ownerFetch("/api/worlds/import", { method: "GET", headers: { "Idempotency-Key": throwingKey } });
+  assert.equal((await failureStatus.json()).status, "FAILED");
+
+  const correctedKey = randomUUID();
+  const corrected = await ownerFetch("/api/worlds/import", { method: "POST", headers: { "Idempotency-Key": correctedKey }, body: JSON.stringify(validBundle) });
+  assert.equal(corrected.status, 200);
+  const imported = await corrected.json();
+  await db.world.deleteMany({ where: { id: imported.worldId } });
 });

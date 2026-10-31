@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { deleteTestUsers } from "./auth-fixture";
 
 let db: PrismaClientType;
 let exportService: typeof import("../src/lib/world-export");
@@ -37,13 +38,41 @@ before(async () => {
   ownerId = (await db.user.create({ data: { name: `Roundtrip ${stamp}`, email: `roundtrip-${stamp}@example.invalid` } })).id;
   sourceId = (await db.world.create({ data: { ownerId, title: `Roundtrip ${stamp}`, slug: `roundtrip-${stamp}` } })).id;
 });
+
+test("v4 roundtrip preserves timeline eras and ordered ink/erase/ink drawings", async () => {
+  const era = await db.era.create({ data: { timeline: { create: { worldId: sourceId, title: `Era timeline ${stamp}` } }, name: "Dawn", startYear: 1, endYear: 9, order: 2, color: "#123456" } });
+  await db.historyEvent.create({ data: { timelineId: era.timelineId, eraId: era.id, title: "First light", dateDisplay: "1", numericDate: 1, description: "Begins" } });
+  const map = await db.map.create({ data: { worldId: sourceId, title: `Ordered map ${stamp}`, imageUrl: "https://example.invalid/map.webp" } });
+  const sameTime = new Date("2020-01-01T00:00:00.000Z");
+  await db.mapElement.createMany({ data: [
+    { mapId: map.id, kind: "PATH", geometry: "{\"points\":[{\"x\":1,\"y\":1},{\"x\":2,\"y\":2}]}", style: "{\"color\":\"red\",\"strokeWidth\":3}", order: 0, createdAt: sameTime },
+    { mapId: map.id, kind: "PATH", geometry: "{\"points\":[{\"x\":3,\"y\":3},{\"x\":4,\"y\":4}]}", style: "{\"erase\":true,\"strokeWidth\":16}", order: 1, createdAt: sameTime },
+    { mapId: map.id, kind: "PATH", geometry: "{\"points\":[{\"x\":5,\"y\":5},{\"x\":6,\"y\":6}]}", style: "{\"color\":\"#3b82f6\"}", order: 2, createdAt: sameTime },
+  ] });
+  const bundle = await exportService.exportWorldV4(sourceId);
+  assert.equal(bundle.timelines.find(item => item.id === era.timelineId)?.eras[0].name, "Dawn");
+  assert.equal(bundle.timelines.find(item => item.id === era.timelineId)?.events[0].eraId, era.id);
+  assert.deepEqual(bundle.maps?.find(item => item.id === map.id)?.elements.map(element => element.style), ["{\"color\":\"red\",\"strokeWidth\":3}", "{\"erase\":true,\"strokeWidth\":16}", "{\"color\":\"#3b82f6\"}"]);
+  const restored = await exportService.importWorldV2(bundle, ownerId, async slug => !!await db.world.findUnique({ where: { slug } }));
+  assert.equal(restored.success, true);
+  const restoredTimeline = await db.timeline.findFirstOrThrow({ where: { worldId: restored.worldId, title: `Era timeline ${stamp}` }, include: { eras: true, events: true } });
+  assert.equal(restoredTimeline.eras[0].name, "Dawn");
+  assert.equal(restoredTimeline.events[0].eraId, restoredTimeline.eras[0].id);
+  const restoredMap = await db.map.findFirstOrThrow({ where: { worldId: restored.worldId, title: `Ordered map ${stamp}` }, include: { elements: { orderBy: { order: "asc" } } } });
+  assert.deepEqual(restoredMap.elements.map(element => element.style), ["{\"color\":\"red\",\"strokeWidth\":3}", "{\"erase\":true,\"strokeWidth\":16}", "{\"color\":\"#3b82f6\"}"]);
+});
 after(async () => {
   if (!db) { if (tempDir) await rm(tempDir, { recursive: true, force: true }); return; }
-  const worlds = await db.world.findMany({ where: { OR: [{ id: sourceId }, { slug: { startsWith: `roundtrip-${stamp}-` } }] }, select: { id: true } });
+  const worlds = sourceId ? await db.world.findMany({
+    where: { OR: [ ...(sourceId ? [{ id: sourceId }] : []), ...(stamp ? [{ slug: { startsWith: `roundtrip-${stamp}-` } }] : []) ] },
+    select: { id: true },
+  }) : [];
   const worldIds = worlds.map(world => world.id);
-  await db.accessAuditEvent.deleteMany({ where: { worldId: { in: worldIds } } });
-  await db.world.deleteMany({ where: { id: { in: worldIds } } });
-  await db.user.deleteMany({ where: { id: ownerId } });
+  if (worldIds.length) {
+    await db.accessAuditEvent.deleteMany({ where: { worldId: { in: worldIds } } });
+    await db.world.deleteMany({ where: { id: { in: worldIds } } });
+  }
+  if (ownerId) await deleteTestUsers(db, ownerId);
   await db.$disconnect();
   await rm(tempDir, { recursive: true, force: true });
   if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL; else Object.assign(process.env, { DATABASE_URL: originalDatabaseUrl });
@@ -72,13 +101,14 @@ test("v2 roundtrip remaps map content and session entity links, and warns on mis
   await db.imageAsset.create({ data: { id: sourceAssetId, worldId: sourceId, title: "Map art", originalName: "map.png", mimeType: "image/webp", byteSize: image.data.length, width: image.width, height: image.height, sha256: image.sha256, archived: true } });
   await db.world.update({ where: { id: sourceId }, data: { appearance: JSON.stringify({ logoUrl: `/api/assets/${sourceAssetId}/file` }) } });
   const block = await db.rpgBlock.create({ data: { worldId: sourceId, category: "NPC", name: "Map block", system: "DND_5E", statsJson: "{}" } });
+  const legacyBlock = await db.rpgBlock.create({ data: { worldId: sourceId, category: "NPC", name: "Call of Cthulhu block", system: "COC", statsJson: "{}" } });
   await db.article.update({ where: { id: parentArticle.id }, data: {
     contentJson: JSON.stringify({ type: "doc", content: [{ type: "paragraph", content: [
       { type: "articleLink", attrs: { articleId: article.id, label: article.title } },
       { type: "campaignStatblock", attrs: { blockId: block.id } },
     ] }] }),
     contentHtml: `<p><span data-article-id="${article.id}">Map target</span><section data-statblock-id="${block.id}"></section></p>`,
-    metadata: JSON.stringify({ dnd5eStatblockId: block.id }),
+    metadata: JSON.stringify({ dnd5eStatblockId: block.id, dnd5eParticipant1: block.id, COCStatblockId: legacyBlock.id, linkedLocation: article.id, linkedEncounters: `${article.id}\n${childArticle.id}\nmissing-article`, unknownExtension: "preserve" }),
   } });
   const session = await db.campaignSession.create({ data: { worldId: sourceId, title: "Linked session" } });
   await db.sessionEntityLink.createMany({ data: [
@@ -109,6 +139,7 @@ test("v2 roundtrip remaps map content and session entity links, and warns on mis
   assert.equal(restored.success, true);
   const newArticle = await db.article.findFirstOrThrow({ where: { worldId: restored.worldId, slug: article.slug } });
   const newBlock = await db.rpgBlock.findFirstOrThrow({ where: { worldId: restored.worldId } });
+  const importedLegacyBlock = await db.rpgBlock.findFirstOrThrow({ where: { worldId: restored.worldId, system: "COC" } });
   const newSession = await db.campaignSession.findFirstOrThrow({ where: { worldId: restored.worldId } });
   const links = await db.sessionEntityLink.findMany({ where: { worldId: restored.worldId } });
   assert.equal(links.length, 2);
@@ -121,6 +152,8 @@ test("v2 roundtrip remaps map content and session entity links, and warns on mis
   assert.equal(await db.audienceGrant.count({ where: { policy: { worldId: restored.worldId } } }), 0);
   assert.equal((await db.accessAuditEvent.findFirstOrThrow({ where: { worldId: restored.worldId, action: "test.foreign" } })).actorId, null);
   const importedArticle = await db.article.findFirstOrThrow({ where: { worldId: restored.worldId, slug: article.slug } });
+  assert.equal(importedArticle.publicationStatus, "DRAFT");
+  assert.equal(importedArticle.visibility, "PRIVATE");
   const importedChild = await db.article.findFirstOrThrow({ where: { worldId: restored.worldId, slug: childArticle.slug } });
   const importedParent = await db.article.findFirstOrThrow({ where: { worldId: restored.worldId, slug: parentArticle.slug } });
   assert.equal(importedParent.sidebarJson, JSON.stringify({ summary: "Quick fact retained" }));
@@ -128,6 +161,12 @@ test("v2 roundtrip remaps map content and session entity links, and warns on mis
   assert.equal(JSON.parse(importedParent.contentJson!).content[0].content[0].attrs.articleId, newArticle.id);
   assert.equal(JSON.parse(importedParent.contentJson!).content[0].content[1].attrs.blockId, newBlock.id);
   assert.equal(JSON.parse(importedParent.metadata!).dnd5eStatblockId, newBlock.id);
+  assert.equal(JSON.parse(importedParent.metadata!).dnd5eParticipant1, newBlock.id);
+  assert.equal(JSON.parse(importedParent.metadata!).COCStatblockId, importedLegacyBlock.id);
+  assert.equal(JSON.parse(importedParent.metadata!).linkedLocation, newArticle.id);
+  assert.equal(JSON.parse(importedParent.metadata!).linkedEncounters, `${newArticle.id}\n${importedChild.id}`);
+  assert.equal(JSON.parse(importedParent.metadata!).unknownExtension, "preserve");
+  assert.ok(restored.warnings?.some(warning => warning.includes("metadata article reference") && warning.includes("missing-article")));
   assert.match(importedParent.contentHtml!, new RegExp(newArticle.id));
   assert.match(importedParent.contentHtml!, new RegExp(newBlock.id));
   assert.equal(await db.articleMention.count({ where: { sourceArticleId: importedParent.id, targetArticleId: newArticle.id } }), 1);

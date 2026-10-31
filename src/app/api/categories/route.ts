@@ -2,7 +2,7 @@ import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { categoryMovePlan, sortOrdered } from "@/lib/category-tree";
-import { validateImageReference } from "@/lib/asset-validation";
+import { assertImageReference, validateImageReference } from "@/lib/asset-validation";
 import { imageAssetId } from "@/lib/assets";
 
 class OrganizationError extends Error { constructor(message: string, public status = 400) { super(message); } }
@@ -69,6 +69,7 @@ async function patchHandler(request: NextRequest) {
       await prisma.$transaction(async tx => {
         const category = await tx.category.findFirst({ where: { id, worldId }, select: { id: true } });
         if (!category) throw new OrganizationError("Category not found in this world", 404);
+        if (iconImage !== null) await assertImageReference(iconImage, worldId, tx);
         await tx.category.update({ where: { id }, data: { iconImage } });
       });
       return NextResponse.json({ success: true });
@@ -121,7 +122,7 @@ async function deleteHandler(request: NextRequest) {
   } catch (error) { return failure(error); }
 }
 
-export const GET = withAuthor(getHandler);
-export const POST = withAuthor(postHandler);
-export const PATCH = withAuthor(patchHandler);
-export const DELETE = withAuthor(deleteHandler);
+export const GET = withAuthor({ target: "world-query", field: "worldId" }, getHandler);
+export const POST = withAuthor({ target: "world-body", field: "worldId" }, postHandler);
+export const PATCH = withAuthor({ target: "world-body", field: "worldId" }, patchHandler);
+export const DELETE = withAuthor({ target: "world-body", field: "worldId" }, deleteHandler);

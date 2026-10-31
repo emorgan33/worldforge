@@ -2,7 +2,7 @@
 import { useWorldGuard } from "@/components/worlds/WorldGuard";
 /* Uploaded images use the byte-serving route directly. */
 /* eslint-disable @next/next/no-img-element */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { IMAGE_ACCEPT, MAX_IMAGE_BYTES, type ImageAssetItem } from "@/lib/assets";
 import type { GuardRegistration } from "@/lib/navigation-guard";
 import { ShareResource } from "@/components/campaign/ShareResource";
@@ -30,12 +30,35 @@ export function imageSourceLabel(asset: Pick<ImageAssetItem, "source" | "provena
   return "Uploaded image";
 }
 
-interface AssetUsage {
+export interface AssetUsage {
   worldCover: boolean | null;
   worldBanner: boolean | null;
   worldBackground: boolean | null;
+  categoryCount: number;
   articleCount: number;
   articles: { id: string; title: string; slug: string; categoryName: string | null }[];
+  revisionCount: number;
+  mapCount: number;
+  mapLayerCount: number;
+  timelineCount: number;
+}
+
+export function assetUsageHasReferences(usage: AssetUsage) {
+  return Boolean(usage.worldCover || usage.worldBanner || usage.worldBackground || usage.categoryCount || usage.articleCount || usage.revisionCount || usage.mapCount || usage.mapLayerCount || usage.timelineCount);
+}
+
+export function assetUsageLines(usage: AssetUsage) {
+  const lines: string[] = [];
+  if (usage.worldCover) lines.push("World cover image");
+  if (usage.worldBanner) lines.push("World banner image");
+  if (usage.worldBackground) lines.push("World background image");
+  if (usage.categoryCount) lines.push(`${usage.categoryCount} categor${usage.categoryCount === 1 ? "y illustration" : "y illustrations"}`);
+  if (usage.articleCount) lines.push(`${usage.articleCount} article${usage.articleCount === 1 ? "" : "s"}`);
+  if (usage.revisionCount) lines.push(`${usage.revisionCount} revision snapshot${usage.revisionCount === 1 ? "" : "s"}`);
+  if (usage.mapCount) lines.push(`${usage.mapCount} map${usage.mapCount === 1 ? "" : "s"}`);
+  if (usage.mapLayerCount) lines.push(`${usage.mapLayerCount} map layer${usage.mapLayerCount === 1 ? "" : "s"}`);
+  if (usage.timelineCount) lines.push(`${usage.timelineCount} timeline${usage.timelineCount === 1 ? "" : "s"}`);
+  return lines.length ? lines : ["Not referenced anywhere"];
 }
 
 export function AssetLibrary({ worldId, onSelect, onGuardChange }: { worldId: string; onSelect?: (asset: ImageAssetItem) => void; onGuardChange?: (registration: GuardRegistration) => void }) {
@@ -52,12 +75,37 @@ export function AssetLibrary({ worldId, onSelect, onGuardChange }: { worldId: st
   const [refresh, setRefresh] = useState(0);
   const [selected, setSelected] = useState<ImageAssetItem | null>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
+  const busyRef = useRef(false);
   const generation = useRef(0);
   const [file, setFile] = useState<File | null>(null);
   const [uploadTitle, setUploadTitle] = useState("");
   const [uploadAlt, setUploadAlt] = useState("");
+  const [detailGuard, setDetailGuard] = useState<GuardRegistration>(null);
 
-  useWorldGuard({ dirty: !!file || !!uploadTitle || !!uploadAlt, busy }, "asset", onGuardChange);
+  const uploadDirty = !!file || !!uploadTitle || !!uploadAlt;
+  const libraryDirty = uploadDirty || !!detailGuard?.dirty;
+  const libraryBusy = busy || !!detailGuard?.busy;
+  useWorldGuard({ dirty: libraryDirty, busy: libraryBusy }, "asset", onGuardChange);
+
+  function leaveSelectedDetails() {
+    if (busyRef.current || busy || detailGuard?.busy) return false;
+    if (!selected || !detailGuard?.dirty) return true;
+    return window.confirm("Discard unsaved changes in image details?");
+  }
+
+  function reportLibraryBusy(nextBusy: boolean, dirty = uploadDirty) {
+    onGuardChange?.({ dirty: dirty || !!detailGuard?.dirty, busy: nextBusy || !!detailGuard?.busy });
+  }
+
+  const reportDetailGuard = useCallback((registration: GuardRegistration) => {
+    setDetailGuard(registration);
+    if (registration) onGuardChange?.({ dirty: uploadDirty || registration.dirty, busy: busyRef.current || busy || registration.busy });
+  }, [uploadDirty, busy, onGuardChange]);
+
+  function clearSelection() {
+    setDetailGuard(null);
+    setSelected(null);
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -86,25 +134,30 @@ export function AssetLibrary({ worldId, onSelect, onGuardChange }: { worldId: st
   async function upload(event: React.FormEvent) {
     event.preventDefault(); if (!file) return;
     if (file.size > MAX_IMAGE_BYTES || !IMAGE_ACCEPT.split(",").includes(file.type)) { setError("Choose a PNG, JPEG or WebP image no larger than 10 MB."); return; }
-    setBusy(true); setError(""); setMessage("");
+    if (!leaveSelectedDetails()) return;
+    const wasDirty = uploadDirty;
+    let succeeded = false;
+    busyRef.current = true; setBusy(true); reportLibraryBusy(true, wasDirty); setError(""); setMessage("");
     try {
       const form = new FormData(); form.set("worldId", worldId); form.set("file", file); form.set("title", uploadTitle); form.set("alt", uploadAlt);
       const result = await fetch("/api/assets", { method: "POST", body: form }).then(jsonResponse);
-      setSelected(result); setSearch(""); setSource("all"); setFile(null); setUploadTitle(""); setUploadAlt(""); setRefresh(r => r + 1);
+      setDetailGuard(null); setSelected(result); setSearch(""); setSource("all"); setFile(null); setUploadTitle(""); setUploadAlt(""); setRefresh(r => r + 1);
+      succeeded = true;
       setMessage(result.reused ? "An existing image with the same content was restored." : "Image uploaded.");
     } catch (error) { setError(error instanceof Error ? error.message : "Upload failed."); }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); reportLibraryBusy(false, succeeded ? false : wasDirty); }
   }
   async function update(asset: ImageAssetItem, changes: { title?: string; alt?: string; archived?: boolean }) {
-    setBusy(true); setError(""); setMessage("");
+    if (busyRef.current) return;
+    busyRef.current = true; setBusy(true); reportLibraryBusy(true); setError(""); setMessage("");
     try {
       const result = await fetch("/api/assets", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: asset.id, worldId, ...changes }) }).then(jsonResponse);
-      setSelected(result); setRefresh(r => r + 1); setMessage(changes.archived === false ? "Image restored to library." : changes.archived ? "Image hidden from library." : "Image updated.");
+      setDetailGuard(null); setSelected(current => current?.id === asset.id ? result : current); setRefresh(r => r + 1); setMessage(changes.archived === false ? "Image restored to library." : changes.archived ? "Image hidden from library." : "Image updated.");
     } catch (error) { setError(error instanceof Error ? error.message : "Update failed."); }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); reportLibraryBusy(false); }
   }
   function clearFilters() {
-    setSearch(""); setSource("all"); setIncludeArchived(false); setSelected(null);
+    setSearch(""); setSource("all"); setIncludeArchived(false); clearSelection();
   }
   return <section aria-label="Image library">
     {error && <p role="alert" className="mb-3 rounded-lg border border-red-800 bg-red-950 px-3 py-2 text-sm text-red-200">{error}</p>}
@@ -114,19 +167,19 @@ export function AssetLibrary({ worldId, onSelect, onGuardChange }: { worldId: st
         <form onSubmit={upload} className="mb-5 grid gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3 sm:grid-cols-4"><div className="sm:col-span-2"><label className="mb-1 block text-xs text-zinc-400">Upload image<input ref={uploadInput} type="file" accept={IMAGE_ACCEPT} onChange={e => { setFile(e.target.files?.[0] ?? null); setError(""); }} className="mt-1 block w-full text-sm text-zinc-400 file:mr-4 file:rounded-lg file:border file:border-zinc-600 file:bg-zinc-800 file:px-3 file:py-1 file:text-zinc-200" /></label></div><div><label className="mb-1 block text-xs text-zinc-400">Title<input aria-label="Image title" maxLength={200} value={uploadTitle} onChange={e => setUploadTitle(e.target.value)} placeholder="Optional" className={inputClass} /></label></div><div><label className="mb-1 block text-xs text-zinc-400">Alt text<input aria-label="Alternative text" maxLength={1000} value={uploadAlt} onChange={e => setUploadAlt(e.target.value)} placeholder="Describe the image" className={inputClass} /></label></div><div className="flex items-end"><button type="submit" disabled={!file || busy} className="min-h-11 w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-zinc-950 disabled:opacity-40">Upload</button></div></form>
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <div role="group" aria-label="Filter saved images by source" className="flex flex-wrap gap-1 rounded-lg border border-zinc-800 bg-zinc-900 p-1">
-            {SOURCE_FILTERS.map(option => <button key={option.value} type="button" aria-pressed={source === option.value} onClick={() => { setSource(option.value); setSelected(null); }} className={`min-h-10 rounded-md px-3 text-xs font-semibold ${source === option.value ? "bg-violet-500/20 text-violet-200" : "text-zinc-400 hover:text-zinc-200"}`}>{option.label}</button>)}
+            {SOURCE_FILTERS.map(option => <button key={option.value} type="button" aria-pressed={source === option.value} onClick={() => { if (source !== option.value && leaveSelectedDetails()) { setSource(option.value); clearSelection(); } }} className={`min-h-10 rounded-md px-3 text-xs font-semibold ${source === option.value ? "bg-violet-500/20 text-violet-200" : "text-zinc-400 hover:text-zinc-200"}`}>{option.label}</button>)}
           </div>
-          <label className="text-xs text-zinc-400">Search<input aria-label="Search images" value={search} onChange={e => { setSearch(e.target.value); setSelected(null); }} className="ml-1 w-40 rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" /></label>
-          <label className="flex items-center gap-2 text-xs text-zinc-400"><input type="checkbox" checked={includeArchived} onChange={e => { setIncludeArchived(e.target.checked); setSelected(null); }} />Show hidden images</label>
+          <label className="text-xs text-zinc-400">Search<input aria-label="Search images" value={search} onChange={e => { if (e.target.value !== search && leaveSelectedDetails()) { setSearch(e.target.value); clearSelection(); } }} className="ml-1 w-40 rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" /></label>
+          <label className="flex items-center gap-2 text-xs text-zinc-400"><input type="checkbox" checked={includeArchived} onChange={e => { if (e.target.checked !== includeArchived && leaveSelectedDetails()) { setIncludeArchived(e.target.checked); clearSelection(); } }} />Show hidden images</label>
         </div>
-        {loading ? <p role="status" className="text-sm text-zinc-400">Loading images…</p> : assets.length === 0 ? <div className="py-5 text-sm text-zinc-500"><p>{search || source !== "all" || includeArchived ? "No matching images." : "No images yet. Upload your first image above."}</p>{(search || source !== "all" || includeArchived) && <button type="button" onClick={clearFilters} className="mt-2 min-h-10 rounded-lg border border-zinc-700 px-3 text-xs text-zinc-200">Clear filters</button>}</div> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{assets.map(asset => <button type="button" aria-label={`View image ${asset.title}`} aria-pressed={selected?.id === asset.id} key={asset.id} onClick={() => setSelected(asset)} className={`overflow-hidden rounded-lg border text-left ${selected?.id === asset.id ? "border-violet-400 ring-1 ring-violet-400" : "border-zinc-700 hover:border-zinc-500"}`}>
+        {loading ? <p role="status" className="text-sm text-zinc-400">Loading images…</p> : assets.length === 0 ? <div className="py-5 text-sm text-zinc-500"><p>{search || source !== "all" || includeArchived ? "No matching images." : "No images yet. Upload your first image above."}</p>{(search || source !== "all" || includeArchived) && <button type="button" onClick={() => { if (leaveSelectedDetails()) clearFilters(); }} className="mt-2 min-h-10 rounded-lg border border-zinc-700 px-3 text-xs text-zinc-200">Clear filters</button>}</div> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{assets.map(asset => <button type="button" aria-label={`View image ${asset.title}`} aria-pressed={selected?.id === asset.id} key={asset.id} onClick={() => { if (selected?.id !== asset.id && leaveSelectedDetails()) { setDetailGuard(null); setSelected(asset); } }} className={`overflow-hidden rounded-lg border text-left ${selected?.id === asset.id ? "border-violet-400 ring-1 ring-violet-400" : "border-zinc-700 hover:border-zinc-500"}`}>
           <img src={asset.url} alt="" loading="lazy" className="h-28 w-full bg-zinc-950 object-contain" /><span className="block truncate p-2 text-xs text-zinc-200">{asset.title}{asset.archived ? " · Hidden" : ""}</span><span className="block px-2 pb-2 text-[10px] text-zinc-500">{imageSourceLabel(asset)}</span>
         </button>)}</div>}
         {cursor && !loading && <button type="button" disabled={loadingMore} onClick={() => void loadMore()} className="mt-3 min-h-10 text-sm text-indigo-300">{loadingMore ? "Loading…" : "Load more images"}</button>}
       </div>
       <aside aria-label="Selected image" className={selected ? "block" : "hidden lg:block"}>
         {selected ? <>
-          <AssetDetails key={`${selected.id}-${selected.title}-${selected.alt}-${selected.archived}`} asset={selected} busy={busy} onUpdate={changes => update(selected, changes)} onSelect={onSelect} onMessage={setMessage} onBack={() => setSelected(null)} onRefresh={() => { setSelected(null); setRefresh(r => r + 1); }} />
+          <AssetDetails key={`${selected.id}-${selected.title}-${selected.alt}-${selected.archived}`} asset={selected} busy={busy} onUpdate={changes => update(selected, changes)} onSelect={onSelect} onMessage={setMessage} onGuardChange={reportDetailGuard} onBack={() => { if (leaveSelectedDetails()) clearSelection(); }} onRefresh={() => { clearSelection(); setRefresh(r => r + 1); }} />
           <div className="mt-3"><ShareResource key={selected.id} kind="assets" resourceId={selected.id} title={selected.title} /></div>
         </> : <p className="rounded-xl border border-dashed border-zinc-800 p-4 text-sm text-zinc-500">Select an image to inspect its details, usage and sharing.</p>}
       </aside>
@@ -134,7 +187,7 @@ export function AssetLibrary({ worldId, onSelect, onGuardChange }: { worldId: st
   </section>;
 }
 
-function AssetDetails({ asset, busy, onUpdate, onSelect, onMessage, onBack, onRefresh }: { asset: ImageAssetItem; busy: boolean; onUpdate: (changes: { title?: string; alt?: string; archived?: boolean }) => Promise<void>; onSelect?: (asset: ImageAssetItem) => void; onMessage: (message: string) => void; onBack: () => void; onRefresh: () => void }) {
+function AssetDetails({ asset, busy, onUpdate, onSelect, onMessage, onGuardChange, onBack, onRefresh }: { asset: ImageAssetItem; busy: boolean; onUpdate: (changes: { title?: string; alt?: string; archived?: boolean }) => Promise<void>; onSelect?: (asset: ImageAssetItem) => void; onMessage: (message: string) => void; onGuardChange: (registration: GuardRegistration) => void; onBack: () => void; onRefresh: () => void }) {
   const [title, setTitle] = useState(asset.title), [alt, setAlt] = useState(asset.alt);
   const [showUsage, setShowUsage] = useState(false);
   const [usage, setUsage] = useState<AssetUsage | null>(null);
@@ -142,7 +195,11 @@ function AssetDetails({ asset, busy, onUpdate, onSelect, onMessage, onBack, onRe
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  useWorldGuard({ dirty: title !== asset.title || alt !== asset.alt, busy: deleting }, "asset");
+  const detailDirty = title !== asset.title || alt !== asset.alt;
+  useWorldGuard({ dirty: detailDirty, busy: deleting }, "asset-detail");
+  useEffect(() => {
+    onGuardChange({ dirty: detailDirty, busy: deleting });
+  }, [detailDirty, deleting, onGuardChange]);
 
   async function loadUsage() {
     setLoadingUsage(true);
@@ -155,12 +212,21 @@ function AssetDetails({ asset, busy, onUpdate, onSelect, onMessage, onBack, onRe
 
   async function confirmDelete() {
     setDeleting(true);
+    onGuardChange({ dirty: detailDirty, busy: true });
+    let deleted = false;
     try {
       const result = await fetch(`/api/assets/${asset.id}/permanent`, { method: "DELETE" }).then(jsonResponse);
-      if (result.deleted) { onMessage("Image permanently deleted."); onRefresh(); }
-      else if (result.referenced) { setShowDeleteConfirm(false); setShowUsage(true); onMessage(`Cannot delete: used as cover/banner and in ${result.references?.articleCount || 0} articles.`); }
+      if (result.deleted) {
+        deleted = true;
+        onGuardChange({ dirty: false, busy: false });
+        onMessage("Image permanently deleted.");
+        onRefresh();
+      }
+      else if (result.referenced) { setShowDeleteConfirm(false); setShowUsage(true); void loadUsage(); onMessage("Cannot delete: this image is still referenced. Review Image Usage for details, or hide it from the library."); }
     } catch (error) { onMessage(error instanceof Error ? error.message : "Failed to delete image."); }
-    finally { setDeleting(false); setShowDeleteConfirm(false); }
+    finally {
+      if (!deleted) { setDeleting(false); setShowDeleteConfirm(false); onGuardChange({ dirty: detailDirty, busy: false }); }
+    }
   }
 
   return <section aria-label="Selected image" className="space-y-4 rounded-xl border border-violet-800/50 bg-zinc-900 p-4">
@@ -174,10 +240,7 @@ function AssetDetails({ asset, busy, onUpdate, onSelect, onMessage, onBack, onRe
       <h4 className="mb-2 font-semibold text-zinc-300">Image Usage</h4>
       {loadingUsage ? <p className="text-zinc-500">Loading...</p> : usage ? <div>
         <p className="text-zinc-400">Used as:</p><ul className="mt-1 space-y-1 text-zinc-300">
-          {usage.worldCover && <li>• World cover image</li>}
-          {usage.worldBanner && <li>• World banner image</li>}
-          {usage.worldBackground && <li>• World background image</li>}
-          {(usage.worldCover || usage.worldBanner || usage.worldBackground || usage.articleCount > 0) === false && <li className="text-zinc-500">Not referenced anywhere</li>}
+          {assetUsageLines(usage).map(line => <li key={line} className={line === "Not referenced anywhere" ? "text-zinc-500" : undefined}>• {line}</li>)}
         </ul>
         {usage.articleCount > 0 && <div><p className="mt-2 text-zinc-400">Used in {usage.articleCount} article{usage.articleCount !== 1 ? "s" : ""}:</p><ul className="mt-1 max-h-40 space-y-1 overflow-y-auto text-zinc-300">{usage.articles.slice(0, 10).map(a => <li key={a.id}>• {a.title}{a.categoryName ? ` (${a.categoryName})` : ""}</li>)}{usage.articleCount > 10 && <li className="text-zinc-500">...and {usage.articleCount - 10} more</li>}</ul></div>}
       </div> : null}
@@ -185,10 +248,10 @@ function AssetDetails({ asset, busy, onUpdate, onSelect, onMessage, onBack, onRe
     </div>}
     {showDeleteConfirm && <div className="rounded-lg border border-red-700/50 bg-red-950/30 p-3 text-xs">
       <p className="font-semibold text-red-300">Permanently delete this image?</p>
-      {usage && (usage.worldCover || usage.worldBanner || usage.worldBackground || usage.articleCount > 0) ? <p className="mt-1 text-zinc-400">This image is still in use. Remove it from all references first, or use &quot;Hide from library&quot; to archive it.</p>
+      {usage && assetUsageHasReferences(usage) ? <p className="mt-1 text-zinc-400">This image is still in use. Remove it from all references first, or use &quot;Hide from library&quot; to archive it.</p>
       : <p className="mt-1 text-zinc-400">This will delete the image file and cannot be undone. Articles using this image will show broken images.</p>}
       <div className="mt-2 flex gap-2">
-        <button type="button" disabled={deleting || !!(usage && (usage.worldCover || usage.worldBanner || usage.worldBackground || usage.articleCount > 0))} onClick={() => void confirmDelete()} className="min-h-10 rounded bg-red-600 px-3 py-1 text-zinc-100 disabled:opacity-50">Delete permanently</button>
+        <button type="button" disabled={deleting || !!(usage && assetUsageHasReferences(usage))} onClick={() => void confirmDelete()} className="min-h-10 rounded bg-red-600 px-3 py-1 text-zinc-100 disabled:opacity-50">Delete permanently</button>
         <button type="button" disabled={deleting} onClick={() => setShowDeleteConfirm(false)} className="min-h-10 rounded border border-zinc-600 px-3 py-1 text-zinc-300">Cancel</button>
       </div>
     </div>}

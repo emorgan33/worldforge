@@ -2,7 +2,8 @@ export type PublicationStatus = "DRAFT" | "WIP" | "PUBLISHED";
 export type ArticleVisibility = "PRIVATE" | "PUBLIC";
 export function publicationFields(input: { publicationStatus?: unknown; visibility?: unknown; state?: unknown }, existing?: { publicationStatus: string; visibility: string }): { publicationStatus: PublicationStatus; visibility: ArticleVisibility; state: PublicationStatus | "PRIVATE" } {
   const status = input.publicationStatus ?? (input.state === "PRIVATE" ? "PUBLISHED" : input.state) ?? existing?.publicationStatus ?? "DRAFT";
-  const visibility = input.visibility ?? (input.state === "PRIVATE" ? "PRIVATE" : undefined) ?? existing?.visibility ?? "PRIVATE";
+  const existingVisibility = existing?.visibility === "PUBLIC" ? "PUBLIC" : "PRIVATE";
+  const visibility = input.visibility ?? (input.state === "PRIVATE" ? "PRIVATE" : undefined) ?? existingVisibility;
   if (!["DRAFT", "WIP", "PUBLISHED"].includes(String(status)) || !["PRIVATE", "PUBLIC"].includes(String(visibility))) throw new Error("Choose a valid publication status and visibility.");
   return { publicationStatus: status as PublicationStatus, visibility: visibility as ArticleVisibility, state: status === "PUBLISHED" && visibility === "PRIVATE" ? "PRIVATE" : status as PublicationStatus };
 }

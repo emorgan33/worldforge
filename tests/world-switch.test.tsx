@@ -2,16 +2,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
-import { authorFetch } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
+if (origin) assertIsolatedTestEnvironment();
 
 // Two-world fixture with differing rules profiles and distinct records in
 // every dataset, so cross-world mixing is detectable.
 test("switching worlds loads only the destination world data", { skip: !origin }, async context => {
   const db = new PrismaClient();
   const owner = await db.user.create({ data: { name: "Switch fixture", email: `switch-${randomUUID()}@example.invalid` } });
-  context.after(async () => { await db.user.deleteMany({ where: { id: owner.id } }); await db.$disconnect(); });
+  context.after(async () => { await deleteTestUsers(db, owner.id); await db.$disconnect(); });
   const worldA = await db.world.create({ data: { ownerId: owner.id, title: "Ashen Coast", slug: `ashen-${randomUUID()}`, system: "PF_2E" } });
   const worldB = await db.world.create({ data: { ownerId: owner.id, title: "Ashen Coast", slug: `ashen-${randomUUID()}`, system: "DND_5E" } });
   const seed = async (worldId: string, tag: string) => {

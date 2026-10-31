@@ -2,7 +2,7 @@ import { withAuthor } from "@/lib/auth";
 import { AccessError } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { imageAssetId } from "@/lib/assets";
+import { isAssetId } from "@/lib/assets";
 import { scanAssetReferences } from "@/lib/asset-references";
 
 export interface AssetUsage {
@@ -13,6 +13,10 @@ export interface AssetUsage {
   categories: { id: string; name: string }[];
   articleCount: number;
   articles: { id: string; title: string; slug: string; categoryName: string | null }[];
+  revisionCount: number;
+  mapCount: number;
+  mapLayerCount: number;
+  timelineCount: number;
 }
 
 /**
@@ -21,11 +25,11 @@ export interface AssetUsage {
  * backgrounds, category illustrations, and article covers/portraits/bodies.
  * Requires ownership of the world containing the asset.
  */
-export const GET = withAuthor(async (_request: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withAuthor({ target: "resource-param", kind: "assets" }, async (_request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   try {
     const { id } = await params;
 
-    if (!imageAssetId(id)) {
+    if (!isAssetId(id)) {
       return NextResponse.json({ error: "Invalid image ID" }, { status: 400 });
     }
 
@@ -38,8 +42,7 @@ export const GET = withAuthor(async (_request: Request, { params }: { params: Pr
       return NextResponse.json({ error: "Image not found" }, { status: 404 });
     }
 
-    const user = await import("@/lib/auth").then(m => m.sessionUser());
-    if (user?.id !== asset.world.ownerId) {
+    if (user.id !== asset.world.ownerId) {
       throw new AccessError("You do not have access to this image", 403);
     }
 
@@ -53,6 +56,10 @@ export const GET = withAuthor(async (_request: Request, { params }: { params: Pr
       categories: references.categories,
       articleCount: references.articles.length,
       articles: references.articles,
+      revisionCount: references.revisions,
+      mapCount: references.maps,
+      mapLayerCount: references.mapLayers,
+      timelineCount: references.timelines,
     } satisfies AssetUsage);
   } catch (error) {
     if (error instanceof AccessError) {

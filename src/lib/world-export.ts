@@ -5,7 +5,10 @@ import { normalizeImage, removeAssetFile } from "@/lib/asset-storage";
 import { provenanceVerificationOrigin, validateImportedStockSnapshot } from "./stock-provenance";
 import { collectHtmlReferences } from "@/lib/article-mention-index";
 import { collectJsonReferences } from "@/lib/article-links";
+import { remapArticleMetadata } from "@/lib/metadata-references";
+import { importedWorldSlug, remapWorldAssetUrls, worldTransferSlugsValid } from "@/lib/world-transfer-adapters";
 import type { JSONContent } from "@tiptap/core";
+import { normalizeMapGeometry, normalizeMapStyle } from "./map-elements";
 
 // ---------------------------------------------------------------------------
 // v1 Manifest (re-exported for type checking)
@@ -145,6 +148,15 @@ export interface WorldExportV2 {
 export interface WorldExportV3 extends Omit<WorldExportV2, "formatVersion"> {
   formatVersion: 3;
 }
+/** Format 4 preserves timeline eras and explicit chronological drawing order. */
+export interface WorldExportV4 extends Omit<WorldExportV3, "formatVersion" | "timelines" | "maps"> {
+  formatVersion: 4;
+  timelines: (Omit<WorldExportV2["timelines"][number], "events"> & {
+    eras: { id: string; name: string; startYear: number; endYear: number | null; order: number; color: string }[];
+    events: (WorldExportV2["timelines"][number]["events"][number] & { eraId: string | null })[];
+  })[];
+  maps?: (Omit<WorldExportMap, "elements"> & { elements: (WorldExportMap["elements"][number] & { order: number })[] })[];
+}
 // ---------------------------------------------------------------------------
 // Export function (v2)
 // ---------------------------------------------------------------------------
@@ -155,6 +167,9 @@ export async function exportWorldV2(worldId: string): Promise<WorldExportV2> {
 /** Complete owner backup including provenance, placement fields and restrictions. */
 export async function exportWorldV3(worldId: string): Promise<WorldExportV3> {
   return buildWorldExport(worldId, 3) as Promise<WorldExportV3>;
+}
+export async function exportWorldV4(worldId: string): Promise<WorldExportV4> {
+  return await buildWorldExport(worldId, 4) as unknown as WorldExportV4;
 }
 
 /**
@@ -174,7 +189,7 @@ export async function worldNeedsV3(worldId: string): Promise<boolean> {
   return Boolean((world && (world.coverImageAlt !== null || world.bannerImageAlt !== null)) || article || revision || category || provenance || restricted);
 }
 
-async function buildWorldExport(worldId: string, formatVersion: 2 | 3): Promise<WorldExportV2 | WorldExportV3> {
+async function buildWorldExport(worldId: string, formatVersion: 2 | 3 | 4): Promise<WorldExportV2 | WorldExportV3 | WorldExportV4> {
   const world = await prisma.world.findUnique({
     where: { id: worldId },
     select: {
@@ -209,7 +224,7 @@ async function buildWorldExport(worldId: string, formatVersion: 2 | 3): Promise<
     prisma.imageAsset.findMany({ where: { worldId }, include: { provenance: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } } }),
     prisma.rpgBlock.findMany({ where: { worldId } }),
     prisma.secret.findMany({ where: { worldId } }),
-    prisma.timeline.findMany({ where: { worldId }, include: { events: true } }),
+    prisma.timeline.findMany({ where: { worldId }, include: { eras: { orderBy: [{ order: "asc" }, { id: "asc" }] }, events: { orderBy: [{ numericDate: "asc" }, { id: "asc" }] } } }),
     prisma.variableCollection.findMany({ where: { worldId }, include: { variables: true } }),
     prisma.worldMember.findMany({ where: { worldId } }),
     prisma.audiencePolicy.findMany({ where: { worldId } }),
@@ -217,7 +232,7 @@ async function buildWorldExport(worldId: string, formatVersion: 2 | 3): Promise<
     prisma.accessAuditEvent.findMany({ where: { worldId }, orderBy: { createdAt: "asc" } }),
     prisma.campaignSession.findMany({ where: { worldId }, orderBy: { order: "asc" } }),
     prisma.sessionEntityLink.findMany({ where: { worldId }, orderBy: { order: "asc" } }),
-    prisma.map.findMany({ where: { worldId }, include: { layers: true, markerGroups: true, markers: true, elements: true } }),
+    prisma.map.findMany({ where: { worldId }, include: { layers: true, markerGroups: true, markers: true, elements: { orderBy: [{ order: "asc" }, { createdAt: "asc" }, { id: "asc" }] } } }),
   ]);
   // Read asset data in batches
   const CHUNK_SIZE = 20;
@@ -251,8 +266,7 @@ async function buildWorldExport(worldId: string, formatVersion: 2 | 3): Promise<
     for (const r of results) exportAssets.push(r);
   }
 
-  return {
-    formatVersion,
+  const manifest = {
     exportedAt: new Date().toISOString(),
     sourceWorldId: worldId,
     world: { ...world, isPublic: false },
@@ -296,10 +310,12 @@ async function buildWorldExport(worldId: string, formatVersion: 2 | 3): Promise<
     timelines: timelines.map((t) => ({
       id: t.id, title: t.title, description: t.description,
       coverImage: t.coverImage,
+      ...((formatVersion === 4) ? { eras: t.eras.map(era => ({ id: era.id, name: era.name, startYear: era.startYear, endYear: era.endYear, order: era.order, color: era.color })) } : {}),
       events: t.events.map((e) => ({
         id: e.id, title: e.title, description: e.description,
         dateDisplay: e.dateDisplay, numericDate: e.numericDate,
         importance: e.importance, articleId: e.articleId,
+        ...((formatVersion === 4) ? { eraId: e.eraId } : {}),
       })),
     })),
     variableCollections: variableCollections.map((vc) => ({
@@ -352,9 +368,12 @@ async function buildWorldExport(worldId: string, formatVersion: 2 | 3): Promise<
       layers: map.layers.map(({ id, name, order, isVisible, imageUrl }) => ({ id, name, order, isVisible, imageUrl })),
       groups: map.markerGroups.map(({ id, name, color, icon }) => ({ id, name, color, icon })),
       pins: map.markers.map(({ id, layerId, groupId, title, description, x, y, articleId, icon, color }) => ({ id, layerId, groupId, title, description, x, y, articleId, icon, color })),
-      elements: map.elements.map(({ id, layerId, kind, geometry, style }) => ({ id, layerId, kind, geometry, style })),
+      elements: map.elements.map(({ id, layerId, kind, geometry, style }, order) => ({ id, layerId, kind, geometry, style, ...((formatVersion === 4) ? { order } : {}) })),
     })),
   };
+  if (formatVersion === 2) return { ...manifest, formatVersion: 2 } as unknown as WorldExportV2;
+  if (formatVersion === 3) return { ...manifest, formatVersion: 3 } as unknown as WorldExportV3;
+  return { ...manifest, formatVersion: 4 } as unknown as WorldExportV4;
 }
 // ---------------------------------------------------------------------------
 // Import result types
@@ -410,9 +429,10 @@ export interface ImportV2Result {
 // Import function (v2)
 // ---------------------------------------------------------------------------
 export async function importWorldV2(
-  data: WorldExportV2 | WorldExportV3,
+  data: WorldExportV2 | WorldExportV3 | WorldExportV4,
   ownerUserId: string,
-  existingSlugCheck: (slug: string) => Promise<boolean>
+  existingSlugCheck: (slug: string) => Promise<boolean>,
+  identity?: { worldId: string; assetId(sourceId: string): string; completionRequestId?: string; completionPayloadHash?: string }
 ): Promise<ImportV2Result> {
   const warnings: string[] = [];
   const articleIdMap = new Map((data.articles || []).map((article) => [article.id, randomUUID()]));
@@ -422,12 +442,13 @@ export async function importWorldV2(
   const collectionIdMap = new Map((data.variableCollections || []).map((collection) => [collection.id, randomUUID()]));
   const variableIdMap = new Map((data.variableCollections || []).flatMap((collection) => collection.variables.map((variable) => [variable.id, randomUUID()] as const)));
   const sessionIdMap = new Map((data.sessions || []).map((session) => [session.id, randomUUID()]));
+  if (!worldTransferSlugsValid(data)) throw new Error("Invalid or duplicate import slug");
   let slug = data.world.slug;
   let slugSuffix = 0;
-  while (await existingSlugCheck(slug)) { slugSuffix++; slug = `${data.world.slug}-${slugSuffix}`; }
+  while (await existingSlugCheck(slug)) { slugSuffix++; slug = importedWorldSlug(data.world.slug, slugSuffix); }
   if (slugSuffix > 0) warnings.push(`World slug "${data.world.slug}" was taken; renamed to "${slug}"`);
 
-  const newWorldId = randomUUID();
+  const newWorldId = identity?.worldId ?? randomUUID();
   const createdAssetFiles: string[] = [];
   try {
   await prisma.world.create({
@@ -473,7 +494,7 @@ export async function importWorldV2(
       if (typeof asset.data !== "string" || asset.data.length > 14 * 1024 * 1024 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(asset.data)) throw new Error("Invalid or oversized image data");
       const decoded = Buffer.from(asset.data, "base64");
       const normalized = await normalizeImage(decoded);
-      const newId = randomUUID();
+      const newId = identity?.assetId(asset.id) ?? randomUUID();
       writingAssetId = newId;
       const provenanceRows = normalizeImportedProvenance(asset);
       await writeAsset(newId, normalized.data);
@@ -511,27 +532,17 @@ export async function importWorldV2(
     }
   }
 
+  const remapUrls = (content: string | null | undefined) => remapWorldAssetUrls(content ?? null, assetUrlMap, assetId => warnings.push(`Removed reference to unavailable asset "${assetId}"`));
   // Restore category illustrations only after asset remapping is known.
   for (const cat of data.categories || []) {
     if (!cat.iconImage) continue;
     const id = categoryIdMap.get(cat.id);
     if (!id) continue;
-    const remapped = assetUrlMap.get(cat.iconImage) ?? null;
+    const remapped = remapUrls(cat.iconImage);
     if (remapped) await prisma.category.update({ where: { id }, data: { iconImage: remapped } });
-    else warnings.push(`Category "${cat.name}" illustration referenced an unavailable image and was cleared`);
+    else if (cat.iconImage) warnings.push(`Category "${cat.name}" illustration referenced an unavailable image and was cleared`);
   }
 
-  function remapUrls(c: string | null): string | null {
-    if (!c) return c;
-    let r = c;
-    for (const [o, n] of assetUrlMap) r = r.split(o).join(n);
-    const validAssetUrls = new Set(assetUrlMap.values());
-    return r.replace(/\/api\/assets\/([0-9a-f-]{36})\/file/gi, (match, assetId: string) => {
-      if (validAssetUrls.has(match)) return match;
-      warnings.push(`Removed reference to unavailable asset "${assetId}"`);
-      return "";
-    });
-  }
   function remapArticleHtml(html: string | null): string | null {
     const articleRemapped = remapUrls(html)?.replace(/data-article-id=(['"])([^'"]+)\1/gi, (_match, quote: string, sourceId: string) => {
       const targetId = articleIdMap.get(sourceId);
@@ -591,11 +602,11 @@ export async function importWorldV2(
         contentHtml: remapArticleHtml(article.contentHtml),
         contentJson: remapArticleJson(article.contentJson),
         sidebarJson: remapArticleJson(article.sidebarJson ?? null),
-        metadata: remapArticleJson(article.metadata),
+        metadata: remapUrls(remapArticleMetadata(article.metadata, articleIdMap, statblockIdMap, (key, sourceId, kind) => warnings.push(`Removed metadata ${kind} reference "${sourceId}" from ${key}`))),
         tags: article.tags,
-        publicationStatus: "DRAFT", visibility: "INHERITED", state: "DRAFT",
-        coverImage: article.coverImage ? assetUrlMap.get(article.coverImage) ?? null : null,
-        portraitImage: article.portraitImage ? assetUrlMap.get(article.portraitImage) ?? null : null,
+        publicationStatus: "DRAFT", visibility: "PRIVATE", state: "DRAFT",
+        coverImage: remapUrls(article.coverImage),
+        portraitImage: remapUrls(article.portraitImage),
         coverImageAlt: article.coverImageAlt ?? null,
         portraitImageAlt: article.portraitImageAlt ?? null,
         parentId: null,
@@ -651,14 +662,14 @@ export async function importWorldV2(
     await prisma.articleRevision.create({ data: {
       id: randomUUID(), articleId, title: revision.title, slug: revision.slug,
       excerpt: revision.excerpt, contentHtml: remapArticleHtml(revision.contentHtml),
-      contentJson: remapArticleJson(revision.contentJson), metadata: remapArticleJson(revision.metadata),
+      contentJson: remapArticleJson(revision.contentJson), metadata: remapUrls(remapArticleMetadata(revision.metadata, articleIdMap, statblockIdMap, (key, sourceId, kind) => warnings.push(`Removed metadata ${kind} reference "${sourceId}" from ${key}`))),
       tags: revision.tags, publicationStatus: revision.publicationStatus,
-      visibility: revision.visibility, state: revision.state, userId: ownerUserId,
+      visibility: revision.visibility === "PUBLIC" ? "PUBLIC" : "PRIVATE", state: revision.state, userId: ownerUserId,
       savedAt: new Date(revision.savedAt), articleVersionAtSave: revision.articleVersionAtSave,
       createdAt: new Date(revision.createdAt),
-      coverImage: revision.coverImage ? assetUrlMap.get(revision.coverImage) ?? null : null,
+      coverImage: remapUrls(revision.coverImage),
       coverImageAlt: revision.coverImageAlt ?? null,
-      portraitImage: revision.portraitImage ? assetUrlMap.get(revision.portraitImage) ?? null : null,
+      portraitImage: remapUrls(revision.portraitImage),
       portraitImageAlt: revision.portraitImageAlt ?? null,
     } });
   }
@@ -686,7 +697,10 @@ export async function importWorldV2(
 
   let timelinesImported = 0;
   for (const timeline of data.timelines || []) {
-    await prisma.timeline.create({ data: { id: randomUUID(), worldId: newWorldId, title: timeline.title, description: timeline.description, coverImage: remapUrls(timeline.coverImage), events: { create: timeline.events.map(e => ({ id: randomUUID(), title: e.title, description: e.description, dateDisplay: e.dateDisplay, numericDate: e.numericDate, importance: e.importance, articleId: e.articleId ? articleIdMap.get(e.articleId) ?? null : null })) } } });
+    const eraIdMap = new Map(("eras" in timeline ? timeline.eras : []).map(era => [era.id, randomUUID()]));
+    await prisma.timeline.create({ data: { id: randomUUID(), worldId: newWorldId, title: timeline.title, description: timeline.description, coverImage: remapUrls(timeline.coverImage),
+      ...("eras" in timeline ? { eras: { create: timeline.eras.map(era => ({ id: eraIdMap.get(era.id)!, name: era.name, startYear: era.startYear, endYear: era.endYear, order: era.order, color: era.color })) } } : {}),
+      events: { create: timeline.events.map((e, index) => ({ id: randomUUID(), title: e.title, description: e.description, dateDisplay: e.dateDisplay, numericDate: e.numericDate, importance: e.importance, articleId: e.articleId ? articleIdMap.get(e.articleId) ?? null : null, ...( "eraId" in e ? { eraId: e.eraId ? eraIdMap.get(e.eraId) ?? null : null } : {}) })) } } });
     timelinesImported++;
   }
 
@@ -697,8 +711,8 @@ export async function importWorldV2(
     variableCollectionsImported++;
   }
 
-  const coverImageUrl = data.world.coverImage ? assetUrlMap.get(data.world.coverImage) ?? null : null;
-  const bannerImageUrl = data.world.bannerImage ? assetUrlMap.get(data.world.bannerImage) ?? null : null;
+  const coverImageUrl = remapUrls(data.world.coverImage);
+  const bannerImageUrl = remapUrls(data.world.bannerImage);
   if (coverImageUrl || bannerImageUrl) {
     await prisma.world.update({ where: { id: newWorldId }, data: { coverImage: coverImageUrl, bannerImage: bannerImageUrl } });
   }
@@ -801,9 +815,21 @@ export async function importWorldV2(
       if (pin.groupId && !groupIdMap.has(pin.groupId) && allGroupIds.has(pin.groupId)) warnings.push(`Skipped cross-map marker group reference for pin "${pin.title}"`);
       return { id: randomUUID(), layerId: pin.layerId ? layerIdMap.get(pin.layerId) ?? null : null, groupId: pin.groupId ? groupIdMap.get(pin.groupId) ?? null : null, title: pin.title, description: pin.description, x: pin.x, y: pin.y, articleId: pin.articleId ? articleIdMap.get(pin.articleId) ?? null : null, icon: pin.icon, color: pin.color };
     });
-    const elements = (map.elements || []).map((element) => {
+    const elements = (map.elements || []).map((element, index) => {
       if (element.layerId && !layerIdMap.has(element.layerId) && allLayerIds.has(element.layerId)) warnings.push(`Skipped cross-map layer reference for a "${element.kind.toLowerCase()}" annotation`);
-      return { id: randomUUID(), layerId: element.layerId ? layerIdMap.get(element.layerId) ?? null : null, kind: element.kind, geometry: element.geometry, style: element.style };
+      const order = "order" in element && typeof element.order === "number" && Number.isSafeInteger(element.order) && element.order >= 0 ? element.order : index;
+      return {
+        id: randomUUID(),
+        layerId: element.layerId ? layerIdMap.get(element.layerId) ?? null : null,
+        kind: element.kind,
+        geometry: JSON.stringify(normalizeMapGeometry(element.kind, JSON.parse(element.geometry))),
+        style: (() => {
+          const parsedStyle = element.style ? JSON.parse(element.style) : null;
+          const normalizedStyle = normalizeMapStyle(element.kind, parsedStyle);
+          return normalizedStyle ? JSON.stringify(normalizedStyle) : null;
+        })(),
+        order,
+      };
     });
     await prisma.map.create({ data: {
       id: mapId, worldId: newWorldId, title: map.title, description: map.description,
@@ -827,6 +853,10 @@ export async function importWorldV2(
         });
       }
     }
+  }
+
+  if (identity?.completionRequestId && identity.completionPayloadHash) {
+    await prisma.world.update({ where: { id: newWorldId }, data: { creationRequestId: identity.completionRequestId, creationPayloadHash: identity.completionPayloadHash } });
   }
 
   return {

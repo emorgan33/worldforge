@@ -6,7 +6,9 @@ Public world and article pages use the same scoped presentation wrapper and opaq
 
 Homepage cover, global article cover, article-specific cover and page background remain separate. An article-specific cover overrides the global article cover. Clearing it restores the global fallback. The background appears behind the reading surface rather than replacing a cover.
 
-Each preset has fixed readable foreground/surface colors. Custom accent text is adjusted toward black or white as needed to meet a 4.5:1 contrast ratio on the reading surface. Background colors/images do not change that opaque surface. Custom CSS is not included.
+Each preset has fixed readable foreground/surface colors. Custom accent text is adjusted toward black or white as needed to meet a 4.5:1 contrast ratio on the reading surface. Background colors/images do not change that opaque surface.
+
+Advanced custom CSS is available in world styling. It is parsed as CSS, limited to 20,000 characters, and selectors are scoped to `.wf-reader`, including selectors nested in `@media`, `@supports`, `@container` and `@starting-style`. Nested reader selectors are checked through every rule and at-rule; functional pseudos containing `&` and implicit or explicit sibling selectors that can escape the reader are rejected. Reader scope is retained when any selector-list branch can still represent the reader element. Other at-rules (including `@import`, `@font-face`, `@layer` and keyframes) are rejected because their effects cannot be confined to the reader wrapper. Malformed CSS and declarations for fixed/sticky positioning, positive `z-index`, or URL-valued custom properties are rejected. Invalid legacy CSS fails closed and is not emitted. This keeps rules from selecting author controls or sibling page content.
 
 ## Storage and access
 
@@ -14,9 +16,11 @@ The additive schema field is `World.appearance String?`, containing validated JS
 
 A library image used as a public world's background becomes publicly accessible, including when the world has no public articles. Removing that reference or making the world private revokes access on the next request unless another public cover/article still references the image. Private-world backgrounds remain owner-only. Images in other worlds cannot be selected through the API and are filtered from reader appearance data. Existing image routes retain private/no-store caching.
 
-For another installation, back up SQLite and asset storage, then run `pnpm exec prisma db push` and `pnpm exec prisma generate` before building/restarting. No reseeding or content backfill is needed. This workspace's consistent pre-change database backup is `/tmp/worldforge-before-appearance-20261015.sqlite`.
+For another installation, back up SQLite and asset storage together using the [backup and restore guide](backup-restore.md), then apply committed migrations with `pnpm db:deploy` and regenerate the client with `pnpm db:generate` before building/restarting. No reseeding or appearance-specific content backfill is needed. The original workspace backup path is historical, not a portable recovery location.
 
-## Verification
+## Historical verification record
+
+The CSS scoping regression checks cover comma-separated and quoted-comma selectors, comments around sibling combinators, unchanged quoted attribute values, compound reader-root scoping and escape detection, nested sibling styling on reader descendants, native nested CSS, nested media/supports rules, implicit and explicit sibling escapes including ancestor-qualified nesting, mixed selector-list scope propagation, functional alternatives at descendant depth, keyframe and unknown at-rule rejection, and malformed or obfuscated unsafe declarations. Focused validation: `node --import tsx --test tests/world-appearance.test.tsx`.
 
 All 44 automated tests passed against the production server, including appearance validation, legacy defaults, preset/custom-accent contrast, world-scoped image references, persistence during ordinary world edits, isolation between worlds, reset and public-background grant/revocation. Focused ESLint and the production build (including TypeScript) passed.
 
