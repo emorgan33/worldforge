@@ -358,3 +358,75 @@ export async function setAccountRole(
     return { value: { userId: ctx.target.id }, details: { role: input.role, previousRole: ctx.target.role } };
   });
 }
+
+export type TargetSessionList = {
+  sessions: { id: string; createdAt: Date; expiresAt: Date; current: boolean }[];
+  previewSubjectCount: number;
+  previewIssuerCount: number;
+};
+
+export async function listTargetSessions(
+  db: PrismaClient,
+  actor: AdminActor,
+  targetUserId: string,
+): Promise<AdminMutationResult<TargetSessionList>> {
+  try {
+    return await db.$transaction(async (tx) => {
+      const now = new Date();
+      if (actor.type === "WEB_ADMIN") {
+        const session = await tx.authSession.findUnique({
+          where: { id: actor.sessionId },
+          select: { expiresAt: true, user: { select: { id: true, role: true, disabledAt: true } } },
+        });
+        if (!session || session.expiresAt <= now || session.user.id !== actor.userId || !activeAdmin(session.user)) {
+          return { ok: false as const, error: { error: "Admin session is no longer valid.", code: "UNAUTHORIZED" as const } };
+        }
+      }
+      const target = await tx.user.findUnique({ where: { id: targetUserId }, select: { id: true } });
+      if (!target) return { ok: false as const, error: { error: "Account not found.", code: "NOT_FOUND" as const } };
+      const sessions = await tx.authSession.findMany({
+        where: { userId: targetUserId, expiresAt: { gt: now } },
+        select: { id: true, createdAt: true, expiresAt: true },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      });
+      const previewSubjectCount = await tx.previewSession.count({ where: { userId: targetUserId, revokedAt: null, expiresAt: { gt: now } } });
+      const previewIssuerCount = await tx.previewSession.count({ where: { issuedById: targetUserId, revokedAt: null, expiresAt: { gt: now } } });
+      return { ok: true as const, value: {
+        sessions: sessions.map((session) => ({ ...session, current: actor.type === "WEB_ADMIN" && session.id === actor.sessionId })),
+        previewSubjectCount,
+        previewIssuerCount,
+      } };
+    }, TRANSACTION_OPTIONS);
+  } catch {
+    return { ok: false, error: { error: "Unable to complete this request.", code: "INTERNAL_ERROR" } };
+  }
+}
+
+export async function revokeTargetSession(
+  db: PrismaClient,
+  actor: AdminActor,
+  target: AdminMutationTarget,
+  sessionId: string,
+): Promise<AdminMutationResult<{ revoked: number }>> {
+  return runAdminMutation(db, actor, target, "SESSION_REVOKE", async ({ tx, target: user }) => {
+    const deleted = await tx.authSession.deleteMany({ where: { id: sessionId, userId: user.id } });
+    if (deleted.count === 0) return { error: "Session not found.", code: "NOT_FOUND" };
+    return { value: { revoked: deleted.count } };
+  });
+}
+
+export async function revokeAllTargetSessions(
+  db: PrismaClient,
+  actor: AdminActor,
+  target: AdminMutationTarget,
+): Promise<AdminMutationResult<{ sessionCount: number; previewCount: number }>> {
+  return runAdminMutation(db, actor, target, "SESSION_REVOKE_ALL", async ({ tx, target: user }) => {
+    const sessions = await tx.authSession.deleteMany({ where: { userId: user.id } });
+    const previews = await tx.previewSession.updateMany({
+      where: { revokedAt: null, OR: [{ userId: user.id }, { issuedById: user.id }] },
+      data: { revokedAt: new Date() },
+    });
+    const value = { sessionCount: sessions.count, previewCount: previews.count };
+    return { value, details: value };
+  });
+}

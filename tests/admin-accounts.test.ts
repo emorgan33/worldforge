@@ -9,6 +9,9 @@ import {
   issueRecovery,
   setAccountStatus,
   setAccountRole,
+  listTargetSessions,
+  revokeTargetSession,
+  revokeAllTargetSessions,
   type AdminMutateContext,
   type AdminMutationOptions,
 } from "../src/lib/admin-accounts";
@@ -1071,6 +1074,125 @@ describe("admin account roles", () => {
       assert.equal(rejected.error.code, "LAST_ADMIN");
       assert.equal(await db.user.count({ where: { role: "ADMIN", disabledAt: null } }), 1);
     } finally { await db2.$disconnect(); await cleanup(); }
+  });
+});
+
+describe("admin session services", () => {
+  it("lists unexpired sessions and active preview counts without exposing hashes", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor, user, sessionId } = await createAdminActor(db);
+      const other = await createTargetUser(db);
+      const world = await db.world.create({ data: { ownerId: other.id, title: "World", slug: `sessions-${randomUUID()}` } });
+      const expiresAt = new Date(Date.now() + 60_000);
+      const hash = tokenHash(randomUUID());
+      await db.authSession.create({ data: { userId: user.id, tokenHash: hash, expiresAt: new Date(Date.now() - 60_000) } });
+      await db.previewSession.createMany({ data: [
+        { tokenHash: tokenHash(randomUUID()), userId: user.id, issuedById: other.id, worldId: world.id, expiresAt },
+        { tokenHash: tokenHash(randomUUID()), userId: other.id, issuedById: user.id, worldId: world.id, expiresAt },
+        { tokenHash: tokenHash(randomUUID()), userId: user.id, issuedById: user.id, worldId: world.id, expiresAt },
+        { tokenHash: tokenHash(randomUUID()), userId: user.id, worldId: world.id, expiresAt: new Date(Date.now() - 60_000) },
+        { tokenHash: tokenHash(randomUUID()), userId: user.id, worldId: world.id, expiresAt, revokedAt: new Date() },
+      ] });
+      const result = await listTargetSessions(db, actor, user.id);
+      assert.ok(result.ok);
+      assert.equal(result.value.sessions.length, 1);
+      assert.equal(result.value.sessions[0].id, sessionId);
+      assert.equal(result.value.sessions[0].current, true);
+      assert.equal(result.value.previewSubjectCount, 2);
+      assert.equal(result.value.previewIssuerCount, 2);
+      assert.ok(!JSON.stringify(result.value).includes(hash));
+      assert.ok(!JSON.stringify(result.value).includes("tokenHash"));
+      const foreign = await listTargetSessions(db, actor, other.id);
+      assert.ok(foreign.ok);
+      assert.equal(foreign.value.sessions.length, 0);
+      const missing = await listTargetSessions(db, actor, randomUUID());
+      assert.ok(!missing.ok);
+      assert.equal(missing.error.code, "NOT_FOUND");
+      await db.authSession.delete({ where: { id: sessionId } });
+      const unauthorized = await listTargetSessions(db, actor, other.id);
+      assert.ok(!unauthorized.ok);
+      assert.equal(unauthorized.error.code, "UNAUTHORIZED");
+    } finally { await cleanup(); }
+  });
+
+  it("single revoke checks ownership and version while preserving other credentials", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const target = await createTargetUser(db);
+      const other = await createTargetUser(db);
+      const world = await db.world.create({ data: { ownerId: other.id, title: "World", slug: `sessions-${randomUUID()}` } });
+      const expiresAt = new Date(Date.now() + 60_000);
+      const own = await db.authSession.create({ data: { userId: target.id, tokenHash: tokenHash(randomUUID()), expiresAt } });
+      const remaining = await db.authSession.create({ data: { userId: target.id, tokenHash: tokenHash(randomUUID()), expiresAt } });
+      const foreign = await db.authSession.create({ data: { userId: other.id, tokenHash: tokenHash(randomUUID()), expiresAt } });
+      const preview = await db.previewSession.create({ data: { tokenHash: tokenHash(randomUUID()), userId: target.id, worldId: world.id, expiresAt } });
+      const mismatch = await revokeTargetSession(db, actor, { userId: target.id }, foreign.id);
+      assert.ok(!mismatch.ok);
+      assert.equal(mismatch.error.code, "NOT_FOUND");
+      const stale = await revokeTargetSession(db, actor, { userId: target.id, expectedVersion: 999 }, own.id);
+      assert.ok(!stale.ok);
+      assert.equal(stale.error.code, "STALE_ACCOUNT");
+      const result = await revokeTargetSession(db, actor, { userId: target.id, expectedVersion: 0 }, own.id);
+      assert.ok(result.ok);
+      assert.equal(result.value.revoked, 1);
+      assert.equal(await db.authSession.findUnique({ where: { id: own.id } }), null);
+      assert.ok(await db.authSession.findUnique({ where: { id: remaining.id } }));
+      assert.ok(await db.authSession.findUnique({ where: { id: foreign.id } }));
+      assert.deepEqual(await db.previewSession.findUniqueOrThrow({ where: { tokenHash: preview.tokenHash } }), preview);
+      const audit = await db.installationAuditEvent.findFirstOrThrow({ where: { targetIdSnapshot: target.id, action: "SESSION_REVOKE", outcome: "SUCCESS" } });
+      assert.ok(!audit.detailsJson.includes(own.tokenHash));
+      assert.ok(!JSON.stringify(result.value).includes(own.tokenHash));
+    } finally { await cleanup(); }
+  });
+
+  it("revoke-all counts each affected preview once and permits self revocation", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor, user, sessionId } = await createAdminActor(db);
+      const other = await createTargetUser(db);
+      const world = await db.world.create({ data: { ownerId: other.id, title: "World", slug: `sessions-${randomUUID()}` } });
+      const expiresAt = new Date(Date.now() + 60_000);
+      const extra = await db.authSession.create({ data: { userId: user.id, tokenHash: tokenHash(randomUUID()), expiresAt } });
+      const subject = tokenHash(randomUUID());
+      const issuer = tokenHash(randomUUID());
+      const both = tokenHash(randomUUID());
+      const unrelated = tokenHash(randomUUID());
+      await db.previewSession.createMany({ data: [
+        { tokenHash: subject, userId: user.id, issuedById: other.id, worldId: world.id, expiresAt },
+        { tokenHash: issuer, userId: other.id, issuedById: user.id, worldId: world.id, expiresAt },
+        { tokenHash: both, userId: user.id, issuedById: user.id, worldId: world.id, expiresAt },
+        { tokenHash: unrelated, userId: other.id, issuedById: other.id, worldId: world.id, expiresAt },
+      ] });
+      const result = await revokeAllTargetSessions(db, actor, { userId: user.id, expectedVersion: 0 });
+      assert.ok(result.ok);
+      assert.deepEqual(result.value, { sessionCount: 2, previewCount: 3 });
+      assert.equal(await db.authSession.findUnique({ where: { id: sessionId } }), null);
+      assert.equal(await db.authSession.findUnique({ where: { id: extra.id } }), null);
+      for (const hash of [subject, issuer, both]) assert.ok((await db.previewSession.findUniqueOrThrow({ where: { tokenHash: hash } })).revokedAt);
+      assert.equal((await db.previewSession.findUniqueOrThrow({ where: { tokenHash: unrelated } })).revokedAt, null);
+      const audit = await db.installationAuditEvent.findFirstOrThrow({ where: { targetIdSnapshot: user.id, action: "SESSION_REVOKE_ALL" } });
+      assert.equal(audit.outcome, "SUCCESS");
+      assert.equal(JSON.parse(audit.detailsJson).previewCount, 3);
+      assert.ok(!audit.detailsJson.includes(extra.tokenHash));
+      assert.ok(!JSON.stringify(result.value).includes(extra.tokenHash));
+    } finally { await cleanup(); }
+  });
+
+  it("permits revoking the current session and rejects stale revoke-all", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor, user, sessionId } = await createAdminActor(db);
+      const stale = await revokeAllTargetSessions(db, actor, { userId: user.id, expectedVersion: 999 });
+      assert.ok(!stale.ok);
+      assert.equal(stale.error.code, "STALE_ACCOUNT");
+      assert.ok(await db.authSession.findUnique({ where: { id: sessionId } }));
+      const result = await revokeTargetSession(db, actor, { userId: user.id, expectedVersion: 0 }, sessionId);
+      assert.ok(result.ok);
+      assert.equal(await db.authSession.findUnique({ where: { id: sessionId } }), null);
+      assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).accountVersion, 1);
+    } finally { await cleanup(); }
   });
 });
 
