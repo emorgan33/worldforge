@@ -94,13 +94,21 @@ test("admin read APIs reject anonymous, non-admin, expired, and disabled callers
     }
   }
 
-  // Expired and disabled admin sessions are not authorized.
-  for (const [label, session] of [["expired", expiredAdmin], ["disabled", disabledAdmin]] as const) {
-    for (const path of ADMIN_READ_PATHS) {
+  // Expired, disabled, and revoked admin sessions are not authorized on any
+  // of the five routes, not just the list routes.
+  const revokedAdmin = await createUserWithSession(db, { role: "ADMIN" });
+  createdUserIds.push(revokedAdmin.user.id);
+  await db.authSession.deleteMany({ where: { userId: revokedAdmin.user.id } });
+
+  for (const [label, session] of [["expired", expiredAdmin], ["disabled", disabledAdmin], ["revoked", revokedAdmin]] as const) {
+    for (const path of [...ADMIN_READ_PATHS, ...targetPaths(admin.user.id)]) {
       const response = await fetchAs(session.token, path);
       assert.equal(response.status, 401, `${label} ${path}`);
       const body = await response.json();
-      assert.equal(body.code, "UNAUTHORIZED");
+      assert.equal(body.code, "UNAUTHORIZED", `${label} ${path}`);
+      assert.equal(body.users, undefined);
+      assert.equal(body.account, undefined);
+      assert.equal(response.headers.get("Cache-Control"), "private, no-store");
     }
   }
 });
@@ -152,6 +160,30 @@ test("admin account list returns safe DTOs only and supports filters and stable 
   const searched = await (await fetchAs(admin.token, `/api/admin/users?search=${encodeURIComponent(stamp)}`)).json();
   assert.ok(searched.users.length >= 2);
   assert.ok(searched.users.every((user: { email: string; name: string }) => user.email.includes(stamp) || user.name.includes(stamp)));
+
+  // Search is ASCII case-insensitive on SQLite (LIKE). Emails are stored
+  // lowercase, so an uppercase query still has to find them. If this fails on
+  // another database, see the portability note in admin-read.ts.
+  const caseToken = `CaseProbe${stamp}`;
+  const caseUser = await db.user.create({ data: { name: "Case probe", email: `${caseToken.toLowerCase()}@example.invalid`, role: "PLAYER" } });
+  createdUserIds.push(caseUser.id);
+  const upperCased = await (await fetchAs(admin.token, `/api/admin/users?search=${caseToken.toUpperCase()}`)).json();
+  assert.equal(
+    upperCased.users.some((user: { id: string }) => user.id === caseUser.id),
+    true,
+    "uppercase search must match the normalized lowercase email",
+  );
+
+  // The undocumented `q` alias is not read; `search` is the only search field.
+  // An ignored `q` must leave the result set identical to an unfiltered list,
+  // not narrow it to the matching account.
+  const unfiltered = await (await fetchAs(admin.token, "/api/admin/users")).json();
+  const aliasOnly = await (await fetchAs(admin.token, `/api/admin/users?q=${encodeURIComponent(caseToken)}`)).json();
+  assert.deepEqual(
+    aliasOnly.users.map((user: { id: string }) => user.id),
+    unfiltered.users.map((user: { id: string }) => user.id),
+    "an undocumented `q` parameter must not silently act as a search",
+  );
 
   // Role filter.
   const roleFiltered = await (await fetchAs(admin.token, "/api/admin/users?role=GM")).json();
@@ -375,6 +407,11 @@ test("admin audit read returns sanitized entries with stable pagination and filt
   assert.equal(unknownAction.status, 400);
   assert.equal((await unknownAction.json()).code, "INVALID_INPUT");
 
+  // A malformed cursor is a 400 on this endpoint too, not an empty page.
+  const badCursor = await fetchAs(admin.token, "/api/admin/audit?cursor=not-a-cursor");
+  assert.equal(badCursor.status, 400);
+  assert.equal((await badCursor.json()).code, "INVALID_INPUT");
+
   // Cursor pagination does not overlap.
   const firstPage = await (await fetchAs(admin.token, "/api/admin/audit?limit=1")).json();
   assert.equal(firstPage.entries.length, 1);
@@ -408,4 +445,81 @@ test("an administrator cannot read another owner's private world through author 
   assert.equal(articles.status, 404, "installation admin status does not grant author access to another owner's world");
   const worlds = await (await fetchAs(admin.token, "/api/worlds")).json();
   assert.equal(worlds.some((entry: { id: string }) => entry.id === world.id), false);
+});
+
+test("cursor pagination is stable when rows share a createdAt timestamp", { skip: !origin }, async context => {
+  const db = new PrismaClient();
+  const createdUserIds: string[] = [];
+  context.after(async () => {
+    await deleteTestUsers(db, ...createdUserIds);
+    await db.$disconnect();
+  });
+
+  const admin = await createUserWithSession(db, { role: "ADMIN" });
+  createdUserIds.push(admin.user.id);
+
+  const stamp = randomUUID().slice(0, 8);
+  const tieToken = `TieToken${stamp}`;
+  const tiedAt = new Date("2026-02-01T12:00:00.000Z");
+
+  for (const suffix of ["a", "b", "c"]) {
+    const user = await db.user.create({
+      data: {
+        name: `${tieToken} ${suffix}`,
+        email: `${tieToken.toLowerCase()}-${suffix}@example.invalid`,
+        role: "AUTHOR",
+        createdAt: tiedAt,
+      },
+    });
+    createdUserIds.push(user.id);
+  }
+
+  const userIds: string[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 10; page++) {
+    const query = new URLSearchParams({ search: tieToken, limit: "1" });
+    if (cursor) query.set("cursor", cursor);
+    const body = await (await fetchAs(admin.token, `/api/admin/users?${query}`)).json();
+    for (const user of body.users) userIds.push(user.id);
+    cursor = body.nextCursor;
+    if (!cursor) break;
+  }
+
+  assert.equal(userIds.length, 3, "every equal-timestamp row is returned exactly once");
+  assert.equal(new Set(userIds).size, 3, "no row repeats across pages");
+
+  // The same tiebreaker has to hold for the audit list.
+  const target = await db.user.create({
+    data: { name: `${tieToken} target`, email: `${tieToken.toLowerCase()}-target@example.invalid`, role: "AUTHOR" },
+  });
+  createdUserIds.push(target.id);
+
+  for (const suffix of ["x", "y", "z"]) {
+    await db.installationAuditEvent.create({
+      data: {
+        actorIdSnapshot: admin.user.id,
+        targetIdSnapshot: target.id,
+        action: "ROLE_CHANGE",
+        outcome: "SUCCESS",
+        reasonCode: suffix,
+        detailsJson: JSON.stringify({ suffix }),
+        actorType: "WEB_ADMIN",
+        createdAt: tiedAt,
+      },
+    });
+  }
+
+  const eventIds: string[] = [];
+  cursor = null;
+  for (let page = 0; page < 10; page++) {
+    const query = new URLSearchParams({ targetId: target.id, limit: "1" });
+    if (cursor) query.set("cursor", cursor);
+    const body = await (await fetchAs(admin.token, `/api/admin/audit?${query}`)).json();
+    for (const entry of body.entries) eventIds.push(entry.id);
+    cursor = body.nextCursor;
+    if (!cursor) break;
+  }
+
+  assert.equal(eventIds.length, 3, "every equal-timestamp audit event is returned exactly once");
+  assert.equal(new Set(eventIds).size, 3, "no audit event repeats across pages");
 });
