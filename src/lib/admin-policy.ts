@@ -137,8 +137,31 @@ export function validateExpectedVersion(body: Record<string, unknown>): number |
   return body.expectedVersion;
 }
 
-export function adminErrorResponse(error: AdminError, status = 400): Response {
-  return Response.json(error, { status, headers: { "Cache-Control": "private, no-store" } });
+/** Map a service error code onto the documented HTTP status. */
+export function adminErrorStatus(code: AdminErrorCode): number {
+  switch (code) {
+    case "UNAUTHORIZED": return 401;
+    case "FORBIDDEN": return 403;
+    case "NOT_FOUND": return 404;
+    case "INVALID_INPUT":
+    case "INVALID_ROLE": return 400;
+    case "LAST_ADMIN":
+    case "SELF_CHANGE":
+    case "ACCOUNT_DISABLED":
+    case "OWNS_WORLDS":
+    case "HAS_DURABLE_RECORDS":
+    case "STALE_ACCOUNT":
+    case "DUPLICATE_EMAIL": return 409;
+    case "CONCURRENCY_CONFLICT": return 503;
+    default: return 500;
+  }
+}
+
+export function adminErrorResponse(error: AdminError, status?: number): Response {
+  return Response.json(
+    { error: error.error, code: error.code },
+    { status: status ?? adminErrorStatus(error.code), headers: { "Cache-Control": "private, no-store" } },
+  );
 }
 
 export function isAdminError(value: unknown): value is AdminError {
