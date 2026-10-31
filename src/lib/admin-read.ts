@@ -80,7 +80,10 @@ function invalid(message: string): AdminError {
 export function parseAdminUserQuery(params: URLSearchParams): AdminUserListQuery | AdminError {
   const query: AdminUserListQuery = {};
 
-  const search = params.get("search") ?? params.get("q");
+  // Only the documented `search` parameter is read. Unknown parameters are
+  // ignored, matching the other read routes; an alias would be undocumented
+  // surface that silently loses to `search` when both are supplied.
+  const search = params.get("search");
   if (search !== null) {
     const trimmed = search.trim();
     if (trimmed.length > MAX_ADMIN_SEARCH_LENGTH) return invalid(`Search must be at most ${MAX_ADMIN_SEARCH_LENGTH} characters.`);
@@ -188,6 +191,12 @@ function userListWhere(query: AdminUserListQuery): Prisma.UserWhereInput {
   if (query.status === "active") where.disabledAt = null;
   if (query.status === "disabled") where.disabledAt = { not: null };
   if (query.search) {
+    // Emails are stored normalized (lowercase), names are not. SQLite's LIKE
+    // backs `contains` and is ASCII case-insensitive, so `ADA` matches `ada`.
+    // That is intentional and covered by tests/admin-api.test.tsx. A move to a
+    // case-sensitive backend (for example Postgres) must add an explicit
+    // case-insensitive mode or a normalized name column, otherwise admin
+    // search silently misses rows.
     where.OR = [
       { email: { contains: query.search } },
       { name: { contains: query.search } },
@@ -221,6 +230,13 @@ export async function listAdminUsers(db: PrismaClient, query: AdminUserListQuery
   };
 }
 
+/**
+ * Detail is a display-only snapshot: the account row is read first and the
+ * counts run in parallel, so concurrent writes can make the counts
+ * momentarily disagree with each other. Anything that gates a mutation
+ * (sessions, deletion preview) goes through the transactional P2 services
+ * instead, which recheck the actor and the target.
+ */
 export async function getAdminAccountDetail(db: PrismaClient, userId: string): Promise<AdminAccountDetail | null> {
   const account = await db.user.findUnique({ where: { id: userId }, select: ACCOUNT_SELECT });
   if (!account) return null;
