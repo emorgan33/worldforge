@@ -15,7 +15,11 @@ your use, and keep backups of your campaign data. See the
 
 ## Screenshots
 
+### Desktop
+
 ![Desktop Aethelgard campaign desk with creation shortcuts, world content, compendium counts, and the World contents sidebar](docs/screenshots/author-workspace-desktop.png)
+
+### Mobile
 
 ![Mobile Aethelgard author workspace with the campaign navigation drawer and World contents tree open](docs/screenshots/author-workspace-mobile.png)
 

@@ -34,10 +34,14 @@ wiki as they are adapted from the repository documentation.
 The desktop campaign desk keeps creation shortcuts, world content, compendium
 counts, and the article tree together:
 
+### Desktop
+
 ![Desktop Aethelgard campaign desk with creation shortcuts, world content, compendium counts, and the World contents sidebar](https://raw.githubusercontent.com/emorgan33/worldforge/main/docs/screenshots/author-workspace-desktop.png)
 
 On a narrow screen, the same destinations and article tree move into a compact
 campaign navigation drawer:
+
+### Mobile
 
 ![Mobile Aethelgard author workspace with the campaign navigation drawer and World contents tree open](https://raw.githubusercontent.com/emorgan33/worldforge/main/docs/screenshots/author-workspace-mobile.png)
 
