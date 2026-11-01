@@ -15,11 +15,12 @@ your use, and keep backups of your campaign data. See the
 
 ## Screenshots
 
-![Desktop Aethelgard author workspace with the World contents navigation pane](docs/screenshots/author-workspace-desktop.png)
+![Desktop Aethelgard campaign desk with creation shortcuts, world content, compendium counts, and the World contents sidebar](docs/screenshots/author-workspace-desktop.png)
 
-![Mobile Aethelgard author workspace with the World contents navigation pane open](docs/screenshots/author-workspace-mobile.png)
+![Mobile Aethelgard author workspace with the campaign navigation drawer and World contents tree open](docs/screenshots/author-workspace-mobile.png)
 
-Both views come from the optional Aethelgard demo seed and show the author workspace.
+Both views come from the optional Aethelgard demo seed and show the current
+Night Watch author workspace.
 
 ## Features
 

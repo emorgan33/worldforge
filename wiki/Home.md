@@ -29,6 +29,21 @@ interactive maps, D&D and Pathfinder character sheets, world export/import,
 and full-installation backup and restore. Feature guides will be added to this
 wiki as they are adapted from the repository documentation.
 
+## See the workspace
+
+The desktop campaign desk keeps creation shortcuts, world content, compendium
+counts, and the article tree together:
+
+![Desktop Aethelgard campaign desk with creation shortcuts, world content, compendium counts, and the World contents sidebar](https://raw.githubusercontent.com/emorgan33/worldforge/main/docs/screenshots/author-workspace-desktop.png)
+
+On a narrow screen, the same destinations and article tree move into a compact
+campaign navigation drawer:
+
+![Mobile Aethelgard author workspace with the campaign navigation drawer and World contents tree open](https://raw.githubusercontent.com/emorgan33/worldforge/main/docs/screenshots/author-workspace-mobile.png)
+
+Both screenshots use the optional Aethelgard demo seed. They contain no private
+campaign or account data.
+
 ## Documentation status
 
 This wiki is being built in the delivery order tracked by
@@ -37,4 +52,4 @@ This wiki is being built in the delivery order tracked by
 historical records, and feature details that have not yet moved here.
 
 **Source owner:** `wiki/Home.md` in the WorldForge repository.
-**Verified against:** WorldForge commit `9050d94` (October 31, 2026).
+**Verified against:** WorldForge commit `eb117d5` (November 1, 2026).
