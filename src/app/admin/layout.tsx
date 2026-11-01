@@ -1,8 +1,9 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-auth";
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+async function AdminAccess({ children }: { children: React.ReactNode }) {
   const auth = await requireAdmin();
   if (!auth.ok) {
     if (auth.failure.status === 401) redirect("/login");
@@ -38,5 +39,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6 md:px-8">{children}</main>
     </div>
+  );
+}
+
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-zinc-950 p-8 text-sm text-zinc-400">Checking administrator access…</main>}>
+      <AdminAccess>{children}</AdminAccess>
+    </Suspense>
   );
 }
