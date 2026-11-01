@@ -76,5 +76,5 @@ For a public server, continue with [Installation](Installation) before exposing
 WorldForge to a network.
 
 **Source owner:** `wiki/Getting-Started.md`; adapted from `README.md`,
-`docs/deployment-configuration.md`, and current author UI.  
+`docs/deployment-configuration.md`, and current author UI.
 **Verified against:** WorldForge commit `9050d94` (October 31, 2026).

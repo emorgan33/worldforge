@@ -36,5 +36,5 @@ This wiki is being built in the delivery order tracked by
 `docs/` directory remains authoritative for implementation contracts,
 historical records, and feature details that have not yet moved here.
 
-**Source owner:** `wiki/Home.md` in the WorldForge repository.  
+**Source owner:** `wiki/Home.md` in the WorldForge repository.
 **Verified against:** WorldForge commit `9050d94` (October 31, 2026).

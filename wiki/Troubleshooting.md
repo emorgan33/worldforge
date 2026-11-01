@@ -83,5 +83,5 @@ private article content, domains you do not want public, and other secrets.
 
 **Source owner:** `wiki/Troubleshooting.md`; adapted from
 `docs/deployment-configuration.md`, `docs/backup-restore.md`, and current auth
-behavior.  
+behavior.
 **Verified against:** WorldForge commit `9050d94` (October 31, 2026).

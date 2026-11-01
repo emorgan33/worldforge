@@ -51,5 +51,5 @@ Production permits HTTP only for localhost/loopback.
 
 **Source owner:** `wiki/Configuration.md`; implementation authority is
 `.env.example`, `docker-compose.yml`, `scripts/docker-entrypoint.sh`, Prisma,
-and `src/lib` environment reads.  
+and `src/lib` environment reads.
 **Verified against:** WorldForge commit `9050d94` (October 31, 2026).

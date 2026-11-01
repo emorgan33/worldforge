@@ -97,5 +97,5 @@ See [Configuration](Configuration) for the complete setting reference and
 [Troubleshooting](Troubleshooting) for startup failures.
 
 **Source owner:** `wiki/Installation.md`; adapted from `README.md` and
-`docs/deployment-configuration.md`.  
+`docs/deployment-configuration.md`.
 **Verified against:** WorldForge commit `9050d94` (October 31, 2026).

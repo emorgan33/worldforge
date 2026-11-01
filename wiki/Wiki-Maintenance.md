@@ -51,5 +51,5 @@ Repository `docs/` remains the home for implementation contracts, design
 decisions, validation reports, release notes, and historical records. The wiki
 is the task-oriented user and operator guide.
 
-**Source owner:** `wiki/Wiki-Maintenance.md`.  
+**Source owner:** `wiki/Wiki-Maintenance.md`.
 **Verified against:** WorldForge commit `9050d94` (October 31, 2026).
