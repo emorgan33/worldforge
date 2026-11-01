@@ -75,6 +75,85 @@ test("direct admin URLs deny GM, PLAYER, disabled, and revoked callers", async (
   }
 });
 
+test("every admin page enforces the complete caller matrix", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  test.setTimeout(120_000);
+  const db = new PrismaClient();
+  const userIds: string[] = [];
+  try {
+    const target = await db.user.create({
+      data: { name: "Matrix target", email: `matrix-target-${randomUUID()}@example.invalid`, role: "AUTHOR" },
+    });
+    userIds.push(target.id);
+    const paths = ["/admin/users", `/admin/users/${target.id}`, "/admin/audit"];
+    const roles = ["AUTHOR", "GM", "PLAYER"] as const;
+
+    for (const path of paths) {
+      await context.clearCookies();
+      await page.goto(path);
+      await expect(page).toHaveURL(/\/login$/);
+
+      for (const role of roles) {
+        const user = await db.user.create({
+          data: { name: `Matrix ${role}`, email: `matrix-${role}-${randomUUID()}@example.invalid`, role },
+        });
+        userIds.push(user.id);
+        const token = randomBytes(32).toString("base64url");
+        await db.authSession.create({
+          data: { userId: user.id, tokenHash: createHash("sha256").update(token).digest("hex"), expiresAt: new Date(Date.now() + 3_600_000) },
+        });
+        await context.clearCookies();
+        await context.addCookies([{ name: SESSION_COOKIE, value: token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+        await page.goto(path);
+        await expect(page.getByRole("heading", { name: "Administrator access required" })).toBeVisible();
+        await db.user.delete({ where: { id: user.id } });
+        userIds.splice(userIds.indexOf(user.id), 1);
+      }
+
+      for (const invalid of ["disabled", "expired", "revoked"] as const) {
+        const user = await db.user.create({
+          data: {
+            name: `Matrix ${invalid}`,
+            email: `matrix-${invalid}-${randomUUID()}@example.invalid`,
+            role: "ADMIN",
+            ...(invalid === "disabled" ? { disabledAt: new Date() } : {}),
+          },
+        });
+        userIds.push(user.id);
+        const token = randomBytes(32).toString("base64url");
+        const session = await db.authSession.create({
+          data: {
+            userId: user.id,
+            tokenHash: createHash("sha256").update(token).digest("hex"),
+            expiresAt: new Date(Date.now() + (invalid === "expired" ? -60_000 : 3_600_000)),
+          },
+        });
+        if (invalid === "revoked") await db.authSession.delete({ where: { id: session.id } });
+        await context.clearCookies();
+        await context.addCookies([{ name: SESSION_COOKIE, value: token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+        await page.goto(path);
+        await expect(page).toHaveURL(/\/login$/);
+        await db.user.delete({ where: { id: user.id } });
+        userIds.splice(userIds.indexOf(user.id), 1);
+      }
+
+      const admin = await createAdminSession(db, "matrix-active-admin");
+      userIds.push(admin.user.id);
+      await context.clearCookies();
+      await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+      await page.goto(path);
+      if (path === "/admin/users") await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
+      else if (path === "/admin/audit") await expect(page.getByRole("heading", { name: "Installation audit" })).toBeVisible();
+      else await expect(page.getByRole("heading", { name: target.email })).toBeVisible();
+      await db.user.delete({ where: { id: admin.user.id } });
+      userIds.splice(userIds.indexOf(admin.user.id), 1);
+    }
+  } finally {
+    await db.user.deleteMany({ where: { id: { in: userIds } } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
 test("administrators can create an account and receive a one-time setup link", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
   const db = new PrismaClient();
@@ -103,7 +182,7 @@ test("administrators can create an account and receive a one-time setup link", a
   }
 });
 
-test("setup links are cleared after navigation and Back", async ({ page, context, baseURL }) => {
+test("setup links are cleared after navigation, Back, and Forward", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
   const db = new PrismaClient();
   let adminId: string | undefined;
@@ -120,6 +199,10 @@ test("setup links are cleared after navigation and Back", async ({ page, context
     await expect(page.getByRole("status").getByRole("textbox")).toHaveValue(/\/setup#token=/);
 
     await page.getByRole("link", { name: "Audit" }).click();
+    await expect(page).toHaveURL(/\/admin\/audit$/);
+    await page.goBack();
+    await expect(page.getByRole("status").getByRole("textbox")).toHaveCount(0);
+    await page.goForward();
     await expect(page).toHaveURL(/\/admin\/audit$/);
     await page.goBack();
     await expect(page.getByRole("status").getByRole("textbox")).toHaveCount(0);
@@ -698,13 +781,136 @@ test("late recovery responses do not restore secrets after client-side link navi
 
     await page.goto(`/admin/users/${target.id}`);
     page.once("dialog", (dialog) => dialog.accept());
+    const recoveryResponse = page.waitForResponse((response) =>
+      response.url().includes(`/api/admin/users/${target.id}/recovery`) && response.request().method() === "POST",
+    );
     await page.getByRole("button", { name: "Issue recovery link" }).click();
     await page.getByRole("link", { name: "Audit" }).click();
     await expect(page).toHaveURL(/\/admin\/audit$/);
     releaseRecovery();
-    await page.waitForTimeout(300);
+    await recoveryResponse;
     await page.goBack();
     await expect(page.getByRole("status").getByRole("textbox")).toHaveCount(0);
+  } finally {
+    if (targetId) await db.user.delete({ where: { id: targetId } }).catch(() => undefined);
+    if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
+test("keyboard confirmation returns focus after a status change", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = new PrismaClient();
+  let adminId: string | undefined;
+  let targetId: string | undefined;
+  try {
+    const admin = await createAdminSession(db);
+    adminId = admin.user.id;
+    const target = await db.user.create({
+      data: { name: "Keyboard confirmation", email: `keyboard-confirm-${randomUUID()}@example.invalid`, role: "AUTHOR" },
+    });
+    targetId = target.id;
+    await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+
+    await page.goto(`/admin/users/${target.id}`);
+    const disableButton = page.getByRole("button", { name: "Disable account" });
+    await disableButton.focus();
+    const confirmation = new Promise<void>((resolve) => {
+      page.once("dialog", async (dialog) => {
+        await dialog.accept();
+        resolve();
+      });
+    });
+    await page.keyboard.press("Enter");
+    await confirmation;
+
+    await expect(page.getByText(/· AUTHOR · Disabled/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Enable account" })).toBeFocused();
+  } finally {
+    if (targetId) await db.user.delete({ where: { id: targetId } }).catch(() => undefined);
+    if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
+test("non-self revoke-all reports conflicts and network failures and restores controls", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = new PrismaClient();
+  let adminId: string | undefined;
+  let targetId: string | undefined;
+  try {
+    const admin = await createAdminSession(db);
+    adminId = admin.user.id;
+    const target = await db.user.create({
+      data: { name: "Revoke failure target", email: `revoke-failure-${randomUUID()}@example.invalid`, role: "AUTHOR" },
+    });
+    targetId = target.id;
+    const targetSessionToken = randomBytes(32).toString("base64url");
+    const targetSession = await db.authSession.create({
+      data: {
+        userId: target.id,
+        tokenHash: createHash("sha256").update(targetSessionToken).digest("hex"),
+        expiresAt: new Date(Date.now() + 3_600_000),
+      },
+    });
+    await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+
+    let attempts = 0;
+    await page.route(`**/api/admin/users/${target.id}/sessions/revoke-all`, async (route) => {
+      attempts += 1;
+      if (attempts === 1) {
+        await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ code: "STALE_ACCOUNT", error: "Account changed; refresh and retry." }) });
+      } else {
+        await route.abort("failed");
+      }
+    });
+
+    await page.goto(`/admin/users/${target.id}`);
+    const revokeAll = page.getByRole("button", { name: "Revoke all access" });
+    page.once("dialog", (dialog) => dialog.accept());
+    await revokeAll.click();
+    await expect(page.locator("p[role='alert']")).toContainText("Account changed");
+    await expect(revokeAll).toBeEnabled();
+    await expect(page.getByText(targetSession.id)).toBeVisible();
+    await expect(page.locator("section").filter({ hasText: "Sessions" }).getByRole("button", { name: /^Revoke$/ })).toBeVisible();
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await revokeAll.click();
+    await expect(page.locator("p[role='alert']")).toContainText("Unable to confirm");
+    await expect(revokeAll).toBeEnabled();
+    expect(attempts).toBe(2);
+    expect(await db.authSession.count({ where: { userId: target.id } })).toBe(1);
+  } finally {
+    if (targetId) await db.user.delete({ where: { id: targetId } }).catch(() => undefined);
+    if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
+test("detail mutations work after returning from another admin page", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = new PrismaClient();
+  let adminId: string | undefined;
+  let targetId: string | undefined;
+  try {
+    const admin = await createAdminSession(db);
+    adminId = admin.user.id;
+    const target = await db.user.create({
+      data: { name: "Mutation after return", email: `return-mutation-${randomUUID()}@example.invalid`, role: "AUTHOR" },
+    });
+    targetId = target.id;
+    await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+
+    await page.goto(`/admin/users/${target.id}`);
+    await page.getByRole("link", { name: "Audit" }).click();
+    await expect(page).toHaveURL(/\/admin\/audit$/);
+    await page.goBack();
+    await expect(page.getByRole("heading", { name: target.email })).toBeVisible();
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Issue recovery link" }).click();
+    await expect(page.getByRole("status").getByRole("textbox")).toHaveValue(/\/setup#token=/);
+    await expect(page.locator("p[role='alert']")).toHaveCount(0);
   } finally {
     if (targetId) await db.user.delete({ where: { id: targetId } }).catch(() => undefined);
     if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
