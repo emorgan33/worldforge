@@ -1,0 +1,40 @@
+# WorldForge
+
+WorldForge is a self-hosted campaign worldbuilding workspace for D&D 5e
+(2014) and Pathfinder 2e Remaster. Authors create wiki-style worlds with
+articles, maps, character sheets, timelines, images, and campaign tools, then
+share only the material their readers should see.
+
+Your content stays in a SQLite database and an image directory you control.
+
+## Choose your path
+
+- **I want to try WorldForge.** Follow [Getting Started](Getting-Started) to
+  run the Docker stack, create an account and world, and publish an article.
+- **I am installing a server.** Read [Installation](Installation), then review
+  every supported setting in [Configuration](Configuration).
+- **Something is not working.** Start with [Troubleshooting](Troubleshooting).
+
+## A 60-second tour
+
+1. Sign in and create a private, empty world with a rules profile.
+2. Add categories and articles in the author workspace.
+3. Write with the block editor and add structured game fields when useful.
+4. Set an article to **Published** and **Public**, then make the world public.
+5. Share the public reader URL. Private drafts, GM notes, and campaign secrets
+   remain out of the public projection.
+
+WorldForge also supports player accounts and invitations, audience policies,
+interactive maps, D&D and Pathfinder character sheets, world export/import,
+and full-installation backup and restore. Feature guides will be added to this
+wiki as they are adapted from the repository documentation.
+
+## Documentation status
+
+This wiki is being built in the delivery order tracked by
+[issue #15](https://github.com/emorgan33/worldforge/issues/15). The repository's
+`docs/` directory remains authoritative for implementation contracts,
+historical records, and feature details that have not yet moved here.
+
+**Source owner:** `wiki/Home.md` in the WorldForge repository.  
+**Verified against:** WorldForge commit `9050d94` (October 31, 2026).

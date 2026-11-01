@@ -171,7 +171,11 @@ to run every integration test; do not run tests against your configured data.
 
 ## Documentation
 
-Design and feature references live in [`docs/`](docs/):
+The [WorldForge wiki](https://github.com/emorgan33/worldforge/wiki) is the
+task-oriented guide for users and operators. Its reviewable source lives in
+[`wiki/`](wiki/). The [`docs/`](docs/) directory remains the canonical home for
+implementation contracts, design decisions, release notes, validation reports,
+and historical records:
 
 - [WorldForge v0.4.0 release notes](docs/releases/v0.4.0.md)
 - [Feature status and roadmap](docs/feature-improvements.md)

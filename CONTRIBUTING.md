@@ -142,6 +142,9 @@ pnpm test:browser # same isolated dev server and storage as test:http
 - Avoid comments unless they explain non-obvious intent. Prefer clear names.
 - Update the relevant file in `docs/` when you change behavior. Design docs,
   not code comments, are how this project records decisions.
+- If the change affects user or operator steps, update the matching tracked
+  page in `wiki/`, verify its commands and claims, and advance its verified
+  commit. See [Wiki Maintenance](wiki/Wiki-Maintenance.md).
 - Never commit `.env`, `prisma/*.db*`, uploaded assets in `data/assets/`, or
   any secret. See `SECURITY.md` for reporting vulnerabilities.
 - Add or update tests for behavior changes.
@@ -155,9 +158,19 @@ pnpm test:browser # same isolated dev server and storage as test:http
 | `src/lib/` | Domain logic, access control, Prisma access, import/export |
 | `prisma/` | Schema, migrations, seed |
 | `tests/` | Node test-runner suites |
-| `docs/` | Feature and design documentation |
+| `docs/` | Implementation contracts, design decisions, validation, releases, and history |
+| `wiki/` | Reviewable source for the task-oriented GitHub wiki |
 
 See `README.md`, `docs/feature-improvements.md`, and `docs/installation-administration.md` for the feature overview and current status.
+
+## Documentation workflow
+
+User and operator guidance is published in the
+[GitHub wiki](https://github.com/emorgan33/worldforge/wiki), with its canonical
+review source under [`wiki/`](wiki/). Propose substantial wiki changes through
+a normal pull request, keep the relevant `docs/` implementation contract in
+sync, and publish only after review. The complete editing, verification, and
+publication workflow is in [Wiki Maintenance](wiki/Wiki-Maintenance.md).
 
 ## A note on Next.js
 
