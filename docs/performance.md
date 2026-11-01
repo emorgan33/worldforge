@@ -58,16 +58,17 @@ Before: The POST handler queried the same article 3 times (once via `include` on
 
 After: The revision's eagerly-loaded article reference is reused, eliminating 2 redundant queries.
 
-### Optimized Asset Visibility Check
+### Complete Asset Visibility Authorization
 **File:** `src/lib/public-world.ts`
 
-Before: `assetIsPublic` loaded `contentHtml`/`contentJson` for ALL public articles to find asset references.
-
-After: 
-- Query-level filter first: only returns articles that contain the asset URL via `contentHtml: { contains }`
-- Limited to 10 results (enough to verify existence)
-- Early-exit short-circuits when no match found
-- Skips document parsing if `contentHtml` doesn't contain the URL pattern
+R03a removed the ten-candidate limit and raw-URL prefilters from public image
+authorization. It now examines all published public article candidates and
+parses the displayed reader projection before granting byte access. This keeps
+entity-encoded HTML, escaped JSON, absolute local URLs and visible references
+after misleading prose or GM-note matches correct. The larger query cost is a
+known tradeoff; any future optimization must retain complete matching and the
+same publication, visibility and reader-content filters. Representative-size
+measurement and optimization are tracked in R17 of `refactor.md`.
 
 ### Optimized Worlds List
 **File:** `src/app/api/worlds/route.ts`
@@ -76,34 +77,46 @@ Before: Worlds list eagerly loaded all categories for every world alongside coun
 
 After: Removed the `categories` include (keeps only `_count`), reducing response payload size and query complexity.
 
-### Optimized Campaign Search
-**File:** `src/lib/campaign-search.ts`
+### Campaign Search
+**Files:** `src/lib/campaign-search.ts`, `src/lib/campaign-search-db.ts`
 
-Before: The search `WHERE` clause scanned `contentHtml` and `contentJson` with `LIKE '%term%'`, reading megabytes of content data per query.
+Campaign author search keeps its all-terms substring matching across title, excerpt, tags, HTML, and JSON bodies. SQLite FTS5 trigram indexes narrow supported ASCII terms, then the original `LIKE` predicates verify candidates to preserve Unicode substring behavior. For common FTS terms, the candidate CTE checks at most 201 rowids and skips index intersection; selective terms retain FTS narrowing. Player search applies the same candidate narrowing to readable article IDs but restricts matching to title, excerpt, and tags, preserving reader discovery behavior. Public reader search remains client-side over visible titles and excerpts. The route reuses the shared JavaScript rank function, including JavaScript Unicode lowercasing, and `localeCompare` ordering for accented, punctuated and case-varied titles. It scans compact summaries in fixed 2,000-row rowid ranges, advances the FTS rowid boundary with each batch, and retains only the next 41 matches in memory. This avoids repeated scans of earlier candidates while keeping application memory bounded independently of total match count.
 
-After: Search only looks at `title`, `excerpt`, and `tags` — these are sufficient for article discovery and avoid full-table scans on large text columns.
+### Lightweight Author Article Lists
+**File:** `src/app/api/articles/route.ts`
+
+The workspace article-list query selects summary fields only. It omits document bodies, metadata, tags and relation collections, which remain available from article detail requests. The response keeps the existing fields consumed by author list views. The previous 2,000-row truncation was removed so larger worlds are not silently incomplete. Responses are capped at 200 rows and the workspace follows the stable cursor to load the full list.
+
+R17 benchmark (2026-10-25): `scripts/benchmark-r17-article-list.ts` created 2,101 articles in a dedicated temporary SQLite database. Each article had about 7 KB of HTML and JSON content. Across three runs, selected database projections and local median timings were:
+
+| Projection | Rows | Database queries | Total JSON bytes | Largest page | Median elapsed |
+|------------|-----:|-----------------:|-----------------:|-------------:|---------------:|
+| Full rows, one query | 2,101 | 1 | 16,496,123 | 16,496,123 | 240 ms |
+| Summary pages | 2,101 | 21 | 1,162,726 | 111,001 | 193 ms |
+
+Latest search benchmark (2026-10-25, 2,101 articles, three-run median): broad search took **35.3 ms / 2 queries** with the baseline full candidate fetch/rank path and **36.1 ms / 3 queries** with bounded rowid-range scanning. The baseline hydrated 2,101 summaries / 482,160 JSON bytes; the optimized path returned 41 rows / 9,458 bytes and held at most one 2,000-row batch plus 41 ranked candidates. This replaces the earlier repeated-batch result of 769 ms / 12 queries while preserving bounded application memory and exact JavaScript ranking. A selective term matching one article took **27.4 ms / 2 queries** on the baseline and **2.5 ms / 2 queries** with FTS; each path returned 267 bytes. These synthetic results keep broad-search latency near baseline and materially improve the previous repeated-scan implementation. The 67 ms SQL-page, 769 ms repeated-batch and 32 ms single-query measurements are superseded.
+
+For backlinks, parsing all 2,101 public article documents returned a 14,940,472-byte projection and took 75.3 ms; the indexed explicit-link path returned one 40-byte source ID in 1.6 ms. Legacy title-based links keep the reader-projection parsing fallback. Public asset authorization scanned 2,101 article projections (15,022,411 bytes) and took 65.1 ms; an indexed placement check took 1.8 ms, with a 60-byte index projection. These paths use exact normalized article references, and public publication filters still apply at lookup time. After applying the R17 migration, run `pnpm exec tsx scripts/backfill-reader-indexes.ts --apply` once to build the derived indexes for existing and imported articles. Until then, those rows retain the complete compatibility scan; article writes maintain their indexes automatically.
+
+The list benchmark returned the full article set and reduced serialized bytes by about 93%, with a maximum page around 111 KB. All timings are synthetic local measurements, not production latency estimates. Search counts include the category projection query; list query counts include one cursor validation lookup per continuation page. To rerun, create a migrated SQLite database at `test.db` inside a dedicated `worldforge-r17-*` directory under the system temp directory, set `DATABASE_URL` to its absolute `file:` URL, then run `pnpm exec tsx scripts/benchmark-r17-article-list.ts`. The script refuses any other database path and deletes its temporary world and user when it exits. `R17_ARTICLE_COUNT` can vary the number of inserted articles.
 
 ## Phase 4: Algorithmic Improvements (LOW Impact)
 
-### Improved CSS Scoping Regex
+### Parsed CSS Scoping
 **File:** `src/lib/world-appearance.ts`
 
-Before: Used `split(",")` on CSS selectors, which incorrectly split attribute selectors containing commas (e.g., `[data-value="a,b"]`).
+Before: Selector scoping used regex rewriting, which could miss nested rules and mishandle selector syntax.
 
-After: Custom `splitSelectors()` function that tracks parenthesis depth and only splits on commas outside attribute selectors.
+After: PostCSS parses the stylesheet and `postcss-selector-parser` scopes selector nodes. Nested scopes are validated before styling, and malformed persisted CSS fails closed.
 
 ## Phase 5: Caching & Eager Loading (HIGH Impact)
 
-### Aggressive Image Caching
+### Image Cache Policy
 **File:** `src/app/api/assets/[id]/file/route.ts`
 
-Before: All images served with `Cache-Control: private, no-store` — every page load required a fresh round-trip for every image (covers, banners, article images, backgrounds).
+Image responses currently use `no-store` for both anonymous reader-visible and private owner-only assets. The one-year cache constants are named for the earlier policy but their values deliberately disable storage.
 
-After: Images are immutable per ID (file content never changes for a given asset ID), so they now serve with:
-- `public, max-age=31536000, immutable` for reader-visible images
-- `private, max-age=31536000, immutable` for owner-only images
-
-This eliminates redundant image downloads on subsequent page loads.
+This avoids retaining image bytes in browser or shared caches under the current authorization and asset lifecycle rules. Revisit caching only with a policy that accounts for publication changes and access revocation.
 
 ### Optimized Article Relations (Reverted — Required by Type)
 **File:** `src/app/api/articles/[id]/route.ts`
@@ -133,9 +146,11 @@ Before: Used `window.setTimeout`/`window.clearTimeout`, which bypasses standard 
 
 After: Uses standard `setTimeout`/`clearTimeout`.
 
-## Verification
+## Historical verification record
+
+R17 is complete. Author article-list, broad and selective campaign search, public backlinks, and public asset authorization measurements above 2,000 articles are recorded above. Indexed query paths bound response projections while legacy references retain complete parsing fallbacks. Campaign search scans fixed 2,000-row rowid ranges and retains only the next 41 candidates for exact JavaScript ranking and cursor paging. A follow-up isolated benchmark reproduced broad search at 35.6 ms / 3 queries and selective search at 2.1 ms. The broad-search latency and transfer trade-offs are documented above, and the R17 work log is in `refactor.md`.
 
 - ✅ Build passes (TypeScript compilation)
-- ✅ All 60 tests pass (21 skipped integration tests)
+- ✅ At the time of this performance work, 60 tests passed (21 server-dependent integration tests were skipped); this is not a current suite result.
 - ✅ Prisma migration applied successfully
 - ✅ Database schema in sync with new indexes

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { fetchWorkspaceArticlePage, WORKSPACE_ARTICLE_PAGE_SIZE } from "@/lib/workspace-articles";
 
 interface EntityRelationshipPickerProps {
   worldId: string;
@@ -16,47 +17,126 @@ interface SearchResult {
 export function EntityRelationshipPicker({ worldId, onSelect }: EntityRelationshipPickerProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [resultScope, setResultScope] = useState(`${worldId}\0`);
+  const [loadingScope, setLoadingScope] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<"ALL" | "article" | "statblock">("ALL");
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const requestGeneration = useRef(0);
+  const worldRef = useRef(worldId);
+  const queryRef = useRef(query);
+  const activeRequest = useRef<AbortController | null>(null);
 
-  const doSearch = useCallback(async (q: string) => {
+  const isCurrentRequest = useCallback((generation: number, requestedWorldId: string, requestedQuery: string) =>
+    requestGeneration.current === generation
+      && worldRef.current === requestedWorldId
+      && queryRef.current.trim() === requestedQuery, []);
+
+  useEffect(() => {
+    activeRequest.current?.abort();
+    activeRequest.current = null;
+    requestGeneration.current++;
+    worldRef.current = worldId;
+  }, [worldId]);
+
+  const scope = `${worldId}\0${query.trim()}`;
+  const scopedResults = resultScope === scope ? results : [];
+  const scopedCursor = resultScope === scope ? nextCursor : null;
+  const loading = loadingScope === scope;
+
+  const doSearch = useCallback(async (q: string, generation: number) => {
     if (!q.trim()) {
-      setResults([]);
       return;
     }
-    setLoading(true);
+    const requestedWorldId = worldId;
+    const requestedQuery = q.trim();
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    setLoadingScope(`${requestedWorldId}\0${requestedQuery}`);
     try {
-      const params = new URLSearchParams({ worldId, q: q.trim() });
-      const res = await fetch(`/api/articles?${params}`);
-      const articles = await res.json();
-      const mapped: SearchResult[] = (Array.isArray(articles) ? articles : []).map(
+      const articles = await fetchWorkspaceArticlePage(requestedWorldId, { query: requestedQuery, signal: controller.signal });
+      const mapped: SearchResult[] = articles.map(
         (a: { id: string; title: string }) => ({ id: a.id, title: a.title, kind: "article" as const })
       );
-      setResults(mapped);
+      if (isCurrentRequest(generation, requestedWorldId, requestedQuery)) {
+        setResults(mapped);
+        setResultScope(`${requestedWorldId}\0${requestedQuery}`);
+        setNextCursor(articles.length === WORKSPACE_ARTICLE_PAGE_SIZE ? articles[articles.length - 1].id : null);
+      }
     } catch {
-      setResults([]);
+      if (isCurrentRequest(generation, requestedWorldId, requestedQuery)) {
+        setResults([]);
+        setResultScope(`${requestedWorldId}\0${requestedQuery}`);
+        setNextCursor(null);
+      }
     } finally {
-      setLoading(false);
+      if (isCurrentRequest(generation, requestedWorldId, requestedQuery)) {
+        if (activeRequest.current === controller) activeRequest.current = null;
+        setLoadingScope(null);
+      }
     }
-  }, [worldId]);
+  }, [isCurrentRequest, worldId]);
+
+  const loadMore = useCallback(async () => {
+    if (!scopedCursor || loading || !query.trim()) return;
+    const generation = requestGeneration.current;
+    const requestedWorldId = worldId;
+    const requestedQuery = query.trim();
+    const requestedCursor = scopedCursor;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    setLoadingScope(`${requestedWorldId}\0${requestedQuery}`);
+    try {
+      const articles = await fetchWorkspaceArticlePage(requestedWorldId, { query: requestedQuery, cursor: requestedCursor, signal: controller.signal });
+      if (isCurrentRequest(generation, requestedWorldId, requestedQuery)) {
+        setResults(previous => [...previous, ...articles.map(a => ({ id: a.id, title: a.title, kind: "article" as const }))]);
+        setResultScope(`${requestedWorldId}\0${requestedQuery}`);
+        setNextCursor(articles.length === WORKSPACE_ARTICLE_PAGE_SIZE ? articles[articles.length - 1].id : null);
+      }
+    } catch {
+      if (isCurrentRequest(generation, requestedWorldId, requestedQuery)) setNextCursor(null);
+    } finally {
+      if (isCurrentRequest(generation, requestedWorldId, requestedQuery)) {
+        if (activeRequest.current === controller) activeRequest.current = null;
+        setLoadingScope(null);
+      }
+    }
+  }, [isCurrentRequest, loading, query, scopedCursor, worldId]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!query.trim()) return;
-    debounceRef.current = setTimeout(() => doSearch(query), 250);
+    const generation = requestGeneration.current;
+    debounceRef.current = setTimeout(() => doSearch(query, generation), 250);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query, doSearch]);
 
-  const filtered = !query.trim() ? [] : typeFilter === "ALL" ? results : results.filter(r => r.kind === typeFilter);
+  const filtered = !query.trim() ? [] : typeFilter === "ALL" ? scopedResults : scopedResults.filter(r => r.kind === typeFilter);
 
   function handleSelect(item: SearchResult) {
     onSelect(item.kind, item.id, item.title);
+    activeRequest.current?.abort();
+    activeRequest.current = null;
+    requestGeneration.current++;
+    queryRef.current = "";
     setQuery("");
     setResults([]);
+    setNextCursor(null);
+    setLoadingScope(null);
     setOpen(false);
+  }
+
+  function handleQueryChange(value: string) {
+    activeRequest.current?.abort();
+    activeRequest.current = null;
+    requestGeneration.current++;
+    queryRef.current = value;
+    setQuery(value);
+    setOpen(true);
   }
 
   return (
@@ -81,7 +161,7 @@ export function EntityRelationshipPicker({ worldId, onSelect }: EntityRelationsh
           ref={inputRef}
           type="text"
           value={query}
-          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+          onChange={e => handleQueryChange(e.target.value)}
           onFocus={() => setOpen(true)}
           placeholder="Search entities..."
           className="w-full rounded-lg border border-zinc-700 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-colors"
@@ -112,6 +192,11 @@ export function EntityRelationshipPicker({ worldId, onSelect }: EntityRelationsh
                 {item.title}
               </button>
             ))
+          )}
+          {scopedCursor && (
+            <button onClick={() => void loadMore()} disabled={loading} className="w-full border-t border-zinc-800 px-3 py-2 text-xs text-amber-300 hover:bg-amber-900/20 disabled:opacity-50">
+              {loading ? "Loading…" : "Load more articles"}
+            </button>
           )}
         </div>
       )}

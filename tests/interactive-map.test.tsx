@@ -2,8 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { InteractiveMap, type MapData } from "@/components/map/InteractiveMap";
+import { MapElementContractError, normalizeMapGeometry, normalizeMapStyle } from "@/lib/map-elements";
 
 const emptyMutate = async () => ({});
+
+test("map element contracts clamp percentage geometry and keep eraser style on paths", () => {
+  assert.deepEqual(normalizeMapGeometry("RECT", { x1: -4, y1: 10, x2: 104, y2: 90 }), { x1: 0, y1: 10, x2: 100, y2: 90 });
+  assert.deepEqual(normalizeMapGeometry("PATH", { points: [{ x: 5, y: 8 }, { x: 10, y: 12 }] }), { points: [{ x: 5, y: 8 }, { x: 10, y: 12 }] });
+  assert.deepEqual(normalizeMapGeometry("LABEL", { x: 15, y: 20, text: "Keep" }), { x: 15, y: 20, text: "Keep" });
+  assert.deepEqual(normalizeMapStyle("PATH", { erase: true, strokeWidth: 16 }), { erase: true, strokeWidth: 16 });
+  assert.deepEqual(normalizeMapStyle("LINE", { color: "red", strokeWidth: 3, legacyFlag: "retained" }), { color: "red", strokeWidth: 3, legacyFlag: "retained" });
+  assert.throws(() => normalizeMapGeometry("LABEL", { x1: 1, y1: 2, x2: 3, y2: 4 }), MapElementContractError);
+  assert.throws(() => normalizeMapStyle("RECT", { erase: true }), MapElementContractError);
+});
 
 test("map editor empty state invites creating a first map", () => {
   const html = renderToStaticMarkup(<InteractiveMap maps={[]} worldId="world-1" onMutate={emptyMutate} />);

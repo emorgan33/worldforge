@@ -68,4 +68,4 @@ async function getHandler(_request: Request, context: { params: Promise<{ id: st
   }
 }
 
-export const GET = withAuthor(getHandler);
+export const GET = withAuthor({ target: "world-param" }, getHandler);

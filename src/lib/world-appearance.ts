@@ -1,4 +1,6 @@
 import type { CSSProperties } from "react";
+import postcss, { type AtRule, type Container, type Rule } from "postcss";
+import selectorParser from "postcss-selector-parser";
 import { isImageReference } from "./assets";
 
 export const WORLD_THEMES = {
@@ -20,34 +22,123 @@ export interface WorldAppearance {
 export const DEFAULT_APPEARANCE: WorldAppearance = { theme: "midnight", backgroundColor: "", backgroundImage: "", accentColor: "", readingWidth: "wide" };
 const color = (value: unknown): value is string => typeof value === "string" && (value === "" || /^#[0-9a-f]{6}$/i.test(value));
 
-// Validate that custom CSS is scoped to reader presentation and contains no dangerous patterns
-function validateCustomCss(css: string): { valid: boolean; error?: string } {
-  if (!css || typeof css !== "string") return { valid: true };
-  const trimmed = css.trim();
-  if (!trimmed) return { valid: true };
-  
-  // Check for dangerous patterns that could affect author controls or other worlds
-  const dangerousPatterns = [
-    /@import/i, /@charset/i, /@font-face/i,
-    /--.*:\s*url\s*\(/i,
-    /position:\s*fixed/i, /position:\s*sticky/i,
-    /z-index:\s*[1-9]/i,
-  ];
-  
-  for (const pattern of dangerousPatterns) {
-    if (pattern.test(trimmed)) {
-      return { valid: false, error: "Custom CSS contains disallowed patterns." };
+const ALLOWED_NESTED_AT_RULES = new Set(["media", "supports", "container", "starting-style"]);
+
+function isReaderRootSelector(selectorText: string): boolean {
+  let isRoot = false;
+  selectorParser((selectors) => {
+    isRoot = selectors.nodes.length === 1 && selectors.nodes[0].nodes.filter((node) => node.type !== "comment").length === 1;
+    const node = selectors.nodes[0]?.nodes.find((entry) => entry.type !== "comment");
+    isRoot = isRoot && node?.type === "class" && node.value === "wf-reader";
+  }).processSync(selectorText);
+  return isRoot;
+}
+
+function hasReaderRootBranch(selectorText: string): boolean {
+  let found = false;
+  selectorParser((selectors) => selectors.each((selector) => {
+    const nodes = selector.nodes.filter((node) => node.type !== "comment");
+    if (nodes[0]?.type !== "class" || nodes[0].value !== "wf-reader") return;
+    // Only a single compound selects the wrapper itself. Descendant and child
+    // selectors are contained by the wrapper, but their subject is a child.
+    if (!nodes.some((node) => node.type === "combinator")) found = true;
+  })).processSync(selectorText);
+  return found;
+}
+
+function hasNestingNode(node: selectorParser.Node): boolean {
+  if (node.type === "nesting") return true;
+  return "nodes" in node && (node as selectorParser.Container).nodes.some(hasNestingNode);
+}
+
+function hasFunctionalNesting(selectorText: string): boolean {
+  let hasUnsafeFunctionalBranch = false;
+  selectorParser((selectors) => selectors.walkPseudos((pseudo) => {
+    if (hasNestingNode(pseudo)) hasUnsafeFunctionalBranch = true;
+  })).processSync(selectorText);
+  return hasUnsafeFunctionalBranch;
+}
+
+function selectsReaderSibling(selectorText: string): boolean {
+  let escapes = false;
+  selectorParser((selectors) => selectors.each((selector) => {
+    const nodes = selector.nodes.filter((node) => node.type !== "comment");
+    nodes.forEach((node, index) => {
+      if (node.type !== "combinator" || (node.value !== "+" && node.value !== "~")) return;
+      // A leading sibling combinator is implicit nesting (`& +` / `& ~`).
+      if (index === 0) {
+        escapes = true;
+        return;
+      }
+      // A sibling combinator escapes only when it follows the current nested
+      // subject. Check the immediately preceding compound: an ancestor
+      // qualifier such as `body &` does not move the nested subject off reader.
+      const compoundStart = nodes.slice(0, index).findLastIndex((prior) => prior.type === "combinator") + 1;
+      if (nodes.slice(compoundStart, index).some(hasNestingNode)) escapes = true;
+    });
+  })).processSync(selectorText);
+  return escapes;
+}
+
+function preservesReaderSubject(selectorText: string): boolean {
+  let preserves = false;
+  selectorParser((selectors) => selectors.each((selector) => {
+    const nodes = selector.nodes.filter((node) => node.type !== "comment");
+    const compoundStart = nodes.findLastIndex((node) => node.type === "combinator") + 1;
+    if (nodes.slice(compoundStart).some(hasNestingNode)) preserves = true;
+  })).processSync(selectorText);
+  return preserves;
+}
+
+function validateNestedScopes(container: Container, readerSubject = false): void {
+  for (const node of container.nodes ?? []) {
+    if (node.type === "atrule") {
+      if (node.nodes) validateNestedScopes(node, readerSubject);
+    } else if (node.type === "rule") {
+      const rule = node as Rule;
+      if (hasFunctionalNesting(rule.selector)) {
+        throw rule.error("A functional selector cannot contain nested branches that may escape the reader presentation.");
+      }
+      if (readerSubject && selectsReaderSibling(rule.selector)) {
+        throw rule.error("A nested selector cannot select a sibling outside the reader presentation.");
+      }
+      const nestedReaderSubject = hasReaderRootBranch(rule.selector) || (readerSubject && preservesReaderSubject(rule.selector));
+      validateNestedScopes(rule, nestedReaderSubject);
     }
   }
-  
-  // Validate CSS syntax - basic check for balanced braces
-  const openBraces = (trimmed.match(/{/g) || []).length;
-  const closeBraces = (trimmed.match(/}/g) || []).length;
-  if (openBraces !== closeBraces) {
-    return { valid: false, error: "Custom CSS has unbalanced braces." };
+}
+
+function parseCustomCss(css: string) {
+  if (css.length > 20_000) throw new Error("Custom CSS must be 20,000 characters or fewer.");
+  const root = postcss.parse(css, { from: undefined });
+  root.walkAtRules((rule) => {
+    if (!ALLOWED_NESTED_AT_RULES.has(rule.name.toLowerCase()) || !rule.nodes) {
+      throw rule.error(`The @${rule.name} at-rule is not supported in custom CSS.`);
+    }
+  });
+  root.walkDecls((decl) => {
+    const decodeEscapes = (value: string) => value.replace(/\\([0-9a-f]{1,6}\s?|.)/gi, (_match, escaped: string) => {
+      const hex = escaped.trim();
+      if (/^[0-9a-f]{1,6}$/i.test(hex)) return String.fromCodePoint(parseInt(hex, 16));
+      return escaped;
+    });
+    const normalized = decodeEscapes(`${decl.prop}:${decl.value}`).replace(/\/\*[\s\S]*?\*\//g, "").toLowerCase();
+    if (/^--[^:]+:.*\burl\s*\(/i.test(normalized) || /\bposition\s*:\s*(fixed|sticky)\b/i.test(normalized) || /\bz-index\s*:\s*[1-9]\d*/i.test(normalized)) {
+      throw decl.error("Custom CSS contains disallowed declarations.");
+    }
+  });
+  validateNestedScopes(root);
+  return root;
+}
+
+function validateCustomCss(css: string): { valid: boolean; error?: string } {
+  if (!css.trim()) return { valid: true };
+  try {
+    parseCustomCss(css);
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: error instanceof Error ? error.message : "Custom CSS is invalid." };
   }
-  
-  return { valid: true };
 }
 
 export function validateAppearance(value: unknown): WorldAppearance {
@@ -104,37 +195,48 @@ export function scopedCustomCss(css: string): string {
   if (!css || typeof css !== "string") return "";
   const trimmed = css.trim();
   if (!trimmed) return "";
-  
-  // Wrap all selectors with .wf-reader scope
-  // Split at commas that are NOT inside parentheses (attribute selectors)
-  const splitSelectors = (selectors: string): string[] => {
-    const parts: string[] = [];
-    let current = "";
-    let parenDepth = 0;
-    for (const ch of selectors) {
-      if (ch === "(") parenDepth++;
-      else if (ch === ")") parenDepth--;
-      if (ch === "," && parenDepth === 0) {
-        parts.push(current);
-        current = "";
-      } else {
-        current += ch;
+  try {
+    const root = parseCustomCss(trimmed);
+    const scopeRules = (container: Container, nested = false) => {
+      for (const node of [...container.nodes ?? []]) {
+        if (node.type === "atrule") {
+          if (node.nodes) scopeRules(node as AtRule, nested);
+        } else if (node.type === "rule") {
+          const rule = node as Rule;
+          if (!nested) {
+            rule.selector = selectorParser((selectors) => {
+              selectors.each((selector) => {
+                const text = selector.toString().trim();
+                if (text === ".wf-reader" || isAlreadyScopedSelector(selector)) return;
+                const first = selector.nodes[0];
+                selector.prepend(selectorParser.combinator({ value: " " }));
+                selector.prepend(selectorParser.className({ value: "wf-reader" }));
+                if (first) first.spaces.before = "";
+              });
+            }).processSync(rule.selector);
+          }
+          scopeRules(rule, true);
+        }
       }
-    }
-    if (current.trim()) parts.push(current);
-    return parts;
-  };
-  
-  const scopedCss = trimmed.replace(/([^{]+)(\{[^}]+\})/g, (_match, selector, ruleBlock) => {
-    const trimmedSelector = selector.trim();
-    // Skip @-rules, already scoped selectors, CSS variables, and comments
-    if (trimmedSelector.startsWith("@") || trimmedSelector.startsWith(".wf-reader") || trimmedSelector.startsWith("--") || trimmedSelector.startsWith("/*")) return _match;
-    // Handle comma-separated selectors, scoping each, accounting for attribute selectors containing commas
-    const scoped = splitSelectors(trimmedSelector).map((s: string) => ".wf-reader " + s.trim()).join(", ");
-    return scoped + " " + ruleBlock;
-  });
-  
-  return scopedCss;
+    };
+    scopeRules(root);
+    return root.toString();
+  } catch {
+    // Persisted legacy CSS is parsed at render time too; malformed input must fail closed.
+    return "";
+  }
+}
+
+function isAlreadyScopedSelector(selector: selectorParser.Selector): boolean {
+  const nodes = selector.nodes.filter((node) => node.type !== "comment");
+  if (isReaderRootSelector(selector.toString())) return true;
+  if (nodes[0]?.type !== "class" || nodes[0].value !== "wf-reader") return false;
+  for (const node of nodes.slice(1)) {
+    if (node.type !== "combinator") continue;
+    if (node.value === "+" || node.value === "~") return false;
+    return node.value === " " || node.value === ">";
+  }
+  return true;
 }
 
 export function rulesTheme(system: string): WorldAppearance["theme"] { return system === "PF_2E" ? "pf2remaster" : system === "DND_5E" ? "dnd2014" : "midnight"; }

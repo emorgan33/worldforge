@@ -11,6 +11,7 @@ export function AssetPicker({ worldId, purpose, onSelect, onClose }: { worldId: 
   const [guards, setGuards] = useState<GuardRegistry>(new Map());
   const [source, setSource] = useState<"world" | "stock">("world");
   const register = useCallback((id: string, registration: GuardRegistration) => setGuards(previous => applyRegistration(previous, id, registration)), []);
+  const registerLibraryGuard = useCallback((registration: GuardRegistration) => register("asset-library", registration), [register]);
   const busy = [...guards.values()].some(guard => guard.busy);
   const dirty = [...guards.values()].some(guard => guard.dirty);
   const paused = useWorldGuard({ dirty, busy }, "asset");
@@ -37,7 +38,7 @@ export function AssetPicker({ worldId, purpose, onSelect, onClose }: { worldId: 
         <button type="button" role="tab" aria-selected={source === "world"} onClick={() => switchSource("world")} className={`min-h-11 rounded-md px-4 text-sm font-semibold ${source === "world" ? "bg-violet-500/20 text-violet-200" : "text-zinc-400 hover:text-zinc-200"}`}>World images</button>
         <button type="button" role="tab" aria-selected={source === "stock"} onClick={() => switchSource("stock")} className={`min-h-11 rounded-md px-4 text-sm font-semibold ${source === "stock" ? "bg-violet-500/20 text-violet-200" : "text-zinc-400 hover:text-zinc-200"}`}>Stock art</button>
       </div>
-      {source === "world" ? <AssetLibrary worldId={worldId} onSelect={commit} /> : <StockArtBrowser worldId={worldId} purpose={purpose} onUse={(asset) => commit(asset)} onBrowseWorldImages={() => switchSource("world")} />}
+      {source === "world" ? <AssetLibrary worldId={worldId} onSelect={commit} onGuardChange={registerLibraryGuard} /> : <StockArtBrowser worldId={worldId} purpose={purpose} onUse={(asset) => commit(asset)} onBrowseWorldImages={() => switchSource("world")} />}
     </WorldGuardProvider>
   </dialog>, document.body);
 }

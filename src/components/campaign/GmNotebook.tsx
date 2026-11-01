@@ -111,7 +111,7 @@ export function GmNotebook({
                           : "bg-red-500/10 text-red-400 border border-red-500/20"
                       }`}
                     >
-                      {secret.isRevealed ? "Publicly Revealed" : "GM Eyes Only"}
+                      {secret.isRevealed ? "Marked revealed (GM only)" : "GM Eyes Only"}
                     </span>
                   </div>
 
@@ -146,7 +146,7 @@ export function GmNotebook({
                     ) : (
                       <>
                         <Eye className="w-3.5 h-3.5" />
-                        <span>Reveal to Players</span>
+                        <span>Mark revealed (GM only)</span>
                       </>
                     )}
                   </button>

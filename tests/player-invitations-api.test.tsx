@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
-import { authorFetch } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
+import { SESSION_COOKIE } from "../src/lib/auth-constants";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
+if (origin) assertIsolatedTestEnvironment();
 
 test("player invitations are email-bound, single-use, and do not grant author APIs", { skip: !origin }, async context => {
   const db = new PrismaClient();
@@ -12,9 +14,12 @@ test("player invitations are email-bound, single-use, and do not grant author AP
   const owner = await db.user.create({ data: { name: "Invitation GM", email: `gm-${stamp}@example.invalid` } });
   const world = await db.world.create({ data: { ownerId: owner.id, title: "Invitation world", slug: `invite-${stamp}` } });
   const email = `player-${stamp}@example.invalid`;
+  const staleCookieEmail = `stale-cookie-player-${stamp}@example.invalid`;
   context.after(async () => {
     await db.world.delete({ where: { id: world.id } });
-    await db.user.deleteMany({ where: { email: { in: [owner.email, email] } } });
+    const player = await db.user.findUnique({ where: { email } });
+    const staleCookiePlayer = await db.user.findUnique({ where: { email: staleCookieEmail } });
+    await deleteTestUsers(db, owner.id, player?.id, staleCookiePlayer?.id);
     await db.$disconnect();
   });
   const gmFetch = await authorFetch(db, owner.id, origin!);
@@ -38,6 +43,22 @@ test("player invitations are email-bound, single-use, and do not grant author AP
   assert.equal((await db.worldMember.findUniqueOrThrow({ where: { worldId_userId: { worldId: world.id, userId: player.id } } })).status, "ACTIVE");
   assert.equal((await fetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin! }, body: JSON.stringify({ token, name: "Second", password: "long-enough-password" }) })).status, 404);
 
+  const staleCookieInviteResponse = await gmFetch(`${origin}/api/worlds/${world.id}/invitations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: staleCookieEmail }) });
+  assert.equal(staleCookieInviteResponse.status, 201);
+  const staleCookieInvite = await staleCookieInviteResponse.json();
+  const staleCookieToken = new URLSearchParams(new URL(staleCookieInvite.claimUrl).hash.slice(1)).get("token");
+  assert(staleCookieToken);
+  const staleUnrelatedSessionToken = randomBytes(32).toString("base64url");
+  const staleCookie = `${SESSION_COOKIE}=${staleUnrelatedSessionToken}`;
+  const staleCookiePreview = await fetch(`${origin}/api/invitations/preview`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin!, Cookie: staleCookie }, body: JSON.stringify({ token: staleCookieToken }) });
+  assert.equal(staleCookiePreview.status, 200);
+  const staleCookiePreviewBody = await staleCookiePreview.json();
+  assert.equal(staleCookiePreviewBody.accountExists, false);
+  assert.equal(staleCookiePreviewBody.signedInEmail, null);
+  const staleCookieClaim = await fetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin!, Cookie: staleCookie }, body: JSON.stringify({ token: staleCookieToken, name: "Stale cookie player", password: "long-enough-password" }) });
+  assert.equal(staleCookieClaim.status, 200, "an invalid unrelated cookie must not block creating the invited account");
+  assert.equal((await db.user.findUniqueOrThrow({ where: { email: staleCookieEmail } })).role, "PLAYER");
+
   const playerFetch = await authorFetch(db, player.id, origin!);
   const home = await playerFetch(`${origin}/api/player/worlds`);
   assert.equal(home.status, 200);
@@ -60,11 +81,11 @@ test("existing author invitation preserves role and ownership; cancelled links c
   const ownWorld = await db.world.create({ data: { ownerId: invited.id, title: "Owned", slug: `owned-${stamp}` } });
   context.after(async () => {
     await db.world.deleteMany({ where: { id: { in: [world.id, ownWorld.id] } } });
-    await db.user.deleteMany({ where: { id: { in: [owner.id, invited.id] } } });
+    await deleteTestUsers(db, owner.id, invited.id);
     await db.$disconnect();
   });
   const gmFetch = await authorFetch(db, owner.id, origin!);
-  const invitedFetch = await authorFetch(db, invited.id, origin!);
+  let invitedFetch = await authorFetch(db, invited.id, origin!);
   assert.equal((await invitedFetch(`${origin}/api/worlds/${world.id}/invitations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: invited.email }) })).status, 404);
   const create = async () => {
     const response = await gmFetch(`${origin}/api/worlds/${world.id}/invitations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: invited.email }) });
@@ -79,6 +100,12 @@ test("existing author invitation preserves role and ownership; cancelled links c
   const active = await create();
   assert.equal((await fetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin! }, body: JSON.stringify({ token: active.token }) })).status, 403);
   assert.equal((await gmFetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: active.token }) })).status, 403);
+  await db.authSession.deleteMany({ where: { userId: invited.id } });
+  const staleSessionClaim = await invitedFetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: active.token }) });
+  assert.equal(staleSessionClaim.status, 401, "a session revoked before the claim transaction cannot authorize membership");
+  assert.equal((await db.playerInvitation.findUniqueOrThrow({ where: { id: active.id } })).claimedAt, null);
+  assert.equal(await db.worldMember.count({ where: { worldId: world.id, userId: invited.id } }), 0);
+  invitedFetch = await authorFetch(db, invited.id, origin!);
   assert.equal((await invitedFetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: active.token }) })).status, 200);
   assert.equal((await db.user.findUniqueOrThrow({ where: { id: invited.id } })).role, "AUTHOR");
   assert.equal((await db.world.findUniqueOrThrow({ where: { id: ownWorld.id } })).ownerId, invited.id);
@@ -86,4 +113,26 @@ test("existing author invitation preserves role and ownership; cancelled links c
   await db.playerInvitation.update({ where: { id: expired.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
   assert.equal((await invitedFetch(`${origin}/api/invitations/preview`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: expired.token }) })).status, 404);
   assert.equal((await invitedFetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: expired.token }) })).status, 404);
+});
+
+test("disabled existing invitees cannot claim membership or receive a session", { skip: !origin }, async context => {
+  const db = new PrismaClient();
+  const stamp = randomUUID();
+  const owner = await db.user.create({ data: { name: "Disabled-invite owner", email: `disabled-invite-owner-${stamp}@example.invalid` } });
+  const invited = await db.user.create({ data: { name: "Disabled invitee", email: `disabled-invitee-${stamp}@example.invalid`, disabledAt: new Date() } });
+  const world = await db.world.create({ data: { ownerId: owner.id, title: "Disabled invite world", slug: `disabled-invite-${stamp}` } });
+  context.after(async () => { await db.world.deleteMany({ where: { id: world.id } }); await deleteTestUsers(db, owner.id, invited.id); await db.$disconnect(); });
+  const gmFetch = await authorFetch(db, owner.id, origin!);
+  const invitationResponse = await gmFetch(`${origin}/api/worlds/${world.id}/invitations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: invited.email }) });
+  assert.equal(invitationResponse.status, 201);
+  const invitation = await invitationResponse.json();
+  const token = new URLSearchParams(new URL(invitation.claimUrl).hash.slice(1)).get("token")!;
+  const preview = await fetch(`${origin}/api/invitations/preview`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin! }, body: JSON.stringify({ token }) });
+  assert.equal(preview.status, 200);
+  assert.equal((await preview.json()).accountExists, true);
+  const claim = await fetch(`${origin}/api/invitations/claim`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin! }, body: JSON.stringify({ token, name: "Should not be created", password: "long-enough-password" }) });
+  assert.equal(claim.status, 403);
+  assert.equal(await db.worldMember.count({ where: { worldId: world.id, userId: invited.id } }), 0);
+  assert.equal(await db.authSession.count({ where: { userId: invited.id } }), 0);
+  assert.equal((await db.playerInvitation.findUniqueOrThrow({ where: { id: invitation.invitation.id } })).claimedAt, null);
 });

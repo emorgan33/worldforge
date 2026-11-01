@@ -143,6 +143,6 @@ async function postHandler(request: Request, context: { params: Promise<{ id: st
   }
 }
 
-export const GET = withAuthor(getHandler);
-export const POST = withAuthor(postHandler);
+export const GET = withAuthor({ target: "world-param" }, getHandler);
+export const POST = withAuthor({ target: "world-param" }, postHandler);
 export const maxDuration = 30;

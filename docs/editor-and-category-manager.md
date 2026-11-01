@@ -18,7 +18,7 @@ The sidebar and manager share a nested, collapsible article tree. Search retains
 
 `/api/categories` scopes all mutations to a world. Category moves reject self-parenting and descendant cycles. Moves and reorder operations use database transactions. Deleting a category promotes its direct child categories and articles to its parent, preserving descendant relationships and article content.
 
-The additive schema change is `Article.order Int @default(0)`. Existing category hierarchy/order fields are reused. A consistent SQLite backup was saved to `/tmp/worldforge-before-organization-20261014213643.sqlite` before applying the change. Other installations need `pnpm exec prisma db push` and `pnpm exec prisma generate` before running this version; no reseeding is required.
+**Historical migration note:** The organization change added `Article.order Int @default(0)` and reused existing category hierarchy/order fields. The original workspace backup path (`/tmp/worldforge-before-organization-20261014213643.sqlite`) is historical and is not a recovery location for other installations. For upgrades, use the committed migrations with `pnpm db:deploy`; use `pnpm db:generate` when regenerating the Prisma client. No reseeding is required.
 
 ## Verification
 

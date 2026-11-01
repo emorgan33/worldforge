@@ -1,7 +1,7 @@
 "use client";
 import { useWorldGuard } from "@/components/worlds/WorldGuard";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Variable as VariableIcon,
   Copy,
@@ -26,9 +26,11 @@ export function VariableManager({
 }: VariableManagerProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
-  const [savingId, setSavingId] = useState<string | null>(null);
+  const pendingIds = useRef(new Set<string>());
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
 
-  useWorldGuard({ dirty: Object.keys(editingValues).length > 0, busy: savingId !== null }, "variable", onGuardChange);
+  useWorldGuard({ dirty: Object.keys(editingValues).length > 0, busy: savingIds.size > 0 }, "variable", onGuardChange);
   const [testText, setTestText] = useState(
     "In the year [cal:current_year], travelers across [lore:world_name] exchanged [coin:gold] to purchase skyship passage."
   );
@@ -41,18 +43,23 @@ export function VariableManager({
 
   const handleSave = async (id: string) => {
     const newVal = editingValues[id];
-    if (newVal === undefined) return;
+    if (newVal === undefined || pendingIds.current.has(id)) return;
 
-    setSavingId(id);
+    pendingIds.current.add(id);
+    setSavingIds(new Set(pendingIds.current));
+    setSaveErrors(previous => { const next = { ...previous }; delete next[id]; return next; });
     try {
       await onUpdateVariable(id, newVal);
       setEditingValues(previous => { if (previous[id] !== newVal) return previous; const next = { ...previous }; delete next[id]; return next; });
+    } catch (error) {
+      setSaveErrors(previous => ({ ...previous, [id]: error instanceof Error ? error.message : "Unable to save this variable. Please try again." }));
     } finally {
-      setSavingId(null);
+      pendingIds.current.delete(id);
+      setSavingIds(new Set(pendingIds.current));
     }
   };
 
-  const simulatedHtml = interpolateVariables(testText, collections);
+  const simulatedHtml = interpolateVariables(testText, collections, "text");
 
   return (
     <div className="space-y-8">
@@ -66,7 +73,7 @@ export function VariableManager({
         <p className="text-sm text-zinc-400 mt-1 max-w-3xl leading-relaxed">
           Define global terms, currency names, calendar years, and recurring lore snippets. Use the shortcode{" "}
           <code className="text-amber-300 font-mono text-xs bg-zinc-800 px-1.5 py-0.5 rounded">[prefix:key]</code>{" "}
-          anywhere in articles to inject or link canonical values. When you change a value here, it updates throughout your world instantly!
+          in article text to display canonical values in author views. Saved changes appear in the preview and author article views.
         </p>
       </div>
 
@@ -164,6 +171,8 @@ export function VariableManager({
                     <div className="flex items-center gap-2 w-full md:w-auto">
                       <input
                         type="text"
+                        aria-label={`Value for ${macro}`}
+                        aria-describedby={saveErrors[v.id] ? `variable-error-${v.id}` : undefined}
                         value={currentValue}
                         onChange={(e) =>
                           setEditingValues((prev) => ({ ...prev, [v.id]: e.target.value }))
@@ -174,13 +183,14 @@ export function VariableManager({
                       <button
                         type="button"
                         onClick={() => handleSave(v.id)}
-                        disabled={savingId === v.id || editingValues[v.id] === undefined}
+                        disabled={savingIds.has(v.id) || editingValues[v.id] === undefined}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 disabled:opacity-40 disabled:pointer-events-none transition-colors border border-zinc-700"
                       >
                         <Save className="w-3.5 h-3.5" />
-                        <span>{savingId === v.id ? "Saving..." : "Save"}</span>
+                        <span>{savingIds.has(v.id) ? "Saving..." : "Save"}</span>
                       </button>
                     </div>
+                    {saveErrors[v.id] && <p id={`variable-error-${v.id}`} role="alert" className="text-xs text-red-400">{saveErrors[v.id]}</p>}
                   </div>
                 );
               })}

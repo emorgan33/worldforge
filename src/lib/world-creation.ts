@@ -1,7 +1,9 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { RPG_SYSTEMS, type RpgSystem } from "@/lib/rpg";
+import { requireActiveAuthor, withAccountLifecycleLock } from "@/lib/account-lifecycle";
 
 export type WorldCreationPayload = { title: string; description: string; system: RpgSystem; requestId: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -28,17 +30,25 @@ export function readableWorldSlug(title: string) {
   return `${base}-${randomBytes(5).toString("hex")}`;
 }
 
-export async function createWorld(ownerId: string, payload: WorldCreationPayload, slugFactory = readableWorldSlug, requestIdentity?: string) {
+/** @internal Test-only synchronization points for eligibility serialization tests. */
+export type WorldCreationTestHooks = { beforeTransaction?: () => Promise<void>; afterEligibility?: () => Promise<void> };
+
+export async function createWorld(ownerId: string, payload: WorldCreationPayload, slugFactory = readableWorldSlug, requestIdentity?: string, db: PrismaClient = prisma, testHooks?: WorldCreationTestHooks) {
   const hash = requestIdentity ? createHash("sha256").update(requestIdentity).digest("hex") : worldCreationHash(payload);
-  const previous = await prisma.world.findUnique({ where: { ownerId_creationRequestId: { ownerId, creationRequestId: payload.requestId } } });
-  if (previous) return { world: previous, created: false, conflict: previous.creationPayloadHash !== hash };
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      const world = await prisma.world.create({ data: { id: randomUUID(), ownerId, title: payload.title, description: payload.description, system: payload.system, slug: slugFactory(payload.title), creationRequestId: payload.requestId, creationPayloadHash: hash } });
-      return { world, created: true, conflict: false };
+      await testHooks?.beforeTransaction?.();
+      return await withAccountLifecycleLock(db, async (tx) => {
+        await requireActiveAuthor(tx, ownerId);
+        await testHooks?.afterEligibility?.();
+        const previous = await tx.world.findUnique({ where: { ownerId_creationRequestId: { ownerId, creationRequestId: payload.requestId } } });
+        if (previous) return { world: previous, created: false, conflict: previous.creationPayloadHash !== hash };
+        const world = await tx.world.create({ data: { id: randomUUID(), ownerId, title: payload.title, description: payload.description, system: payload.system, slug: slugFactory(payload.title), creationRequestId: payload.requestId, creationPayloadHash: hash } });
+        return { world, created: true, conflict: false };
+      });
     } catch (error) {
       if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-      const raced = await prisma.world.findUnique({ where: { ownerId_creationRequestId: { ownerId, creationRequestId: payload.requestId } } });
+      const raced = await db.world.findUnique({ where: { ownerId_creationRequestId: { ownerId, creationRequestId: payload.requestId } } });
       if (raced) return { world: raced, created: false, conflict: raced.creationPayloadHash !== hash };
       if (attempt === 4) throw error;
     }

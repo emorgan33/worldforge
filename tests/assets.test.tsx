@@ -3,11 +3,16 @@ import { test } from "node:test";
 import sharp from "sharp";
 import { ASSET_SOURCE_FILTERS, assetSourceWhere, imageAssetId, isImageReference, MAX_IMAGE_BYTES } from "../src/lib/assets";
 import { normalizeImage, readImageForm, AssetInputError } from "../src/lib/asset-storage";
+import { localAssetId } from "../src/lib/public-content";
 const id = "b96e99c9-73a0-4725-a75d-3d22d70a2baa";
 test("image references accept library IDs and HTTP URLs, excluding paths and executable schemes", () => {
   assert.equal(imageAssetId(`/api/assets/${id}/file`), id);
   for (const value of ["", `/api/assets/${id}/file`, "https://example.com/art.png", "http://localhost:3033/art.png"]) assert(isImageReference(value));
   for (const value of ["/etc/passwd", "/api/assets/../file", `/api/assets/${id}/file?path=bad`, "javascript:alert(1)", "data:image/svg+xml,<svg/>", "file:///tmp/image"]) assert(!isImageReference(value));
+});
+test("local asset references normalize surrounding src whitespace before extracting IDs", () => {
+  assert.equal(localAssetId(` /api/assets/${id}/file `), id);
+  assert.equal(localAssetId(` https://example.invalid/api/assets/${id}/file `), id);
 });
 test("image normalization decodes pixels, strips metadata and preserves transparency", async () => {
   const input = await sharp({ create: { width: 4, height: 3, channels: 4, background: { r: 80, g: 30, b: 120, alpha: .5 } } }).png().withMetadata().toBuffer();

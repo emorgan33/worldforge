@@ -1,32 +1,96 @@
 import { PrismaClient } from "@prisma/client";
-import { newToken, tokenHash } from "../src/lib/passwords";
+import { createAccount, issueRecovery } from "../src/lib/admin-accounts";
+import { appendInstallationAuditEvent } from "../src/lib/admin-audit";
+import { withAccountLifecycleLock } from "../src/lib/account-lifecycle";
+import { normalizeEmail, validName } from "../src/lib/admin-policy";
+
 const db = new PrismaClient();
+const LOCAL_OPERATOR = { type: "LOCAL_OPERATOR" as const };
+const DEFAULT_GM_EMAIL = "lorekeeper@worldforge.dev";
+
+function nameFromEmail(email: string): string {
+  const local = email.split("@")[0];
+  const trimmed = local.trim();
+  const validated = validName(trimmed);
+  if (validated) return validated;
+  // Very long local parts would fail the 1–120 name policy; truncate safely.
+  return trimmed.slice(0, 120).trim();
+}
+
+async function printSetupUrl(email: string, token: string) {
+  const origin = process.env.WORLDFORGE_ORIGIN || "http://localhost:3033";
+  console.log(`Set up or recover ${email}'s account within 24 hours:\n${origin}/setup#token=${token}`);
+}
+
 async function main() {
   const args = process.argv.slice(2).filter(argument => argument !== "--");
   const create = args[0] === "--create";
-  const email = (create ? args[1] : args[0])?.trim().toLowerCase();
-  if (email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)) {
+  const emailArg = (create ? args[1] : args[0])?.trim().toLowerCase();
+  if (emailArg && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailArg) || emailArg.length > 254)) {
     throw new Error("Pass a valid email address.");
   }
-  if (create && (!email || args.length !== 2)) {
+  if (create && (!emailArg || args.length !== 2)) {
     throw new Error("To create an account, run auth:setup -- --create email@example.com.");
   }
   if (!create && args.length > 1) throw new Error("Pass one email address, or use --create to add a new account.");
-  let user = create ? null : email ? await db.user.findUnique({ where: { email } }) : (await db.world.findFirst({ orderBy: { createdAt: "asc" }, select: { owner: true } }))?.owner;
+
   if (create) {
-    if (await db.user.findUnique({ where: { email: email! } })) throw new Error(`An account already exists for ${email}. Run auth:setup -- ${email} to recover it.`);
-    user = await db.user.create({ data: { name: email!.split("@")[0], email: email!, role: "AUTHOR" } });
-  } else if (!user && await db.user.count() === 0) {
-    user = await db.user.create({ data: { name: "Lorekeeper", email: email || "lorekeeper@worldforge.dev", role: "GM" } });
+    const result = await createAccount(db, LOCAL_OPERATOR, {
+      email: emailArg,
+      name: nameFromEmail(emailArg!),
+      role: "AUTHOR",
+    });
+    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.error}`);
+    await printSetupUrl(emailArg!, result.value.token);
+    return;
   }
-  if (!user) throw new Error(email
-    ? `No user found with email ${email}. Run auth:setup -- --create ${email} to add a new account.`
+
+  const normalizedEmail = emailArg ? normalizeEmail(emailArg) : null;
+  let user = normalizedEmail ? await db.user.findUnique({ where: { email: normalizedEmail } }) : (await db.world.findFirst({ orderBy: { createdAt: "asc" }, select: { owner: true } }))?.owner;
+
+  // Legacy zero-argument fresh-installation path: create the first GM account
+  // under the lifecycle lock so the count-and-create window is serialized.
+  if (!user && !emailArg) {
+    user = await withAccountLifecycleLock(db, async (tx) => {
+      if (await tx.user.count() !== 0) return null;
+      const seeded = await tx.user.create({
+        data: { name: "Lorekeeper", email: DEFAULT_GM_EMAIL, role: "GM" },
+      });
+      await appendInstallationAuditEvent(tx, {
+        actorType: "LOCAL_OPERATOR",
+        actorIdSnapshot: null,
+        targetIdSnapshot: seeded.id,
+        action: "ACCOUNT_CREATE",
+        outcome: "SUCCESS",
+        details: { role: "GM" },
+      });
+      return seeded;
+    });
+  }
+
+  if (!user && normalizedEmail && (await db.user.count()) === 0) {
+    const result = await createAccount(db, LOCAL_OPERATOR, {
+      email: normalizedEmail,
+      name: nameFromEmail(normalizedEmail),
+      role: "AUTHOR",
+    });
+    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.error}`);
+    await printSetupUrl(normalizedEmail, result.value.token);
+    return;
+  }
+
+  if (!user) throw new Error(emailArg
+    ? `No user found with email ${emailArg}. Run auth:setup -- --create ${emailArg} to add a new account.`
     : "No world owner found. Pass an existing user's email, or use --create to add a new account.");
-  const token = newToken();
-  await db.$transaction(async tx => {
-    await tx.accountSetup.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: new Date() } });
-    await tx.accountSetup.create({ data: { tokenHash: tokenHash(token), userId: user.id, expiresAt: new Date(Date.now() + 24 * 60 * 60_000) } });
-  });
-  console.log(`Set up or recover ${user.name}'s account within 24 hours:\n${process.env.WORLDFORGE_ORIGIN || "http://localhost:3033"}/setup#token=${token}`);
+  if (user.disabledAt !== null) {
+    throw new Error("This account is disabled. Use the local recovery command before issuing a setup link.");
+  }
+
+  const result = await issueRecovery(db, LOCAL_OPERATOR, { userId: user.id });
+  if (!result.ok) throw new Error(`${result.error.code}: ${result.error.error}`);
+  await printSetupUrl(user.email, result.value.token);
 }
-main().finally(() => db.$disconnect());
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+}).finally(() => db.$disconnect());

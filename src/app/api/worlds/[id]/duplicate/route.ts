@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sessionUser, withAuthor } from "@/lib/auth";
+import { withAuthor } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { normalizeWorldCreation } from "@/lib/world-creation";
 import { duplicateWorldSettings } from "@/lib/world-management";
@@ -12,7 +12,7 @@ const WORLD_SUMMARY = {
   _count: { select: { articles: true, maps: true, timelines: true, secrets: true, variableCollections: true } },
 } as const;
 
-export const POST = withAuthor(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const POST = withAuthor({ target: "world-param" }, async (request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   let body: unknown;
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
   if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 1 || typeof (body as { requestId?: unknown }).requestId !== "string") {
@@ -24,7 +24,7 @@ export const POST = withAuthor(async (request: Request, { params }: { params: Pr
   if (!normalizeWorldCreation({ title: "Copy", system: "DND_5E", requestId })) return NextResponse.json({ error: "A valid requestId is required." }, { status: 400 });
   try {
     const { id: sourceId } = await params;
-    const ownerId = (await sessionUser())!.id;
+    const ownerId = user.id;
     const result = await duplicateWorldSettings(sourceId, ownerId, requestId);
     if (result.missing) return NextResponse.json({ error: "World not found." }, { status: 404 });
     if (result.conflict) return NextResponse.json({ error: "This requestId was already used for different world details." }, { status: 409 });

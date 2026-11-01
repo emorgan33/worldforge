@@ -1,20 +1,20 @@
 # Article revision history and recovery
 
-The article revision system provides server-side version tracking for all article content in WorldForge. Every save operation creates a revision snapshot that preserves the full state of the article at that point in time.
+The article revision system provides server-side version tracking for selected article fields. Saves create snapshots of the fields listed below; they do not capture the article's full placement, hierarchy, or relationship state.
 
 ## Overview
 
 Revision history allows GMs to:
 
-- View full content history for any article with timestamps and user tracking
+- View saved-field history for any article with timestamps and user tracking
 - Compare previous versions to see what changed
-- Restore to any prior state safely (with automatic backup of current version)
+- Restore the saved fields from any retained revision (with an automatic snapshot of the current saved fields)
 - Track who made changes and when
 - Prevent silent overwrites through concurrent edit detection
 
 ## Database Schema
 
-The `ArticleRevision` model stores:
+The `ArticleRevision` model stores the following core fields (the schema also includes optional cover and portrait URLs and their descriptions):
 
 ```prisma
 model ArticleRevision {
@@ -44,7 +44,7 @@ model ArticleRevision {
 }
 ```
 
-The `Article` model includes a `version` field that increments on each save, enabling concurrent edit detection.
+The `Article` model includes a monotonically increasing `version` field. An update changes it with an atomic compare-and-increment; restoring an older revision also increments the current version rather than reusing the revision's historical version.
 
 ## API Endpoints
 
@@ -90,28 +90,36 @@ Restore an article to a specific revision.
 ```json
 {
   "success": true,
-  "revision": { /* full revision data */ }
+  "revision": { /* selected historical revision */ },
+  "article": { /* resulting current article, including its incremented version */ }
 }
 ```
 
 **Behavior:**
 - The current article version is automatically saved as a new revision before restoring
 - This ensures no data is lost during the restore operation
-- The restored revision becomes the current article state
+- The restore, current-state snapshot, version increment and mention-index rebuild commit together or roll back together
+- The article version always increments; restoring never rewinds it to a historical value
+- A concurrent edit causes HTTP `409`, with no partial snapshot, restore or mention update
+
+Revisions restore exactly the fields stored by `ArticleRevision`: title, slug, excerpt, HTML and structured content, metadata, tags, cover and portrait values/descriptions, and publication state/visibility. Fields that are not stored—such as template, category, canon state, order/pin, hierarchy and other relations—remain at their current values. `wordCount` is recomputed from restored HTML, and outbound mention edges are rebuilt from restored content. Older snapshots with null optional placement fields remain readable and restore those values as null.
+
+### Cloning an article
+
+`POST /api/articles/[id]/clone` creates the copied article, its first revision snapshot, a fresh `GM_ONLY` audience policy, and outbound mention edges in one database transaction. The clone starts as a private Draft at version 1 with `GM_DRAFT` canon state. It retains the source's article content and placement fields, but does not inherit the source's grants, revision history, session reveal, or supersession link. Mention edges are rebuilt from the copied content using the same world-scoped index as article saves.
 
 ## Concurrent Edit Detection
 
-When an article is loaded, its current `version` number is included in the response. If the article is edited in multiple tabs simultaneously:
+When an article is loaded, its current `version` number is included in the response. First-party saves include it as `expectedVersion`. If the article is edited in multiple tabs simultaneously:
 
 1. The first save increments the version and proceeds normally
 2. The second save includes the original version in its request
-3. The server compares versions and can detect if another edit occurred
-4. If versions don't match, a conflict is detected
+3. The server compares and updates the version atomically, so overlapping requests cannot both commit from the same version
+4. A mismatch returns HTTP `409` with `{ code: "ARTICLE_CONFLICT", currentVersion }` and leaves the losing save's content, revision and mention index unchanged
 
-The `ArticleEditorForm` component handles this by:
-- Including the current version in save requests
-- Detecting version mismatches on save failure
-- Prompting the user to review and resolve conflicts
+The editor retains the losing local draft and offers **Save as new article**. It does not merge changes or replace the current saved version. Reopen the article to start from its latest content before reconciling edits.
+
+For compatibility, versionless external `PATCH` callers remain supported during rollout and use the version read by that request as an atomic compare-and-increment guard. Such callers do not receive stale-editor protection across separate requests. First-party article edits require an expected version; old local drafts without one can only be saved as a new article.
 
 ## Security
 
@@ -147,7 +155,8 @@ Local recovery drafts are distinct from server revisions and are not affected by
 ## Testing
 
 The revision system is verified through:
-- API integration tests for create, list, and restore operations
-- Concurrent edit detection scenarios
+- API integration tests for create, list, restore and optimistic concurrency (`tests/article-save-api.test.ts`)
+- Restore and clone lifecycle checks (`tests/article-revisions-api.test.ts`) cover the field contract, legacy nullable placements, word count, backlinks, private clone policies, image validation, ownership and transaction rollback with injected database failures
+- Browser checks for two-editor conflicts, safe-copy recovery and versioned autosaves (`tests/browser/article-saves.spec.ts`)
 - Ownership and permission enforcement
 - Version increment verification

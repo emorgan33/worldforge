@@ -2,6 +2,7 @@ import { prisma } from "./db";
 import { AccessError } from "./access";
 import { recordAuditEvent } from "./audit";
 import { newToken, tokenHash } from "./passwords";
+import { AccountEligibilityError, findActiveSessionActor, requireActiveAccount, requireActiveAuthor, withAccountLifecycleLock } from "./account-lifecycle";
 
 const PREVIEW_EXPIRY_SECONDS = 15 * 60; // 15 minutes
 
@@ -9,57 +10,48 @@ const PREVIEW_EXPIRY_SECONDS = 15 * 60; // 15 minutes
 // Member management
 // ---------------------------------------------------------------------------
 export async function addMember(worldId: string, userId: string, actorId: string) {
-  const existing = await prisma.worldMember.findUnique({
-    where: { worldId_userId: { worldId, userId } },
-    select: { status: true },
-  });
-  if (existing?.status === "ACTIVE") return;
-
-  await prisma.worldMember.upsert({
-    where: { worldId_userId: { worldId, userId } },
-    create: { worldId, userId, role: "PLAYER", status: "ACTIVE" },
-    update: { status: "ACTIVE", revokedAt: null, revokedById: null },
-  });
-
-  await recordAuditEvent({
-    worldId,
-    action: "add_member",
-    actorId,
-    beforeJson: existing ? JSON.stringify({ status: existing.status }) : null,
-    afterJson: JSON.stringify({ status: "ACTIVE" }),
+  await prisma.$transaction(async tx => {
+    const existing = await tx.worldMember.findUnique({
+      where: { worldId_userId: { worldId, userId } }, select: { status: true },
+    });
+    if (existing?.status === "ACTIVE") return;
+    await tx.worldMember.upsert({
+      where: { worldId_userId: { worldId, userId } },
+      create: { worldId, userId, role: "PLAYER", status: "ACTIVE" },
+      update: { status: "ACTIVE", revokedAt: null, revokedById: null },
+    });
+    await recordAuditEvent({
+      worldId, action: "add_member", actorId,
+      beforeJson: existing ? JSON.stringify({ status: existing.status }) : null,
+      afterJson: JSON.stringify({ status: "ACTIVE" }),
+    }, tx);
   });
 }
 
 export async function revokeMember(worldId: string, userId: string, actorId: string) {
-  const member = await prisma.worldMember.findUnique({
-    where: { worldId_userId: { worldId, userId } },
-    select: { status: true },
-  });
-  if (!member || member.status === "REVOKED") throw new AccessError("Member not found.", 404);
-
-  await prisma.worldMember.update({
-    where: { worldId_userId: { worldId, userId } },
-    data: { status: "REVOKED", revokedAt: new Date(), revokedById: actorId },
-  });
-
-  // Rejoining a world must not silently restore a prior snapshot grant.
-  await prisma.audienceGrant.updateMany({
-    where: { userId, revokedAt: null, policy: { worldId } },
-    data: { revokedAt: new Date(), revokedById: actorId },
-  });
-
-  // Revoke any preview sessions for this member
-  await prisma.previewSession.updateMany({
-    where: { userId, worldId, revokedAt: null },
-    data: { revokedAt: new Date() },
-  });
-
-  await recordAuditEvent({
-    worldId,
-    action: "revoke_member",
-    actorId,
-    beforeJson: JSON.stringify({ status: member.status }),
-    afterJson: JSON.stringify({ status: "REVOKED" }),
+  await prisma.$transaction(async tx => {
+    const member = await tx.worldMember.findUnique({
+      where: { worldId_userId: { worldId, userId } }, select: { status: true },
+    });
+    if (!member || member.status === "REVOKED") throw new AccessError("Member not found.", 404);
+    const now = new Date();
+    await tx.worldMember.update({
+      where: { worldId_userId: { worldId, userId } },
+      data: { status: "REVOKED", revokedAt: now, revokedById: actorId },
+    });
+    // Rejoining does not silently restore prior snapshot grants.
+    await tx.audienceGrant.updateMany({
+      where: { userId, revokedAt: null, policy: { worldId } },
+      data: { revokedAt: now, revokedById: actorId },
+    });
+    await tx.previewSession.updateMany({
+      where: { userId, worldId, revokedAt: null }, data: { revokedAt: now },
+    });
+    await recordAuditEvent({
+      worldId, action: "revoke_member", actorId,
+      beforeJson: JSON.stringify({ status: member.status }),
+      afterJson: JSON.stringify({ status: "REVOKED" }),
+    }, tx);
   });
 }
 
@@ -74,124 +66,114 @@ export async function createPolicy(
   actorId: string,
   playerIds?: string[]
 ) {
-  const existing = await prisma.audiencePolicy.findUnique({
-    where: { resourceKind_resourceId: { resourceKind, resourceId } },
-    select: { id: true },
+  return prisma.$transaction(async tx => {
+    const existing = await tx.audiencePolicy.findUnique({
+      where: { resourceKind_resourceId: { resourceKind, resourceId } }, select: { id: true },
+    });
+    if (existing) throw new AccessError("Policy already exists for this resource.", 409);
+    const policy = await tx.audiencePolicy.create({
+      data: {
+        worldId, resourceKind, resourceId, mode, createdById: actorId,
+        grants: mode === "PLAYER_SNAPSHOT" && playerIds
+          ? { create: playerIds.map((uid) => ({ userId: uid, grantedById: actorId })) }
+          : undefined,
+      },
+    });
+    await recordAuditEvent({
+      worldId, resourceKind, resourceId, action: "create_policy", actorId,
+      afterJson: JSON.stringify({ mode, grantCount: playerIds?.length ?? 0 }),
+    }, tx);
+    return policy;
   });
-  if (existing) throw new AccessError("Policy already exists for this resource.", 409);
-
-  const policy = await prisma.audiencePolicy.create({
-    data: {
-      worldId,
-      resourceKind,
-      resourceId,
-      mode,
-      createdById: actorId,
-      grants: mode === "PLAYER_SNAPSHOT" && playerIds
-        ? { create: playerIds.map((uid) => ({ userId: uid, grantedById: actorId })) }
-        : undefined,
-    },
-  });
-
-  await recordAuditEvent({
-    worldId,
-    resourceKind,
-    resourceId,
-    action: "create_policy",
-    actorId,
-    afterJson: JSON.stringify({ mode, grantCount: playerIds?.length ?? 0 }),
-  });
-
-  return policy;
 }
 
 export async function replaceSnapshotGrants(policyId: string, playerIds: string[], actorId: string) {
-  const policy = await prisma.audiencePolicy.findUnique({
-    where: { id: policyId },
-    select: { worldId: true, resourceKind: true, resourceId: true, mode: true },
-  });
-  if (!policy || policy.mode !== "PLAYER_SNAPSHOT") {
-    throw new AccessError("Only PLAYER_SNAPSHOT policies can have grants replaced.", 400);
-  }
-
   await prisma.$transaction(async (tx) => {
+    const policy = await tx.audiencePolicy.findUnique({
+      where: { id: policyId }, select: { worldId: true, resourceKind: true, resourceId: true, mode: true },
+    });
+    if (!policy || policy.mode !== "PLAYER_SNAPSHOT") throw new AccessError("Only PLAYER_SNAPSHOT policies can have grants replaced.", 400);
+    const now = new Date();
     await tx.audienceGrant.updateMany({
       where: { policyId, revokedAt: null },
-      data: { revokedAt: new Date(), revokedById: actorId },
+      data: { revokedAt: now, revokedById: actorId },
     });
     for (const userId of playerIds) {
-      await tx.audienceGrant.create({ data: { policyId, userId, grantedById: actorId } });
+      await tx.audienceGrant.upsert({
+        where: { policyId_userId: { policyId, userId } },
+        create: { policyId, userId, grantedById: actorId },
+        update: { revokedAt: null, revokedById: null, grantedById: actorId, grantedAt: new Date() },
+      });
     }
-  });
-
-  await recordAuditEvent({
-    worldId: policy.worldId,
-    resourceKind: policy.resourceKind,
-    resourceId: policy.resourceId,
-    action: "retroactive_grant",
-    actorId,
-    afterJson: JSON.stringify({ grantCount: playerIds.length }),
+    await recordAuditEvent({
+      worldId: policy.worldId, resourceKind: policy.resourceKind, resourceId: policy.resourceId,
+      action: "retroactive_grant", actorId, afterJson: JSON.stringify({ grantCount: playerIds.length }),
+    }, tx);
   });
 }
 
 export async function revokePolicy(worldId: string, resourceKind: string, resourceId: string, actorId: string) {
-  const policy = await prisma.audiencePolicy.findUnique({
-    where: { resourceKind_resourceId: { resourceKind, resourceId } },
-    select: { id: true, mode: true },
-  });
-  if (!policy) throw new AccessError("Policy not found.", 404);
-
-  await prisma.audiencePolicy.delete({ where: { id: policy.id } });
-
-  await recordAuditEvent({
-    worldId, resourceKind, resourceId,
-    action: "revoke_policy", actorId,
-    beforeJson: JSON.stringify({ mode: policy.mode }),
+  await prisma.$transaction(async tx => {
+    const policy = await tx.audiencePolicy.findUnique({
+      where: { resourceKind_resourceId: { resourceKind, resourceId } }, select: { id: true, mode: true },
+    });
+    if (!policy) throw new AccessError("Policy not found.", 404);
+    await tx.audiencePolicy.delete({ where: { id: policy.id } });
+    await recordAuditEvent({
+      worldId, resourceKind, resourceId, action: "revoke_policy", actorId,
+      beforeJson: JSON.stringify({ mode: policy.mode }),
+    }, tx);
   });
 }
 
 // ---------------------------------------------------------------------------
 // Preview sessions
 // ---------------------------------------------------------------------------
-export async function issuePreviewSession(worldId: string, userId: string, actorId: string) {
-  const member = await prisma.worldMember.findUnique({
-    where: { worldId_userId: { worldId, userId } },
-    select: { status: true },
-  });
-  if (!member || member.status !== "ACTIVE") {
-    throw new AccessError("Cannot preview for a non-active member.", 400);
-  }
-
+export async function issuePreviewSession(worldId: string, userId: string, actorId: string, sessionTokenHash: string) {
   const token = newToken();
   const hash = tokenHash(token);
-  await prisma.previewSession.create({
-    data: { tokenHash: hash, userId, worldId, issuedById: actorId, memberAtGrant: true, expiresAt: new Date(Date.now() + PREVIEW_EXPIRY_SECONDS * 1000) },
-  });
-
-  await recordAuditEvent({ worldId, action: "issue_preview", actorId, afterJson: JSON.stringify({ userId }) });
+  try {
+    await withAccountLifecycleLock(prisma, async tx => {
+    const actor = await findActiveSessionActor(tx, sessionTokenHash);
+    if (!actor || actor.id !== actorId || !["ADMIN", "AUTHOR", "GM"].includes(actor.role)) throw new AccessError("Sign in to manage this world.", 401);
+    await requireActiveAuthor(tx, actorId);
+    await requireActiveAccount(tx, userId);
+    const world = await tx.world.findFirst({ where: { id: worldId, ownerId: actorId, deletedAt: null }, select: { id: true } });
+    if (!world) throw new AccessError("World not found.", 404);
+    const member = await tx.worldMember.findUnique({
+      where: { worldId_userId: { worldId, userId } }, select: { status: true },
+    });
+    if (!member || member.status !== "ACTIVE") throw new AccessError("Cannot preview for a non-active member.", 400);
+    await tx.previewSession.create({
+      data: { tokenHash: hash, userId, worldId, issuedById: actorId, memberAtGrant: true, expiresAt: new Date(Date.now() + PREVIEW_EXPIRY_SECONDS * 1000) },
+    });
+    await recordAuditEvent({ worldId, action: "issue_preview", actorId, afterJson: JSON.stringify({ userId }) }, tx);
+    });
+  } catch (error) {
+    if (error instanceof AccountEligibilityError) throw new AccessError("Preview access is unavailable for this account.", 403);
+    throw error;
+  }
   return { token, expiresIn: PREVIEW_EXPIRY_SECONDS };
 }
 
-export async function revokePreviewSession(tokenHash: string, actorId: string) {
-  const session = await prisma.previewSession.findUnique({ where: { tokenHash }, select: { worldId: true, userId: true } });
-  if (!session) throw new AccessError("Preview session not found.", 404);
-  await prisma.previewSession.update({ where: { tokenHash }, data: { revokedAt: new Date() } });
-  await recordAuditEvent({ worldId: session.worldId, action: "revoke_preview", actorId, afterJson: JSON.stringify({ userId: session.userId }) });
+export async function revokePreviewSession(tokenHash: string, worldId: string, actorId: string) {
+  await prisma.$transaction(async tx => {
+    const session = await tx.previewSession.findUnique({ where: { tokenHash }, select: { worldId: true, userId: true, revokedAt: true } });
+    if (!session || session.worldId !== worldId || session.revokedAt) throw new AccessError("Preview session not found.", 404);
+    await tx.previewSession.update({ where: { tokenHash }, data: { revokedAt: new Date() } });
+    await recordAuditEvent({ worldId: session.worldId, action: "revoke_preview", actorId, afterJson: JSON.stringify({ userId: session.userId }) }, tx);
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Retroactive grant
 // ---------------------------------------------------------------------------
 export async function retroactiveGrant(worldId: string, resourceKind: string, resourceId: string, userIds: string[], actorId: string) {
-  const policy = await prisma.audiencePolicy.findUnique({
-    where: { resourceKind_resourceId: { resourceKind, resourceId } },
-    select: { id: true, mode: true },
-  });
-  if (!policy || policy.mode !== "PLAYER_SNAPSHOT") {
-    throw new AccessError("Resource must have a PLAYER_SNAPSHOT policy.", 400);
-  }
-
   await prisma.$transaction(async (tx) => {
+    const policy = await tx.audiencePolicy.findUnique({
+      where: { resourceKind_resourceId: { resourceKind, resourceId } }, select: { id: true, mode: true },
+    });
+    if (!policy || policy.mode !== "PLAYER_SNAPSHOT") throw new AccessError("Resource must have a PLAYER_SNAPSHOT policy.", 400);
     for (const userId of userIds) {
       await tx.audienceGrant.upsert({
         where: { policyId_userId: { policyId: policy.id, userId } },
@@ -199,7 +181,6 @@ export async function retroactiveGrant(worldId: string, resourceKind: string, re
         update: { revokedAt: null, revokedById: null },
       });
     }
+    await recordAuditEvent({ worldId, resourceKind, resourceId, action: "retroactive_grant", actorId, afterJson: JSON.stringify({ addedUserIds: userIds }) }, tx);
   });
-
-  await recordAuditEvent({ worldId, resourceKind, resourceId, action: "retroactive_grant", actorId, afterJson: JSON.stringify({ addedUserIds: userIds }) });
 }

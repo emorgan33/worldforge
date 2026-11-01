@@ -45,6 +45,6 @@ async function deleteHandler(_request: NextRequest, { params }: Context) {
   }
 }
 
-export const GET = withAuthor(getHandler);
-export const PATCH = withAuthor(patchHandler);
-export const DELETE = withAuthor(deleteHandler);
+export const GET = withAuthor({ target: "resource-param", kind: "statblocks" }, getHandler);
+export const PATCH = withAuthor({ target: "resource-param", kind: "statblocks" }, patchHandler);
+export const DELETE = withAuthor({ target: "resource-param", kind: "statblocks" }, deleteHandler);

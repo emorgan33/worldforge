@@ -2,14 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import sharp from "sharp";
-import { authorFetch } from "./auth-fixture";
+import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { DEFAULT_APPEARANCE } from "../src/lib/world-appearance";
 import { removeAssetFile } from "../src/lib/asset-storage";
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
+if (origin) assertIsolatedTestEnvironment();
 test("world appearance validates ownership, persists across ordinary edits and grants/revokes background assets", { skip: !origin }, async context => {
   const db = new PrismaClient();
   const owner = await db.user.create({ data: { name: "Appearance fixture", email: `appearance-${Date.now()}@example.invalid` } });
-  context.after(async () => { const assets = await db.imageAsset.findMany({ where: { world: { ownerId: owner.id } } }); for (const asset of assets) await removeAssetFile(asset.id); await db.user.delete({ where: { id: owner.id } }); await db.$disconnect(); });
+  context.after(async () => { const assets = await db.imageAsset.findMany({ where: { world: { ownerId: owner.id } } }); for (const asset of assets) await removeAssetFile(asset.id); await deleteTestUsers(db, owner.id); await db.$disconnect(); });
   const world = await db.world.create({ data: { ownerId: owner.id, title: "The Verdant Coast", slug: `appearance-${owner.id}` } });
   const other = await db.world.create({ data: { ownerId: owner.id, title: "Other world", slug: `other-${owner.id}` } });
   const owned = await authorFetch(db, owner.id, origin!);

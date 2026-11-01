@@ -13,6 +13,7 @@ const LABELS: Record<string, string> = {
   map: "map editing",
   session: "session",
   asset: "image library upload",
+  "asset-detail": "image details",
   foundry: "Foundry import",
 };
 

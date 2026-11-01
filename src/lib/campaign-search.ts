@@ -88,8 +88,8 @@ export function articleSearchWhere(worldId: string, filters: CampaignSearchFilte
     ...(filters.template ? { template: filters.template } : {}),
     ...(filters.status ? { publicationStatus: filters.status } : {}),
     ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
-    // Search article body text as well. contentHtml/contentJson are large
-    // columns, so a dedicated FTS index is the long-term optimization.
+    // Body matches remain available; the SQLite trigram index in R17 narrows
+    // these large-column substring searches before bounded keyset paging.
     ...(terms.length ? {
       AND: terms.map(term => ({
         OR: [
@@ -107,10 +107,10 @@ export function articleSearchWhere(worldId: string, filters: CampaignSearchFilte
 export function rankSearchArticles(articles: SearchableArticle[], query: string): SearchableArticle[] {
   const terms = searchTerms(query);
   const needle = query.trim().toLocaleLowerCase();
-  return [...articles].sort((a, b) => searchRank(a, terms, needle) - searchRank(b, terms, needle) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+  return [...articles].sort((a, b) => campaignSearchRank(a, terms, needle) - campaignSearchRank(b, terms, needle) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
 }
 
-function searchRank(article: SearchableArticle, terms: string[], needle: string) {
+export function campaignSearchRank(article: SearchableArticle, terms: string[], needle: string) {
   if (!terms.length) return 1;
   const title = article.title.toLocaleLowerCase();
   const excerpt = `${article.excerpt ?? ""} ${article.tags ?? ""}`.toLocaleLowerCase();

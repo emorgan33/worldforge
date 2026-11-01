@@ -2,25 +2,14 @@ import { unstable_rethrow } from "next/navigation";
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { prisma } from "./db";
+import type { Prisma } from "@prisma/client";
+import { AccountEligibilityError, AccountLifecycleConflictError, requireActiveAccount, withAccountLifecycleLock } from "./account-lifecycle";
 import { newToken, tokenHash } from "./passwords";
 import { SESSION_COOKIE, SESSION_SECONDS } from "./auth-constants";
-
-export class AccessError extends Error { constructor(message: string, public status = 404) { super(message); } }
+import { AccessError, resolveResourceWorld, sameOrigin, sessionUser, type ResourceKind } from "./authorization-core";
+export { AccessError, sameOrigin, sessionUser } from "./authorization-core";
 
 // EXACT original - no parameters, just cookies()
-export async function sessionUser() {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
-  const session = await prisma.authSession.findUnique({ where: { tokenHash: tokenHash(token) }, select: { expiresAt: true, user: { select: { id: true, email: true, name: true, role: true } } } });
-  return session && session.expiresAt > new Date() ? session.user : null;
-}
-
-export function sameOrigin(request: Request) {
-  const url = new URL(request.url);
-  const expected = process.env.WORLDFORGE_ORIGIN || `${url.protocol}//${request.headers.get("host") || url.host}`;
-  if (request.headers.get("origin") !== expected || request.headers.get("sec-fetch-site") === "cross-site") throw new AccessError("This request must come from this site.", 403);
-}
-
 export async function ownedWorld(worldId: unknown, userId?: string) {
   const actor = userId || (await sessionUser())?.id;
   if (!actor) throw new AccessError("Sign in to access your workspace.", 401);
@@ -33,125 +22,164 @@ export async function ownedArchivedWorld(worldId: unknown, userId?: string) {
   if (typeof worldId !== "string" || !await prisma.world.findFirst({ where: { id: worldId, ownerId: actor, deletedAt: { not: null } }, select: { id: true } })) throw new AccessError("Not found.");
 }
 
-export async function issueSession(userId: string, request: Request) {
+export async function issueSession(
+  userId: string,
+  request: Request,
+  credentialSnapshot: { passwordHash: string; accountVersion: number },
+) {
   const token = newToken();
-  await prisma.authSession.create({ data: { userId, tokenHash: tokenHash(token), expiresAt: new Date(Date.now() + SESSION_SECONDS * 1000) } });
+  const expiresAt = new Date(Date.now() + SESSION_SECONDS * 1000);
+  let issued: boolean;
+  try {
+    issued = await withAccountLifecycleLock(prisma, async (tx) => {
+      const user = await requireActiveAccount(tx, userId);
+      if (user.passwordHash !== credentialSnapshot.passwordHash || user.accountVersion !== credentialSnapshot.accountVersion) return false;
+      await createSessionRecord(tx, userId, token, expiresAt);
+      return true;
+    });
+  } catch (error) {
+    if (error instanceof AccountEligibilityError) return false;
+    throw error;
+  }
+  if (!issued) return false;
+  await setSessionCookie(token, request);
+  return true;
+}
+
+export async function createSessionRecord(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  token: string,
+  expiresAt: Date,
+) {
+  await tx.user.update({ where: { id: userId }, data: { lastSignInAt: new Date() } });
+  await tx.authSession.create({ data: { userId, tokenHash: tokenHash(token), expiresAt } });
+}
+
+export async function setSessionCookie(token: string, request: Request) {
   (await cookies()).set(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: (process.env.WORLDFORGE_ORIGIN || request.url).startsWith("https:"), path: "/", maxAge: SESSION_SECONDS });
 }
 
 export async function revokeSession() {
   const jar = await cookies(); const token = jar.get(SESSION_COOKIE)?.value;
-  if (token) await prisma.authSession.deleteMany({ where: { tokenHash: tokenHash(token) } });
+  const previewToken = jar.get("wf_preview")?.value;
+  if (token || previewToken) await withAccountLifecycleLock(prisma, async (tx) => {
+    if (token) await tx.authSession.deleteMany({ where: { tokenHash: tokenHash(token) } });
+    if (previewToken) await tx.previewSession.updateMany({ where: { tokenHash: tokenHash(previewToken), revokedAt: null }, data: { revokedAt: new Date() } });
+  });
   jar.delete(SESSION_COOKIE);
+  jar.delete("wf_preview");
 }
 
-async function resourceWorld(kind: string, id: string): Promise<string | null> {
-  switch (kind) {
-    case "articles": return (await prisma.article.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
-    case "statblocks": return (await prisma.rpgBlock.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
-    case "assets": return (await prisma.imageAsset.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
-    case "secrets": return (await prisma.secret.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
-    case "maps": return (await prisma.map.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
-    case "map-layers": return (await prisma.mapLayer.findUnique({ where: { id }, select: { map: { select: { worldId: true } } } }))?.map.worldId || null;
-    case "map-markers": return (await prisma.marker.findUnique({ where: { id }, select: { map: { select: { worldId: true } } } }))?.map.worldId || null;
-    case "map-elements": return (await prisma.mapElement.findUnique({ where: { id }, select: { map: { select: { worldId: true } } } }))?.map.worldId || null;
-    case "collection": return (await prisma.variableCollection.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
-    case "variable": return (await prisma.variable.findUnique({ where: { id }, select: { collection: { select: { worldId: true } } } }))?.collection.worldId || null;
-    case "sessions": return (await prisma.campaignSession.findUnique({ where: { id }, select: { worldId: true } }))?.worldId || null;
-    default: return null;
-  }
-}
+type AuthorDeclaration =
+  | { target: "account" }
+  | { target: "world-param"; archived?: boolean }
+  | { target: "world-query"; field: string }
+  | { target: "world-body"; field: string }
+  | { target: "world-form"; field: string; readForm: (request: Request) => Promise<FormData> }
+  | { target: "map-action-body"; worldField: string; mapField: string }
+  | { target: "resource-body"; kind: ResourceKind; field: string }
+  | { target: "resource-param"; kind: ResourceKind; archived?: boolean }
+  | { target: "resource-route"; kinds: readonly ResourceKind[] };
+export type AuthorizedRoute = { user: NonNullable<Awaited<ReturnType<typeof sessionUser>>>; worldId?: string; resourceId?: string; formData?: FormData };
 
-async function authorize(request: NextRequest, userId: string, role: string) {
-  const url = new URL(request.url);
-  const segments = url.pathname.split("/");
-  const [, , resource, id, ...rest] = segments;
-
-  // Handle resources/[kind]/[id]/... routes
-  if (resource === "resources") {
-    const kind = id;                   // e.g. "articles"
-    const resourceId = rest[0];        // the actual resource ID
-    if (resourceId) {
-      if (!["GET", "HEAD"].includes(request.method)) sameOrigin(request);
-      const worldId = await resourceWorld(kind, resourceId);
-      await ownedWorld(worldId, userId);
-      return;
-    }
-  }
-
-  if (["GET", "HEAD"].includes(request.method)) {
-    if (role === "PLAYER") throw new AccessError("Player accounts cannot access author APIs.", 403);
-    if (resource === "worlds") {
-      // For nested routes like /api/worlds/[id]/export, check ownership
-      if (id === "deleted" && rest.length === 0) return;
-      if (rest.length > 0) await ownedWorld(id, userId);
-      return;
-    }
-    // Author detail endpoints include GM-only fields. Player reads use the
-    // dedicated, filtered /c reader and /api/c endpoints instead.
-    const worldId = id ? await resourceWorld(resource, id) : url.searchParams.get("worldId");
-    // Every author collection requires an explicit owned world. Several list
-    // handlers otherwise treat a missing worldId as an unrestricted query.
-    if (!worldId) throw new AccessError("Not found.");
-    await ownedWorld(worldId, userId);
-    return;
-  }
-  sameOrigin(request);
-  if (role === "PLAYER") throw new AccessError("Player accounts cannot manage worlds.", 403);
-  // Collection-level world writes are the only routes whose target is not in
-  // the URL. Keep nested world routes and resource authorization path-bound.
-  if (resource === "worlds" && id === undefined && rest.length === 0) {
-    if (request.method === "POST") return;
-    if (request.method === "PATCH") {
-      const body = await request.clone().json().catch(() => { throw new AccessError("Invalid JSON.", 400); });
-      if (!body || typeof body !== "object" || Array.isArray(body) || typeof (body as { id?: unknown }).id !== "string" || !(body as { id: string }).id) throw new AccessError("A world ID is required.", 400);
-      await ownedWorld((body as { id: string }).id, userId);
-      return;
-    }
-  }
-  if (resource === "assets" && request.method === "POST") return;
-
-  // For world routes, the world ID is in the URL path (e.g. /api/worlds/[id]/members)
-  if (resource === "worlds") {
-    if (id === "import" && rest.length === 0 && request.method === "POST") return;
-    if (rest.length === 1 && ["restore", "purge", "hard"].includes(rest[0]) && ((rest[0] === "restore" && request.method === "POST") || (rest[0] === "purge" && request.method === "POST") || (rest[0] === "hard" && request.method === "DELETE"))) await ownedArchivedWorld(id, userId);
-    else await ownedWorld(id, userId);
-    return;
-  }
-
-  let worldId: unknown = null;
-  if (id) {
-    // The target is in the URL, so resolve its world from the database and do
-    // not require a JSON body. Bodyless resource actions (for example
-    // POST /api/articles/[id]/clone) must still authorize.
-    worldId = await resourceWorld(resource, id);
-  } else {
-    const body = await request.clone().json().catch(() => { throw new AccessError("Invalid JSON.", 400); });
-    if (!body || typeof body !== "object") throw new AccessError("Invalid request.", 400);
-    const fields = body as Record<string, unknown>;
-    worldId = fields.worldId;
-    if (resource === "maps") {
-      const mapId = typeof fields.mapId === "string" ? fields.mapId : typeof fields.id === "string" ? fields.id : "";
-      if (!worldId) worldId = await resourceWorld("maps", mapId);
-    } else if (resource === "variables") worldId = await resourceWorld(request.method === "POST" ? "collection" : "variable", (fields.collectionId as string) || (fields.id as string) || "");
-    else if (resource === "secrets" && request.method === "PATCH") worldId = await resourceWorld("secrets", (fields.id as string) || "");
-  }
-  await ownedWorld(worldId, userId);
-}
-
-export function withAuthor<H>(handler: H): H {
-  return (async (request: NextRequest, context: unknown) => {
+export function withAuthor<C = unknown>(
+  declaration: AuthorDeclaration,
+  handler: (request: NextRequest, context: C, authorized: AuthorizedRoute) => Promise<Response>,
+): (request: NextRequest, context: C) => Promise<Response> {
+  return async (request: NextRequest, context: C) => {
     try {
       const user = await sessionUser();
       if (!user) throw new AccessError("Sign in to access your workspace.", 401);
-      await authorize(request, user.id, user.role);
-      const response = await (handler as (request: NextRequest, context: unknown) => Promise<Response>)(request, context);
+      if (user.role === "PLAYER" && declaration.target !== "resource-route") throw new AccessError("Player accounts cannot access author APIs.", 403);
+      if (!["GET", "HEAD"].includes(request.method)) sameOrigin(request);
+      let authorizedWorldId: string | null = null;
+      let authorizedResourceId: string | undefined;
+      let authorizedFormData: FormData | undefined;
+      if (declaration.target === "world-param") {
+        const params = await (context as { params?: Promise<Record<string, string>> }).params;
+        const worldId = params?.id;
+        authorizedWorldId = typeof worldId === "string" ? worldId : null;
+        if (declaration.archived) await ownedArchivedWorld(worldId, user.id);
+        else await ownedWorld(worldId, user.id);
+      } else if (declaration.target === "resource-param") {
+        const params = await (context as { params?: Promise<Record<string, string>> }).params;
+        const worldId = await resolveResourceWorld(declaration.kind, params?.id ?? "");
+        authorizedResourceId = params?.id;
+        authorizedWorldId = worldId;
+        if (declaration.archived) await ownedArchivedWorld(worldId, user.id);
+        else await ownedWorld(worldId, user.id);
+      } else if (declaration.target === "world-query") {
+        const worldId = new URL(request.url).searchParams.get(declaration.field);
+        authorizedWorldId = worldId;
+        await ownedWorld(worldId, user.id);
+      } else if (declaration.target === "world-body") {
+        const body = await request.clone().json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) throw new AccessError("Invalid request.", 400);
+        const worldId = (body as Record<string, unknown>)[declaration.field];
+        authorizedWorldId = typeof worldId === "string" ? worldId : null;
+        await ownedWorld(worldId, user.id);
+      } else if (declaration.target === "world-form") {
+        try {
+          authorizedFormData = await declaration.readForm(request);
+        } catch (error) {
+          const status = (error as { status?: unknown })?.status;
+          if (error instanceof Error && typeof status === "number") throw new AccessError(error.message, status);
+          throw error;
+        }
+        const worldId = authorizedFormData.get(declaration.field);
+        authorizedWorldId = typeof worldId === "string" ? worldId : null;
+        await ownedWorld(worldId, user.id);
+      } else if (declaration.target === "map-action-body") {
+        const body = await request.clone().json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) throw new AccessError("Invalid request.", 400);
+        const fields = body as Record<string, unknown>;
+        const providedWorldId = fields[declaration.worldField];
+        const mapId = fields[declaration.mapField];
+        const mapWorldId = typeof mapId === "string" && mapId ? await resolveResourceWorld("maps", mapId) : null;
+        if (typeof providedWorldId === "string" && mapWorldId && providedWorldId !== mapWorldId) throw new AccessError("Not found.");
+        const worldId = mapWorldId ?? (typeof providedWorldId === "string" ? providedWorldId : null);
+        authorizedWorldId = worldId;
+        await ownedWorld(worldId, user.id);
+      } else if (declaration.target === "resource-body") {
+        const body = await request.clone().json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) throw new AccessError("Invalid request.", 400);
+        const fields = body as Record<string, unknown>;
+        const worldId = await resolveResourceWorld(declaration.kind, typeof fields[declaration.field] === "string" ? fields[declaration.field] as string : "");
+        authorizedWorldId = worldId;
+        if (typeof fields.worldId === "string" && fields.worldId !== worldId) throw new AccessError("Not found.");
+        await ownedWorld(worldId, user.id);
+      } else if (declaration.target === "resource-route") {
+        const params = await (context as { params?: Promise<Record<string, string>> }).params;
+        const kind = params?.kind ?? "";
+        if (!declaration.kinds.includes(kind as ResourceKind)) throw new AccessError("Not found.");
+        const resourceId = params?.id ?? "";
+        const worldId = await resolveResourceWorld(kind, resourceId);
+        authorizedResourceId = resourceId;
+        authorizedWorldId = worldId;
+        await ownedWorld(worldId, user.id);
+      }
+      const response = await handler(request, context, { user, ...(authorizedWorldId ? { worldId: authorizedWorldId } : {}), ...(authorizedResourceId ? { resourceId: authorizedResourceId } : {}), ...(authorizedFormData ? { formData: authorizedFormData } : {}) });
       response.headers.set("Cache-Control", "private, no-store");
       return response;
     } catch (error) {
       unstable_rethrow(error);
       if (!(error instanceof AccessError)) console.error("Author request failed", error);
+      if (error instanceof AccountLifecycleConflictError) return Response.json({ error: error.message }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "2" } });
       return Response.json({ error: error instanceof AccessError ? error.message : "Unable to complete this request." }, { status: error instanceof AccessError ? error.status : 500, headers: { "Cache-Control": "no-store" } });
     }
-  }) as H;
+  };
+}
+
+type ResourceRouteContext = { params: Promise<{ kind: string; id: string }> };
+type AuthorizedResource = { user: NonNullable<Awaited<ReturnType<typeof sessionUser>>>; worldId: string; resourceId: string };
+
+/** Explicit authorization for a resource route; it does not inspect URL segments or request bodies. */
+export function withAuthorResource(
+  kind: ResourceKind,
+  handler: (request: NextRequest, context: ResourceRouteContext, authorized: AuthorizedResource) => Promise<Response>,
+): (request: NextRequest, context: ResourceRouteContext) => Promise<Response> {
+  return withAuthor({ target: "resource-route", kinds: [kind] }, async (request, context, authorized) =>
+    handler(request, context as ResourceRouteContext, { user: authorized.user, worldId: authorized.worldId!, resourceId: authorized.resourceId! }),
+  );
 }

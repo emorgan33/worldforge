@@ -28,8 +28,9 @@ export function parseArticleDocument(json?: string | null, html?: string | null)
   return { type: "doc", content: htmlNodes(parseDocument(html || "").children) };
 }
 export function localAssetId(src: string) {
-  const relative = imageAssetId(src); if (relative) return relative;
-  try { return imageAssetId(new URL(src).pathname); } catch { return null; }
+  const value = src.trim();
+  const relative = imageAssetId(value); if (relative) return relative;
+  try { return imageAssetId(new URL(value).pathname); } catch { return null; }
 }
 export function publicImage(src: unknown, assetIds: Set<string>) {
   if (typeof src !== "string" || !src || !isImageReference(src)) return null;

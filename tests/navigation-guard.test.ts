@@ -44,8 +44,9 @@ test("a clean registry allows the transition", () => {
 });
 
 test("guard labels cover every registered form id", () => {
-  for (const id of ["article", "settings", "compendium", "variable", "map", "session", "asset", "foundry"]) {
+  for (const id of ["article", "settings", "compendium", "variable", "map", "session", "asset", "asset-detail", "foundry"]) {
     assert.equal(guardLabel(id), guardLabel(id));
     assert.notEqual(guardLabel(id), "");
   }
+  assert.equal(guardLabel("asset-detail:form-1"), "image details");
 });

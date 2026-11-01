@@ -2,12 +2,13 @@
 
 FROM node:22-bookworm-slim AS base
 ENV PNPM_HOME="/pnpm" \
+    COREPACK_HOME="/pnpm/corepack" \
     PATH="/pnpm:$PATH" \
     CI="true"
 RUN apt-get update -y \
-    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && apt-get install -y --no-install-recommends openssl ca-certificates sqlite3 \
     && rm -rf /var/lib/apt/lists/*
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.14.0 --activate
 WORKDIR /app
 
 # Install dependencies without lifecycle scripts; Prisma and native builds are
@@ -34,7 +35,12 @@ COPY --from=build /app/next.config.ts ./next.config.ts
 COPY --from=build /app/tsconfig.json ./tsconfig.json
 COPY --from=build /app/src ./src
 COPY --from=build /app/scripts ./scripts
-RUN chmod +x ./scripts/docker-entrypoint.sh
+RUN groupadd --gid 10001 worldforge \
+    && useradd --uid 10001 --gid worldforge --home-dir /app --no-create-home worldforge \
+    && mkdir -p /data/assets \
+    && chown -R worldforge:worldforge /data /app/.next /pnpm \
+    && chmod +x ./scripts/docker-entrypoint.sh
+USER worldforge
 EXPOSE 3033
 ENTRYPOINT ["./scripts/docker-entrypoint.sh"]
 CMD ["pnpm", "start"]

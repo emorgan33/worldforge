@@ -1,4 +1,5 @@
 import { prisma } from "./db";
+import type { Prisma } from "@prisma/client";
 
 export interface AuditEventInput {
   worldId: string;
@@ -15,8 +16,8 @@ export interface AuditEventInput {
  * Append a new audit event. This is the ONLY way to create audit records.
  * There are no update/delete APIs for audit events.
  */
-export async function recordAuditEvent(input: AuditEventInput): Promise<string> {
-  const event = await prisma.accessAuditEvent.create({
+export async function recordAuditEvent(input: AuditEventInput, client: Prisma.TransactionClient | typeof prisma = prisma): Promise<string> {
+  const event = await client.accessAuditEvent.create({
     data: {
       worldId: input.worldId,
       resourceKind: input.resourceKind ?? null,
@@ -69,14 +70,4 @@ async function getEventCreatedAt(id: string): Promise<Date> {
   });
   if (!event) return new Date();
   return event.createdAt;
-}
-
-/**
- * Verify audit immutability: no event can be updated or deleted.
- * Throws if any event has been modified after creation.
- */
-export async function verifyAuditImmutability(): Promise<boolean> {
-  const count = await prisma.accessAuditEvent.count();
-  if (count === 0) return true;
-  return true;
 }

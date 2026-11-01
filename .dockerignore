@@ -32,6 +32,12 @@ tests
 test
 *.md
 
+# Next.js type-checks all root TypeScript files, including playwright.config.ts.
+# Retain only its shared import so production builds do not need test suites.
+!tests/
+tests/*
+!tests/auth-fixture.ts
+
 # The reviewed stock-art bundle is a runtime artifact, including any
 # redistributable Markdown evidence it references.
 !resources/stock-art/**

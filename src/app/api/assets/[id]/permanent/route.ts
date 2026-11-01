@@ -2,9 +2,10 @@ import { withAuthor } from "@/lib/auth";
 import { AccessError } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { imageAssetId } from "@/lib/assets";
-import { removeAssetFile } from "@/lib/asset-storage";
+import { isAssetId } from "@/lib/assets";
 import { isReferenced, scanAssetReferences } from "@/lib/asset-references";
+import { randomUUID } from "node:crypto";
+import { drainAssetCleanupJobs } from "@/lib/world-management";
 
 export interface DeletionResult {
   success: boolean;
@@ -24,11 +25,11 @@ export interface DeletionResult {
  * Permanently deletes an asset and its file.
  * Requires that the asset is not actively referenced in any content.
  */
-export const DELETE = withAuthor(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
+export const DELETE = withAuthor({ target: "resource-param", kind: "assets" }, async (request: Request, { params }: { params: Promise<{ id: string }> }, { user }) => {
   try {
     const { id } = await params;
 
-    if (!imageAssetId(id)) {
+    if (!isAssetId(id)) {
       return NextResponse.json({ error: "Invalid image ID" }, { status: 400 });
     }
 
@@ -41,14 +42,24 @@ export const DELETE = withAuthor(async (request: Request, { params }: { params: 
       return NextResponse.json({ error: "Image not found" }, { status: 404 });
     }
 
-    const user = await import("@/lib/auth").then(m => m.sessionUser());
-    if (user?.id !== asset.world.ownerId) {
+    if (user.id !== asset.world.ownerId) {
       throw new AccessError("You do not have access to this image", 403);
     }
 
-    const references = await scanAssetReferences(asset.worldId, id);
+    const deletion = await prisma.$transaction(async tx => {
+      const references = await scanAssetReferences(asset.worldId, id, tx);
+      if (isReferenced(references)) return { references, deleted: false };
+      await tx.assetCleanupJob.upsert({
+        where: { assetId: id },
+        create: { id: randomUUID(), assetId: id },
+        update: {},
+      });
+      await tx.imageAsset.delete({ where: { id } });
+      return { references, deleted: true };
+    });
 
-    if (isReferenced(references)) {
+    if (!deletion.deleted) {
+      const references = deletion.references;
       return NextResponse.json({
         success: false,
         deleted: false,
@@ -63,13 +74,9 @@ export const DELETE = withAuthor(async (request: Request, { params }: { params: 
       } satisfies DeletionResult);
     }
 
-    // Delete file from disk
-    await removeAssetFile(id);
-
-    // Delete database record
-    await prisma.imageAsset.delete({
-      where: { id },
-    });
+    // Attempt immediate unlink after the durable intent has committed. The
+    // drainer keeps failures queued and records their error for a later retry.
+    await drainAssetCleanupJobs();
 
     return NextResponse.json({
       success: true,

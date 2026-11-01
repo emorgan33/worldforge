@@ -1,4 +1,4 @@
-import { withAuthor, ownedWorld, AccessError } from "@/lib/auth";
+import { withAuthor, AccessError } from "@/lib/auth";
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -51,17 +51,17 @@ async function getHandler(request: Request) {
     return NextResponse.json({ assets: assets.slice(0, 40).map(present), nextCursor: assets.length > 40 ? assets[39].id : null });
   } catch (error) { return failure(error); }
 }
-async function postHandler(request: Request) {
+async function postHandler(_request: Request, _context: unknown, authorized: { formData?: FormData }) {
   let fileId: string | null = null;
   try {
-    const form = await readImageForm(request);
+    const form = authorized.formData;
+    if (!form) throw new AssetInputError("Choose an image to upload.");
     const worldId = form.get("worldId"), file = form.get("file");
     const title = form.get("title"), alt = form.get("alt") || "";
     if (typeof worldId !== "string" || !worldId) throw new AssetInputError("A world is required.");
     if (!await prisma.world.findUnique({ where: { id: worldId }, select: { id: true } })) throw new AssetInputError("World not found.", 404);
     if (!(file instanceof File) || !IMAGE_ACCEPT.split(",").includes(file.type)) throw new AssetInputError("Choose a PNG, JPEG or WebP image.");
     if (typeof alt !== "string" || alt.length > 1000 || (title !== null && (typeof title !== "string" || title.length > 200))) throw new AssetInputError("Use a title up to 200 characters and alternative text up to 1000 characters.");
-    await ownedWorld(worldId);
     const image = await normalizeImage(Buffer.from(await file.arrayBuffer()));
     const existing = await prisma.imageAsset.findUnique({ where: { worldId_sha256: { worldId, sha256: image.sha256 } }, include: { provenance: { select: provenanceSelect, orderBy: { createdAt: "asc" } } } });
     if (existing) {
@@ -100,6 +100,6 @@ async function patchHandler(request: Request) {
   } catch (error) { return failure(error); }
 }
 
-export const GET = withAuthor(getHandler);
-export const POST = withAuthor(postHandler);
-export const PATCH = withAuthor(patchHandler);
+export const GET = withAuthor({ target: "world-query", field: "worldId" }, getHandler);
+export const POST = withAuthor({ target: "world-form", field: "worldId", readForm: readImageForm }, postHandler);
+export const PATCH = withAuthor({ target: "world-body", field: "worldId" }, patchHandler);

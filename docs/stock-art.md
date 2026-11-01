@@ -197,20 +197,21 @@ and falls back to the labelled folder icon when the image is absent, private or
 fails to load, so no private URL or broken-image glyph reaches the reader.
 
 Every persistent reference to an image is scanned exhaustively by
-`src/lib/asset-references.ts`. `scanAssetReferences` covers world cover, banner
-and background, category illustrations, and article covers, portraits and parsed
-bodies (confirmed against the document so prose cannot produce a false
-reference). `GET /api/assets/[id]/usage` and the permanent-delete route use it,
-and `referencedAssetIds` feeds the world cleanup job, so an archived image that
-is referenced only through a portrait, a parsed body or a category icon is never
-removed. Article bytes are anonymously fetchable only while a referenced
-placement is publicly readable; revoking publication removes both the credit and
-the response from `/api/assets/[id]/file`.
+`src/lib/asset-references.ts`. The scan covers world cover, banner and
+background, category illustrations, article covers, portraits and parsed
+bodies, revision snapshots, map canvases, map layers and timeline covers.
+`GET /api/assets/[id]/usage` and permanent deletion use the same reference
+model, and world cleanup uses its world-wide collector. Archived images that
+remain placed keep working; permanent deletion is blocked until every
+persistent reference is removed. Article bytes are anonymously fetchable only
+while a placement appears in the public reader projection; publication and
+visibility revocation removes both the credit and the response from
+`/api/assets/[id]/file`.
 
-## Portable export/import (format 3)
+## Portable export/import (format 4)
 
 Image bytes leave the server only through world export. `src/lib/world-export.ts`
-builds format 3, `GET /api/worlds/[id]/export` defaults to it, and the Manage
+builds format 4, `GET /api/worlds/[id]/export` defaults to it, and the Manage
 worlds export button uses the default. Format 3 extends format 2 with image
 `source`, `displayRestricted`/`restrictionReason`/`restrictionDate`, the
 provenance snapshot list, per-placement alt text (`World.coverImageAlt` /
@@ -218,16 +219,18 @@ provenance snapshot list, per-placement alt text (`World.coverImageAlt` /
 snapshots) and `Category.iconImage`, on top of the existing bytes, members,
 audience policies and audit sections.
 
-Format 3 is defined as the complete owner backup. It rejects the filtering flags
+Format 4 is defined as the complete owner backup. It rejects the filtering flags
 `includeAssets` and `includePrivate` with a `400` rather than silently ignoring
 them, so a partial export is never mistaken for a complete backup.
 
 Legacy formats stay available for worlds that can be represented losslessly:
-`?format=v1` supports filtering. Format 2, like format 3, is a complete backup
-and rejects `includeAssets`/`includePrivate` flags explicitly. Both keep their older shapes, but
+`?format=v1` can omit asset bytes with `includeAssets=false`, but rejects
+`includePrivate=false` because the legacy shape cannot safely remove all private
+content. Formats 2 and 3, like format 4, are complete
+backups and reject `includeAssets`/`includePrivate` flags explicitly. They keep their older shapes, but
 `worldNeedsV3()` refuses a legacy export when the world has provenance,
 restrictions or placement data that the legacy shape would drop, with guidance to
-use format 3. The guard checks placement data in retained revisions as well as
+use format 4. The guard checks placement data in retained revisions as well as
 current content, including explicit decorative empty descriptions.
 
 On import, provenance is validated before any write: entry id, version, digest

@@ -45,6 +45,7 @@ test("creation migration upgrades populated worlds and preserves multiple null r
       await after.world.create({ data: { ownerId: owner.id, title: "Null key one", slug: `null-one-${randomUUID()}` } });
       await after.world.create({ data: { ownerId: owner.id, title: "Null key two", slug: `null-two-${randomUUID()}` } });
     } finally {
+      await after.world.deleteMany({ where: { ownerId: owner.id } });
       await after.user.delete({ where: { id: owner.id } });
       await after.$disconnect();
     }

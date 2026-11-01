@@ -20,6 +20,9 @@ model User {
   avatar          String?
   role            String             @default("AUTHOR") // ADMIN, AUTHOR, GM, PLAYER
   passwordHash    String?
+  disabledAt      DateTime?
+  lastSignInAt    DateTime?
+  accountVersion  Int                @default(0)
   sessions        AuthSession[]
   setupLinks      AccountSetup[]
   worlds          World[]
@@ -34,8 +37,12 @@ model User {
   issuedPreviews  PreviewSession[]   @relation("PreviewIssuer")
   foundryPreviews FoundryPreview[]
   foundryRuns     FoundryImportRun[]
+  worldTransferImports WorldTransferImport[]
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
+
+  @@index([role, disabledAt, createdAt])
+  @@index([createdAt, id])
 }
 
 // -------------------------------------------------------------
@@ -57,7 +64,7 @@ model World {
   ownerId             String
   creationRequestId   String?
   creationPayloadHash String?
-  owner               User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner               User                 @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   categories          Category[]
   articles            Article[]
   secrets             Secret[]
@@ -159,6 +166,10 @@ model Article {
   // Bidirectional Knowledge Graph References
   outboundMentions ArticleMention[] @relation("MentionSource")
   inboundMentions  ArticleMention[] @relation("MentionTarget")
+  mentionsIndexed Boolean @default(false)
+  hasLegacyArticleLinks Boolean @default(false)
+  assetReferencesIndexed Boolean @default(false)
+  assetReferences ArticleAssetReference[]
 
   // Template-specific metadata (JSON: traits, demographics, biological specs, etc.)
   metadata String? // Serialized JSON
@@ -196,6 +207,15 @@ model ArticleMention {
 
   @@index([sourceArticleId])
   @@index([targetArticleId])
+}
+
+model ArticleAssetReference {
+  sourceArticleId String
+  sourceArticle   Article @relation(fields: [sourceArticleId], references: [id], onDelete: Cascade)
+  assetId         String
+
+  @@id([sourceArticleId, assetId])
+  @@index([assetId])
 }
 
 // -------------------------------------------------------------
@@ -329,6 +349,7 @@ model MapElement {
   kind      String    // LABEL | LINE | CIRCLE | RECT | PATH
   geometry  String    // Serialized JSON: percentages 0-100 relative to map size
   style     String?   // Serialized JSON: color, strokeWidth, fontSize, erase flag
+  order     Int       @default(0)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -410,7 +431,7 @@ model FoundryPreview {
   worldId        String
   world          World    @relation(fields: [worldId], references: [id], onDelete: Cascade)
   authorId       String
-  author         User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author         User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
   metadataJson   String
   candidatesJson String
   expiresAt      DateTime
@@ -424,7 +445,7 @@ model FoundryImportRun {
   worldId        String
   world          World    @relation(fields: [worldId], references: [id], onDelete: Cascade)
   authorId       String
-  author         User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author         User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
   previewId      String
   idempotencyKey String
   requestHash    String
@@ -436,6 +457,23 @@ model FoundryImportRun {
 
   @@unique([worldId, authorId, idempotencyKey])
   @@index([worldId, authorId, createdAt])
+}
+
+model WorldTransferImport {
+  id             String   @id @default(uuid())
+  ownerId        String
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  requestKey     String
+  payloadHash    String
+  payloadJson    String
+  status         String   @default("PENDING")
+  resultJson     String?
+  error          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([ownerId, requestKey])
+  @@index([ownerId, status, updatedAt])
 }
 
 model FoundryImportOutcome {
@@ -573,13 +611,14 @@ model AssetCleanupJob {
 }
 
 model AuthSession {
-  tokenHash String   @id
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  @@index([userId])
+  @@index([userId, expiresAt])
 }
 
 model AccountSetup {
@@ -594,6 +633,31 @@ model LoginLimit {
   key      String   @id
   attempts Int      @default(0)
   resetsAt DateTime
+}
+
+// -------------------------------------------------------------
+// Installation Administration
+// -------------------------------------------------------------
+model InstallationAdminState {
+  id        Int      @id @default(1)
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model InstallationAuditEvent {
+  id               String   @id @default(uuid())
+  actorIdSnapshot  String?
+  targetIdSnapshot String?
+  action           String
+  outcome          String
+  reasonCode       String?
+  detailsJson      String
+  actorType        String
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt, id])
+  @@index([targetIdSnapshot, createdAt])
+  @@index([action, createdAt])
 }
 
 // -------------------------------------------------------------
@@ -786,7 +850,7 @@ model ArticleRevision {
 
   // Metadata
   userId  String
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Restrict)
   savedAt DateTime @default(now())
 
   // For concurrent edit detection

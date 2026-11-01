@@ -2,7 +2,7 @@ import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-export const GET = withAuthor(async (_request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const GET = withAuthor({ target: "world-param" }, async (_request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id: worldId } = await params;
   const sessions = await prisma.campaignSession.findMany({
     where: { worldId },
@@ -16,7 +16,7 @@ export const GET = withAuthor(async (_request: NextRequest, { params }: { params
   return NextResponse.json(sessions);
 });
 
-export const POST = withAuthor(async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+export const POST = withAuthor({ target: "world-param" }, async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const { id: worldId } = await params;
   const body = await request.json();
   const { title, description, sessionDate, inWorldDate, currentLocation, status } = body;

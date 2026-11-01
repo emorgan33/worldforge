@@ -4,14 +4,17 @@ services:
     image: worldforge:local
     restart: unless-stopped
     ports:
-      - "3033:3033"
+      # Public host port is configurable; the container always listens on 3033.
+      - "${WORLDFORGE_HOST_BIND:-127.0.0.1}:${WORLDFORGE_HOST_PORT:-3033}:3033"
     environment:
       # The database and uploaded images live together on the /data volume so a
       # single backup captures the whole campaign.
       DATABASE_URL: "file:/data/worldforge.db"
       WORLDFORGE_ASSET_DIR: "/data/assets"
+      PORT: "3033"
       # Must match the URL used in the browser, or writes are rejected (403).
       WORLDFORGE_ORIGIN: "${WORLDFORGE_ORIGIN:-http://localhost:3033}"
+      WORLDFORGE_TRUSTED_PROXY: "${WORLDFORGE_TRUSTED_PROXY:-0}"
     volumes:
       - worldforge-data:/data
     healthcheck:

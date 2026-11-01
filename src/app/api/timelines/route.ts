@@ -36,4 +36,4 @@ async function getHandler(req: NextRequest) {
   }
 }
 
-export const GET = withAuthor(getHandler);
+export const GET = withAuthor({ target: "world-query", field: "worldId" }, getHandler);

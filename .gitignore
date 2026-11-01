@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
 
 # next.js
 /.next/
@@ -33,6 +35,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+
+# Local Docker Compose deployment settings
+/docker-compose.override.yml
 
 # vercel
 .vercel
@@ -59,3 +64,4 @@ next-env.d.ts
 
 # Local feature implementation budget
 /docs/feature-token-budget.md
+/docs/world-anvil-reference-review.md
