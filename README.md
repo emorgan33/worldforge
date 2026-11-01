@@ -189,6 +189,7 @@ Design and feature references live in [`docs/`](docs/):
 - [Reader navigation and discovery](docs/reader-navigation-and-discovery.md)
 - [Night watch author workspace](docs/feature-requests/night-watch-author-workspace.md) · [Validation report](docs/night-watch-validation-2026-10-23.md)
 - [Backup and restore](docs/backup-restore.md)
+- [Installation administration](docs/installation-administration.md)
 - [FoundryVTT integration](docs/foundryvtt-integration.md)
 
 ## Tech stack

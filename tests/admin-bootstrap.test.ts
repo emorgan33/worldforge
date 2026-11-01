@@ -211,6 +211,33 @@ describe("auth:setup CLI", () => {
     }
   });
 
+  it("fresh-install explicit setup email is the account promoted by the bootstrap CLI", async () => {
+    const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
+    const email = "first-admin@example.com";
+    try {
+      const setup = runAuthSetup(databaseUrl, ["--create", email]);
+      assert.equal(setup.status, 0, setup.stderr);
+      assert.ok(setup.stdout.includes(`Set up or recover ${email}`));
+
+      const before = await db.user.findUniqueOrThrow({ where: { email } });
+      assert.equal(before.role, "AUTHOR");
+
+      const bootstrap = spawnSync("pnpm", ["admin:bootstrap", "--", email], {
+        cwd: process.cwd(),
+        env: { ...process.env, DATABASE_URL: databaseUrl },
+        encoding: "utf-8",
+      });
+      assert.equal(bootstrap.status, 0, bootstrap.stderr);
+      assert.ok(bootstrap.stdout.includes(`Promoted ${email} to ADMIN`));
+
+      const after = await db.user.findUniqueOrThrow({ where: { email } });
+      assert.equal(after.id, before.id);
+      assert.equal(after.role, "ADMIN");
+    } finally {
+      await cleanup();
+    }
+  });
+
   it("rejects duplicate --create with DUPLICATE_EMAIL", async () => {
     const { databaseUrl, cleanup } = await createIsolatedDatabase();
     try {

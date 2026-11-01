@@ -145,6 +145,8 @@ jobs:
         run: mkdir -p "$WORLDFORGE_ASSET_DIR"
       - run: pnpm db:deploy
       - run: pnpm build
+      - name: Install Chromium for production page authorization checks
+        run: pnpm exec playwright install --with-deps chromium
       - name: Start production server
         run: |
           pnpm exec next start --port 3132 > /tmp/next-start.log 2>&1 &

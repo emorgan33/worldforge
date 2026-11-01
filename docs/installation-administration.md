@@ -1,6 +1,6 @@
 # Installation administration
 
-The `/admin` interface is protected by server-side authorization (`requireAdmin()` in `src/lib/admin-auth.ts`) and operates only against isolated temporary storage during tests. Anonymous requests redirect to `/login`; signed-in non-administrators receive an access-denied page before any account data is exposed. All mutation APIs enforce the same authorization plus strict JSON validation (`src/lib/admin-request.ts`), endpoint-specific success validation, and transactional audit with sanitized details.
+The `/admin` interface is protected by server-side authorization (`requireAdmin()` in `src/lib/admin-auth.ts`). Anonymous and disabled callers are redirected to `/login`; signed-in non-administrators receive an access-denied page before account data is exposed. Mutation APIs enforce the same authorization plus strict JSON validation (`src/lib/admin-request.ts`), endpoint-specific success validation, and transactional audit with sanitized details. Isolated temporary storage is for rehearsal and testing only; real operations must use the installed instance's configured database and asset storage.
 
 ## Authorization and lifecycle
 
@@ -14,47 +14,61 @@ The `/admin` interface is protected by server-side authorization (`requireAdmin(
 |---|---|---|
 | 1. Admin authorization covers all callers and pages | 28 browser tests include matrix across Users, detail, and Audit; anonymous redirect, non-admin denial, disabled, revoked, and active ADMIN | `tests/browser/admin.spec.ts` (lines 43, 78, 917) |
 | 2. Lifecycle: create/recover/status/role/revoke/deletion audited and non-replayable | Transactional mutation core (`admin-accounts.ts`); audit failure fallback (`admin-audit.ts`); recovery invalidates prior links; disabled target blocked; deletion preview/checks/recompute/blockers audited | `tests/admin-accounts.test.ts`; browser coverage at lines 157, 459, 548, 582, 700 |
-| 3. Deletion preserves unrelated records and removes durable/blocking references correctly | `P2.6` service and fixtures; blocked/successful deletion browser tests; audit snapshots survive deletion | `tests/admin-accounts.test.ts`; browser at lines 548, 300 |
+| 3. Deletion preserves unrelated records and rejects accounts with blockers | `P2.6` recomputes blockers and rejects deletion; it does not remove durable records to make deletion possible | `tests/admin-accounts.test.ts`; browser at lines 548, 300 |
 | 4. Concurrent mutations are serialized; two-client last-admin race protected; stale versions rejected | `P2.1` singleton; `P2.3`/`P2.4` last-active-admin guard with barrier test; `STALE_ACCOUNT` browser test at line 582 | `tests/admin-accounts.test.ts`; browser at line 582 |
 | 5. Operator documentation and commands tested | `P4`: `tests/admin-bootstrap.test.ts`; CLI commands (`admin:bootstrap`, `admin:recover`, `auth:setup`) documented in `CONTRIBUTING.md` and `docs/feature-requests/installation-admin-panel.md` (P4 row) |
 
 ## Operator procedures
 
-Use isolated temporary storage for all operator commands. The tests and operator commands use the same isolated SQLite path and asset directory (`CONTRIBUTING.md`, lines 86–104). The public origin for the admin interface must match `WORLDFORGE_ORIGIN`.
+### Choose the correct installation
+
+- **Real installation:** run commands inside the deployed container so they use its configured `DATABASE_URL` and `WORLDFORGE_ASSET_DIR`; retain the deployed `WORLDFORGE_ORIGIN` matching the public browser URL. Do not override these values with test paths. Back up the configured database and complete asset directory before account deletion or other destructive maintenance. For Docker Compose, commands below use `docker compose exec worldforge ...` from the installation directory.
+- **Local installation:** run `pnpm` commands from the app directory with that installation's `.env` loaded and the same configured database, assets, and `WORLDFORGE_ORIGIN` as the running server.
+- **Rehearsal/tests only:** follow the isolated temporary SQLite/assets instructions in `CONTRIBUTING.md` (including `WORLD_CREATION_TEST_DATABASE_URL`). Never point a test or rehearsal command at real installation data.
 
 ### Fresh installation (no active administrator)
 
-1. Consume the initial setup link (`pnpm auth:setup` produces `/setup#token=...`). This creates the first active account with a one-time setup URL.
-2. Open the setup URL to set the password; the setup link is consumed atomically and previous links are invalidated.
-3. Only after setup consumption, run `pnpm admin:bootstrap` (or `pnpm exec tsx scripts/admin-bootstrap.ts`) with the account email. Bootstrap promotes to `ADMIN` only when no active admin exists (`LAST_ADMIN` guard) and invalidates previous credentials.
+1. Choose the administrator email and use it for both commands below. Generate its initial setup link with `docker compose exec worldforge pnpm auth:setup -- --create admin@example.com` (local: `pnpm auth:setup -- --create admin@example.com`). The explicit `--create` form creates that exact email as an active `AUTHOR`; without it, zero-argument `auth:setup` instead creates `lorekeeper@worldforge.dev` on an empty installation.
+2. Open the printed setup URL and set the password using **the same `admin@example.com` address**. The setup link is consumed atomically and previous links are invalidated.
+3. Only after setup consumption, promote that same account: `docker compose exec worldforge pnpm admin:bootstrap -- admin@example.com` (local: `pnpm admin:bootstrap -- admin@example.com`). Bootstrap promotes to `ADMIN` only when no active admin exists (`LAST_ADMIN` guard) and invalidates existing sessions and outstanding setup links.
 4. Sign in at `/login` with the new credentials; the local session cookie must be valid for `/admin/*`.
+
+Fresh-install sequence verified on isolated SQLite storage: `auth:setup -- --create admin@example.com` issued the link, consuming it with `admin@example.com` returned HTTP 200, and `admin:bootstrap -- admin@example.com` promoted that same persisted account to `ADMIN` with its password set. The regression test `tests/admin-bootstrap.test.ts` also runs both CLI commands against one isolated account and verifies the identity/role match.
+
+### Promote an existing account when no active administrator exists
+
+Confirm the target account is active and that the installation has no active `ADMIN`. Run `docker compose exec worldforge pnpm admin:bootstrap -- existing@example.com` (local: `pnpm admin:bootstrap -- existing@example.com`). The command refuses if another active administrator exists or if the target is disabled. Promotion invalidates that account's sessions, setup links, and preview capabilities; the operator must have the account consume any needed setup link before promotion, then sign in again afterward. If the target is disabled, use the disabled-account recovery procedure below first.
 
 ### Existing account recovery
 
-- Normal disabled-account recovery: `pnpm admin:recover disabled@example.com` (positional email, using `localRecoverAccount` in `admin-accounts.ts`). The target must be disabled (`ACCOUNT_DISABLED` if active); recovery clears `disabledAt`, revokes all existing sessions and preview capabilities, invalidates previous setup links, and writes a `LOCAL_RECOVERY` audit event. The user must sign in again with an existing password or receive a new setup link.
-- Disabled account: recovery is the only safe recovery path; do not use `bootstrapAdmin` on a disabled account (`ACCOUNT_DISABLED` is returned by the service at `admin-accounts.ts:601`).
-- Lost/link-expired setup: issue a new recovery link (`/admin/users/[id]` → Issue recovery link), which invalidates previous unused links (`updateMany` with `usedAt` set); if the previous link was lost, the user consumes the new link before any bootstrap attempt.
+- Active account password recovery: `docker compose exec worldforge pnpm auth:setup -- admin@example.com` (local: `pnpm auth:setup -- admin@example.com`). This issues a one-time password-setup link for the existing account; send the link privately and have the user consume it. The password change invalidates prior sessions/links. This command does not promote the account.
+- Disabled-account recovery: `docker compose exec worldforge pnpm admin:recover -- admin@example.com` (local: `pnpm admin:recover -- admin@example.com`; positional email). The target must be disabled; it clears `disabledAt`, revokes sessions and preview capabilities, invalidates outstanding setup links, and writes a `LOCAL_RECOVERY` audit event. If invoked for an already-active account it returns `INVALID_INPUT: Account is not disabled.` The user must sign in again. Do not use bootstrap on disabled accounts.
+- Lost or expired setup link: reissue using `auth:setup -- email@example.com` for an active account, or the admin panel's **Issue recovery link** action for an eligible account. A newly issued link invalidates prior unused links; send it privately and have the user consume it before any bootstrap attempt. Bootstrap invalidates outstanding setup links and sessions, so operators must consume the initial setup link first and then sign in again after bootstrap.
 
 ### Safe deletion and blockers
 
-Run `pnpm exec tsx scripts/admin-bootstrap.ts` or use the admin panel (`/admin/users/[id]` → Preview deletion blockers). Deletion is blocked (not removed) when any of the following exist (`deleteAccount` at `admin-accounts.ts:492–521`): an owned active world (`OWNS_WORLDS`); durable article revisions or foundry import history (`HAS_DURABLE_RECORDS`); pending/running/recovery/unknown import states (`HAS_DURABLE_RECORDS`). The preview computes blockers inside the transaction; the final delete rechecks them atomically. Deletion requires `confirmEmail` match, `backupAcknowledged: true`, and a matching `expectedVersion`. Before removal, all live preview sessions where the target is subject or issuer are revoked; issuer attribution is cleared with `SetNull` rather than deleting the preview content; the `ACCOUNT_DELETE` audit uses immutable scalar ID snapshots so it survives the deletion.
+1. Make and verify a backup of the installation's configured database **and** full asset directory before starting; see [Backup and restore](backup-restore.md). Do not use `admin-bootstrap` for deletion: it only promotes an account.
+2. In `/admin/users/[id]`, inspect **Preview deletion blockers**. The target must first be disabled; active accounts are not eligible. The preview and final delete both recompute blockers transactionally.
+3. Deletion is rejected (not auto-cleaned) if the account owns any world, including archived worlds (`OWNS_WORLDS`), has durable article revisions/foundry import history, or pending/running/recovery/unknown import states (`HAS_DURABLE_RECORDS`). Resolve world ownership using the application's archive/ownership/purge workflow only after deciding to retain or permanently remove that content and confirming a backup. Do not delete histories merely to bypass a blocker. Then re-preview.
+4. Confirm the account email and acknowledge the backup in the panel's delete flow. The service requires the matching `expectedVersion`, exact email, and backup acknowledgement. Before removal, live preview sessions are revoked; nullable issuer attribution is cleared without deleting preview content; the `ACCOUNT_DELETE` audit retains immutable ID snapshots.
 
 ### Release evidence and operator notes
 
-The operator documentation references `CONTRIBUTING.md` (isolated database setup and server origin) and `docs/feature-requests/installation-admin-panel.md` (P4 operator commands and P8 evidence). The browser regression suite (`tests/browser/admin.spec.ts`, 28 tests) covers keyboard focus return after confirmation, Forward navigation, mutation-after-return, non-self revoke-all conflict/network recovery, barrier-based held responses, and the full caller-state matrix. No runtime services were changed in the documentation-only P8 commit; prior service results (`test:service` 95/95 from P6) and HTTP/browser results (28/28) can be carried forward but were not rerun for this commit.
-
-Release gates not rerun for this follow-up: `pnpm test:service`, `pnpm test:http`, `pnpm test:production-auth`. Complete these before marking P8 approved.
+The full browser suite (`pnpm test:browser`) and the HTTP suite (`pnpm test:http`) are distinct gates. The targeted admin-browser result of 28/28 is historical and is not used as a substitute for the full browser gate.
 
 ## Release evidence mapping
 
-Evidence remains mapped to the five issue criteria (see Evidence mapped to issue criteria above). The operator guide connects authorization (`P5`), lifecycle (`P2`/`P3`/`P4`), deletion (`P2`/`P6`), concurrency (`P2`), and operator commands (`P4`) to concrete files and tests. Do not approve P8 until the three pending release gates have been executed against isolated temporary storage and their evidence added to this document or `docs/feature-requests/installation-admin-panel.md`.
+Evidence maps to the five issue criteria above: authorization (`P5`), lifecycle (`P2`/`P3`/`P4`), deletion (`P2`/`P6`), concurrency (`P2`), and operator commands (`P4`).
 
-Isolated checks completed on the current candidate (`d8422f9` plus `934883e` follow-up):
+Release gates passed on the candidate based at `a1134ad` plus the P8 working changes, using isolated storage under `/tmp/user/1000/opencode/p8-d3-validation` (SQLite database and assets). Commands were run serially; the dev server and all integration/browser tests used the same storage and origin (`http://127.0.0.1:3162`); production auth used the production server at `http://127.0.0.1:3163`. After adding the fresh-install CLI regression test, `pnpm test:service` was rerun against fresh isolated storage at `/tmp/user/1000/opencode/p8-fresh-service` and passed 96/96; all other gates below cover unchanged runtime/test surfaces:
 
-- `pnpm exec playwright test tests/browser/admin.spec.ts`: 28/28 passed (`tests/browser/admin.spec.ts` includes keyboard focus, Forward, full caller matrix, mutation-after-return, non-self revoke-all error/network handling, barrier-based held recovery, truncated create/revoke, deletion, pagination, accessibility, responsive layout, stale-state, and setup clearing).
+- `pnpm build`: passed.
+- `pnpm lint`: 0 errors, 16 warnings.
 - `pnpm test:unit`: 218/218 passed.
-- `pnpm lint`: 0 errors, 16 warnings (pre-existing).
-- `pnpm build`: passed (production build succeeds with Suspense-wrapped authorization).
+- `pnpm test:service`: 96/96 passed (rerun after the fresh-install regression test was added).
+- `pnpm test:http`: 111/111 passed.
+- `pnpm test:browser`: full suite, 62/62 passed (includes all 28 admin browser tests).
+- `pnpm test:production-auth`: 1/1 passed against the production build, including anonymous/non-admin/disabled/active-admin page and API checks.
 - `git diff --check`: passed.
 
-Release gates **not rerun** for this follow-up: `pnpm test:service`, `pnpm test:http`, and `pnpm test:production-auth`. Per the P8 plan (`docs/feature-requests/installation-admin-panel.md`), those must be recorded before P8 approval.
+These are validation results for the listed working candidate, not a committed release SHA. Do not claim release evidence for any later source changes unless the affected gates are rerun.
