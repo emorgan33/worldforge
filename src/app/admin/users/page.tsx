@@ -84,18 +84,7 @@ export default function AdminUsersPage() {
       setNextCursor(data.nextCursor ?? null);
     } catch {
       if (requestId !== requestSeq.current) return;
-      setError("Unable to confirm this request. The account list has been refreshed; retry if needed.");
-      try {
-        const response = await fetch("/api/admin/users");
-        const data = await response.json();
-        if (requestId !== requestSeq.current) return;
-        if (response.ok) {
-          setUsers(data.users || []);
-          setNextCursor(data.nextCursor ?? null);
-        }
-      } catch {
-        // Leave current list
-      }
+      setError("Unable to load accounts. The current list and filters are unchanged; retry if needed.");
     } finally {
       if (requestId === requestSeq.current) {
         setLoading(false);

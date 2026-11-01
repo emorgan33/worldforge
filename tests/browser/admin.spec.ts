@@ -416,6 +416,114 @@ test("account detail exposes accessible control names", async ({ page, context, 
   }
 });
 
+test("truncated successful account detail does not crash and can be retried", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = new PrismaClient();
+  const admin = await createAdminSession(db);
+  const target = await db.user.create({ data: { name: "Detail retry", email: `detail-retry-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
+  try {
+    await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+    let truncate = true;
+    await page.route(`**/api/admin/users/${target.id}`, async route => {
+      if (truncate && route.request().method() === "GET") {
+        const response = await route.fetch();
+        await route.fulfill({ response, body: "{truncated" });
+      } else await route.continue();
+    });
+    await page.goto(`/admin/users/${target.id}`);
+    await expect(page.locator('p[role="alert"]')).toContainText("Unable to load account");
+    await expect(page.getByRole("button", { name: "Retry loading account" })).toBeVisible();
+    truncate = false;
+    await page.getByRole("button", { name: "Retry loading account" }).click();
+    await expect(page.getByRole("heading", { name: target.email })).toBeVisible();
+  } finally {
+    await db.user.deleteMany({ where: { id: { in: [target.id, admin.user.id] } } });
+    await db.$disconnect();
+  }
+});
+
+test("malformed detail refresh keeps the last valid account and offers retry", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = new PrismaClient();
+  const admin = await createAdminSession(db);
+  const target = await db.user.create({ data: { name: "Detail refresh", email: `detail-refresh-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
+  try {
+    await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+    await page.goto(`/admin/users/${target.id}`);
+    await expect(page.getByRole("heading", { name: target.email })).toBeVisible();
+    let malformed = true;
+    await page.route(`**/api/admin/users/${target.id}`, async route => {
+      if (malformed && route.request().method() === "GET") {
+        const response = await route.fetch();
+        await route.fulfill({ response, body: "{}" });
+      } else await route.continue();
+    });
+    page.on("dialog", dialog => void dialog.accept());
+    await page.getByRole("combobox", { name: "Account role" }).selectOption("PLAYER");
+    await page.getByRole("button", { name: "Change role" }).click();
+    await expect(page.locator('p[role="alert"]')).toContainText("Unable to load account");
+    await expect(page.getByRole("heading", { name: target.email })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retry loading account" })).toBeVisible();
+    malformed = false;
+    await page.getByRole("button", { name: "Retry loading account" }).click();
+    await expect(page.getByRole("combobox", { name: "Account role" })).toHaveValue("PLAYER");
+    await expect(page.locator('p[role="alert"]')).toHaveCount(0);
+  } finally {
+    await db.user.deleteMany({ where: { id: { in: [target.id, admin.user.id] } } });
+    await db.$disconnect();
+  }
+});
+
+test("failed filtered pagination keeps applied results and cursor", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = new PrismaClient();
+  const admin = await createAdminSession(db);
+  const ids: string[] = [];
+  const prefix = `filtered-${randomUUID()}`;
+  try {
+    for (let index = 0; index < 26; index++) {
+      const user = await db.user.create({ data: { name: `Filtered ${index}`, email: `${prefix}-${index}@example.invalid`, role: "AUTHOR" } });
+      ids.push(user.id);
+    }
+    const unrelated = await db.user.create({ data: { name: "Unrelated account", email: `unrelated-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
+    ids.push(unrelated.id);
+    await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+    await page.goto("/admin/users");
+    await page.getByLabel("Search").fill(prefix);
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.getByRole("button", { name: "Load more" })).toBeVisible();
+    await expect(page.locator("tbody tr").first()).toContainText(prefix);
+    const originalRows = await page.locator("tbody tr").allTextContents();
+    const cursors: string[] = [];
+    let failPage = true;
+    await page.route("**/api/admin/users?**", async route => {
+      const cursor = new URL(route.request().url()).searchParams.get("cursor");
+      if (cursor) {
+        cursors.push(cursor);
+        if (failPage) return route.abort("failed");
+      }
+      await route.continue();
+    });
+    await page.getByRole("button", { name: "Load more" }).click();
+    await expect(page.locator('p[role="alert"]')).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByRole("button", { name: "Load more" })).toBeVisible();
+    expect(await page.locator("tbody tr").allTextContents()).toEqual(originalRows);
+    expect((await page.locator("tbody tr").allTextContents()).every(row => row.includes(prefix))).toBe(true);
+    await expect(page.getByRole("link", { name: unrelated.email })).toHaveCount(0);
+    await expect(page.getByLabel("Search")).toHaveValue(prefix);
+    failPage = false;
+    await page.getByRole("button", { name: "Load more" }).click();
+    await expect(page.locator("tbody tr")).toHaveCount(26);
+    expect(cursors).toHaveLength(2);
+    expect(cursors[1]).toBe(cursors[0]);
+  } finally {
+    await db.user.deleteMany({ where: { id: { in: ids } } });
+    await db.user.delete({ where: { id: admin.user.id } });
+    await db.$disconnect();
+  }
+});
+
 test("users pagination applies stable filters", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
   const db = new PrismaClient();

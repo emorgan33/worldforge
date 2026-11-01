@@ -35,6 +35,21 @@ type DeletionPreview = {
 
 type SetupLink = { url: string; expiresAt: string };
 
+function isDetail(value: unknown): value is Detail {
+  if (!value || typeof value !== "object") return false;
+  const data = value as Partial<Detail>;
+  const account = data.account;
+  return Boolean(account && typeof account.id === "string" && typeof account.email === "string" &&
+    typeof account.name === "string" && ["ADMIN", "AUTHOR", "GM", "PLAYER"].includes(account.role) &&
+    typeof account.accountVersion === "number" && typeof account.createdAt === "string" &&
+    (account.disabledAt === null || typeof account.disabledAt === "string") &&
+    (account.lastSignInAt === null || typeof account.lastSignInAt === "string") &&
+    typeof account.setupPending === "boolean" && Array.isArray(data.worlds) &&
+    data.worlds.every(world => world && typeof world.id === "string" && typeof world.title === "string" &&
+      (world.deletedAt === null || typeof world.deletedAt === "string")) &&
+    [data.membershipCount, data.grantCount, data.sessionCount, data.setupCount, data.previewCount].every(count => typeof count === "number"));
+}
+
 export default function AdminUserDetail({ id, currentUserId: initialCurrentUserId }: { id: string; currentUserId: string | null }) {
   const router = useRouter();
   const currentUserId = initialCurrentUserId;
@@ -42,6 +57,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
   const [sessions, setSessions] = useState<Sessions | null>(null);
   const [preview, setPreview] = useState<DeletionPreview | null>(null);
   const [error, setError] = useState("");
+  const [detailLoadFailed, setDetailLoadFailed] = useState(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const [busy, setBusy] = useState(false);
   const [roleDraft, setRoleDraft] = useState("");
@@ -90,21 +106,31 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
   async function loadDetail() {
     try {
       const response = await fetch(`/api/admin/users/${id}`);
-      let data: Detail & { error?: string } = {} as Detail & { error?: string };
+      let data: unknown;
       try {
         data = await response.json();
       } catch {
-        data = {} as Detail & { error?: string };
+        data = null;
       }
       if (unmounted.current) return false;
       if (!response.ok) {
-        setError(data.error || "Unable to load account.");
+        setDetailLoadFailed(true);
+        setError(data && typeof data === "object" && "error" in data && typeof data.error === "string" ? data.error : "Unable to load account.");
         return false;
       }
-      setDetail(data as Detail);
-      setRoleDraft((data as Detail).account.role);
+      if (!isDetail(data) || data.account.id !== id) {
+        setDetailLoadFailed(true);
+        setError("Unable to load account. Retry loading to confirm the current state.");
+        return false;
+      }
+      setDetail(data);
+      setRoleDraft(data.account.role);
+      setDetailLoadFailed(false);
+      setError("");
       return true;
     } catch {
+      if (unmounted.current) return false;
+      setDetailLoadFailed(true);
       setError("Unable to load account.");
       return false;
     }
@@ -227,7 +253,12 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
       <p className="text-sm text-zinc-400" id="loading-account">Loading account…</p>
     </div>
   );
-  if (error && !detail) return <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm text-red-300 focus:outline-none">{error}</p>;
+  if (error && !detail) return (
+    <div className="space-y-3">
+      <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm text-red-300 focus:outline-none">{error}</p>
+      <button type="button" onClick={() => void loadDetail().then(ok => { if (ok) void loadSessions(); })} className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-white">Retry loading account</button>
+    </div>
+  );
   if (!detail) return null;
   const account = detail.account;
   const isSelf = currentUserId === id;
@@ -241,9 +272,10 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
       </div>
 
       {error && (
-        <p ref={errorRef} tabIndex={-1} role="alert" className="rounded-lg border border-red-800 bg-red-950/30 px-4 py-3 text-sm text-red-300 focus:outline-none">
-          {error}
-        </p>
+        <div className="space-y-2">
+          <p ref={errorRef} tabIndex={-1} role="alert" className="rounded-lg border border-red-800 bg-red-950/30 px-4 py-3 text-sm text-red-300 focus:outline-none">{error}</p>
+          {detailLoadFailed && <button type="button" onClick={() => void loadDetail().then(ok => { if (ok) void loadSessions(); })} className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-white">Retry loading account</button>}
+        </div>
       )}
 
       {setupLink && (
