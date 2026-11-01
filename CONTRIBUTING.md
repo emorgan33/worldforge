@@ -157,8 +157,7 @@ pnpm test:browser # same isolated dev server and storage as test:http
 | `tests/` | Node test-runner suites |
 | `docs/` | Feature and design documentation |
 
-See `README.md` and `docs/feature-improvements.md` for the feature overview and
-current status.
+See `README.md`, `docs/feature-improvements.md`, and `docs/installation-administration.md` for the feature overview and current status.
 
 ## A note on Next.js
 
