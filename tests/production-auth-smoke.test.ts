@@ -39,20 +39,54 @@ test("production login issues a session accepted by authenticated APIs", { skip:
   const worlds = await fetch(`${origin}/api/worlds`, { headers: { Cookie: cookieHeader } });
   assert.equal(worlds.status, 200, "the production server must accept its issued session on an authenticated API");
 
-  // Admin authorization: anonymous / non-admin denied; disabled admin denied; admin accepted.
-  const adminResponse = await fetch(`${origin}/admin/users`, { redirect: "manual" });
-  assert.ok(adminResponse.status === 401 || adminResponse.status === 302 || adminResponse.status === 403, `anonymous /admin/users must be denied (status ${adminResponse.status})`);
+  // Admin authorization regression: anonymous, non-admin, disabled admin denied; active admin accepted.
+  const anonAdminResponse = await fetch(`${origin}/admin/users`, { redirect: "manual" });
+  assert.ok([401, 302, 403].includes(anonAdminResponse.status), `anonymous /admin/users must be denied (status ${anonAdminResponse.status})`);
 
-  const adminAccount = await db.user.create({
-    data: { name: "Production admin smoke", email: `production-admin-smoke-${randomUUID()}@example.invalid`, role: "ADMIN", disabledAt: new Date() },
+  const anonApiResponse = await fetch(`${origin}/api/admin/users`, { redirect: "manual" });
+  assert.equal(anonApiResponse.status, 401, `anonymous /api/admin/users must return 401 (status ${anonApiResponse.status})`);
+
+  // Non-admin (AUTHOR) session denied at /admin/users
+  const nonAdminUser = await db.user.create({ data: { name: "Production non-admin", email: `production-nonadmin-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
+  const nonAdminToken = randomBytes(32).toString("base64url");
+  await db.authSession.create({ data: { userId: nonAdminUser.id, tokenHash: createHash("sha256").update(nonAdminToken).digest("hex"), expiresAt: new Date(Date.now() + 3_600_000) } });
+  const nonAdminCookieHeader = `${SESSION_COOKIE}=${nonAdminToken}`;
+  const nonAdminResponse = await fetch(`${origin}/admin/users`, { headers: { Cookie: nonAdminCookieHeader, Origin: origin }, redirect: "manual" });
+  assert.ok([401, 302, 403].includes(nonAdminResponse.status), `non-admin /admin/users must be denied (status ${nonAdminResponse.status})`);
+  await db.authSession.deleteMany({ where: { userId: nonAdminUser.id } });
+  await deleteTestUsers(db, nonAdminUser.id);
+
+  // Disabled admin denied
+  const disabledAdminAccount = await db.user.create({
+    data: { name: "Production disabled admin", email: `production-disabled-admin-${randomUUID()}@example.invalid`, role: "ADMIN", disabledAt: new Date() },
   });
-  const adminToken = randomBytes(32).toString("base64url");
+  const disabledAdminToken = randomBytes(32).toString("base64url");
   await db.authSession.create({
-    data: { userId: adminAccount.id, tokenHash: createHash("sha256").update(adminToken).digest("hex"), expiresAt: new Date(Date.now() + 3_600_000) },
+    data: { userId: disabledAdminAccount.id, tokenHash: createHash("sha256").update(disabledAdminToken).digest("hex"), expiresAt: new Date(Date.now() + 3_600_000) },
   });
-  const adminCookieHeader = `${SESSION_COOKIE}=${adminToken}`;
-  const disabledAdminResponse = await fetch(`${origin}/admin/users`, { headers: { Cookie: adminCookieHeader, Origin: origin }, redirect: "manual" });
+  const disabledAdminCookieHeader = `${SESSION_COOKIE}=${disabledAdminToken}`;
+  const disabledAdminResponse = await fetch(`${origin}/admin/users`, { headers: { Cookie: disabledAdminCookieHeader, Origin: origin }, redirect: "manual" });
   assert.ok([401, 302, 403].includes(disabledAdminResponse.status), `disabled admin /admin/users must be denied (status ${disabledAdminResponse.status})`);
-  await db.authSession.deleteMany({ where: { userId: adminAccount.id } });
-  await deleteTestUsers(db, adminAccount.id);
+
+  const disabledAdminApiResponse = await fetch(`${origin}/api/admin/users`, { headers: { Cookie: disabledAdminCookieHeader, Origin: origin } });
+  assert.equal(disabledAdminApiResponse.status, 401, `disabled admin /api/admin/users must return 401 (status ${disabledAdminApiResponse.status})`);
+  await db.authSession.deleteMany({ where: { userId: disabledAdminAccount.id } });
+  await deleteTestUsers(db, disabledAdminAccount.id);
+
+  // Active admin accepted at /admin/users and /api/admin/users
+  const activeAdminAccount = await db.user.create({
+    data: { name: "Production active admin", email: `production-active-admin-${randomUUID()}@example.invalid`, role: "ADMIN", disabledAt: null },
+  });
+  const activeAdminToken = randomBytes(32).toString("base64url");
+  await db.authSession.create({
+    data: { userId: activeAdminAccount.id, tokenHash: createHash("sha256").update(activeAdminToken).digest("hex"), expiresAt: new Date(Date.now() + 3_600_000) },
+  });
+  const activeAdminCookieHeader = `${SESSION_COOKIE}=${activeAdminToken}`;
+  const activeAdminPageResponse = await fetch(`${origin}/admin/users`, { headers: { Cookie: activeAdminCookieHeader, Origin: origin }, redirect: "manual" });
+  assert.equal(activeAdminPageResponse.status, 200, `active admin /admin/users must return 200 (status ${activeAdminPageResponse.status})`);
+
+  const activeAdminApiResponse = await fetch(`${origin}/api/admin/users`, { headers: { Cookie: activeAdminCookieHeader, Origin: origin } });
+  assert.equal(activeAdminApiResponse.status, 200, `active admin /api/admin/users must return 200 (status ${activeAdminApiResponse.status})`);
+  await db.authSession.deleteMany({ where: { userId: activeAdminAccount.id } });
+  await deleteTestUsers(db, activeAdminAccount.id);
 });

@@ -31,7 +31,7 @@ Use isolated temporary storage for all operator commands. The tests and operator
 
 ### Existing account recovery
 
-- Normal recovery: `pnpm admin:recover --email=<email>` (uses `localRecoverAccount` in `admin-accounts.ts`). The target must be disabled; recovery clears `disabledAt`, revokes all existing sessions and preview capabilities, invalidates previous setup links, and writes an `ACCOUNT_RECOVERY` audit event. The user must sign in again with an existing password or receive a new setup link.
+- Normal disabled-account recovery: `pnpm admin:recover disabled@example.com` (positional email, using `localRecoverAccount` in `admin-accounts.ts`). The target must be disabled (`ACCOUNT_DISABLED` if active); recovery clears `disabledAt`, revokes all existing sessions and preview capabilities, invalidates previous setup links, and writes a `LOCAL_RECOVERY` audit event. The user must sign in again with an existing password or receive a new setup link.
 - Disabled account: recovery is the only safe recovery path; do not use `bootstrapAdmin` on a disabled account (`ACCOUNT_DISABLED` is returned by the service at `admin-accounts.ts:601`).
 - Lost/link-expired setup: issue a new recovery link (`/admin/users/[id]` → Issue recovery link), which invalidates previous unused links (`updateMany` with `usedAt` set); if the previous link was lost, the user consumes the new link before any bootstrap attempt.
 
@@ -57,4 +57,4 @@ Isolated checks completed on the current candidate (`d8422f9` plus `934883e` fol
 - `pnpm build`: passed (production build succeeds with Suspense-wrapped authorization).
 - `git diff --check`: passed.
 
-Release gates **not rerun** for this follow-up: `pnpm test:service`, `pnpm test:http`, and `pnpm test:production-auth`. Per `docs/feature-requests/installation-admin-panel.md`, `P7` requires those to be recorded before `P8` is considered complete. `P8` is started here with documentation and evidence mapping; do not claim full release readiness until the required service, HTTP, and production-auth gates have been rerun and recorded.
+Release gates **not rerun** for this follow-up: `pnpm test:service`, `pnpm test:http`, and `pnpm test:production-auth`. Per the P8 plan (`docs/feature-requests/installation-admin-panel.md`), those must be recorded before P8 approval.
