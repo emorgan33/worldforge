@@ -12,7 +12,11 @@ Feature guides are being adapted from the repository documentation.
 
 ## Operating WorldForge
 
-Operations guides are the next delivery slice.
+- [Backup and Restore](Backup-and-Restore)
+- [Performance and Limits](Performance-and-Limits)
+- [Security Model](Security-Model)
+- [Installation Administration](Installation-Administration)
+- [Upgrading and Releases](Upgrading-and-Releases)
 
 ## Contributing
 
@@ -20,6 +24,7 @@ Operations guides are the next delivery slice.
 
 ---
 
-Verified against commit `9050d94`.
+Start-here pages are verified against commit `9050d94`; operating pages are
+verified against commit `fdff259`.
 
 Source owner: `wiki/_Sidebar.md`.
