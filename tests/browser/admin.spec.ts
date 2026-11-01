@@ -451,6 +451,7 @@ test("malformed detail refresh keeps the last valid account and offers retry", a
     await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
     await page.goto(`/admin/users/${target.id}`);
     await expect(page.getByRole("heading", { name: target.email })).toBeVisible();
+    await page.waitForLoadState("networkidle");
     let malformed = true;
     await page.route(`**/api/admin/users/${target.id}`, async route => {
       if (malformed && route.request().method() === "GET") {
@@ -460,6 +461,7 @@ test("malformed detail refresh keeps the last valid account and offers retry", a
     });
     page.on("dialog", dialog => void dialog.accept());
     await page.getByRole("combobox", { name: "Account role" }).selectOption("PLAYER");
+    await expect(page.getByRole("button", { name: "Change role" })).toBeEnabled();
     await page.getByRole("button", { name: "Change role" }).click();
     await expect(page.locator('p[role="alert"]')).toContainText("Unable to load account");
     await expect(page.getByRole("heading", { name: target.email })).toBeVisible();
