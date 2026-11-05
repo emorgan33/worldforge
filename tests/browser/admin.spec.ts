@@ -661,19 +661,32 @@ test("blocked deletion shows blockers", async ({ page, context, baseURL }) => {
   let adminId: string | undefined;
   let targetId: string | undefined;
   let worldId: string | undefined;
+  let archivedWorldId: string | undefined;
   try {
     const admin = await createAdminSession(db);
     adminId = admin.user.id;
-    const target = await db.user.create({ data: { name: "Blocked Target", email: `blocked-target-${randomUUID()}@example.invalid`, role: "AUTHOR", disabledAt: new Date() } });
+    const target = await db.user.create({ data: { name: "Blocked Target", email: `blocked-target-${randomUUID()}@example.invalid`, role: "PLAYER", disabledAt: new Date() } });
     targetId = target.id;
     const world = await db.world.create({ data: { ownerId: target.id, title: "Blocking World", slug: `blocking-${randomUUID()}` } });
     worldId = world.id;
+    const archivedWorld = await db.world.create({ data: { ownerId: target.id, title: "Archived Blocking World", slug: `archived-blocking-${randomUUID()}`, deletedAt: new Date() } });
+    archivedWorldId = archivedWorld.id;
     await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
 
     await page.goto(`/admin/users/${target.id}`); await expect(page.locator("#loading-account")).not.toBeVisible({ timeout: 40000 });
     await page.getByRole("button", { name: "Preview deletion blockers" }).click();
     await expect(page.getByText("Allowed: No")).toBeVisible();
-    await expect(page.getByText("Blocking World", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Deletion blocked" })).toBeVisible();
+    await expect(page.getByText(/cannot currently be deleted because it owns 2 worlds/i)).toBeVisible();
+    await expect(page.getByText(/not the account role/i)).toBeVisible();
+    const previewStatus = page.locator("div[role='status']");
+    await expect(previewStatus.getByText("Blocking World", { exact: true })).toBeVisible();
+    await expect(previewStatus.getByText("Archived Blocking World", { exact: true })).toBeVisible();
+    await expect(previewStatus.getByText(/Active · /)).toBeVisible();
+    await expect(previewStatus.getByText(/Archived · /)).toBeVisible();
+    await expect(page.getByText(/re-run this preview/i)).toBeVisible();
+    await expect(page.getByText(/permanently destroys the world/i)).toBeVisible();
+    await expect(page.getByText(/never transfers or removes world content/i)).toBeVisible();
 
     // Attempt blocked deletion
     await page.getByLabel("Confirm current email").fill(target.email);
@@ -683,6 +696,7 @@ test("blocked deletion shows blockers", async ({ page, context, baseURL }) => {
     await expect(page.locator("p[role='alert']")).toContainText(/owns worlds/i);
   } finally {
     if (worldId) await db.world.delete({ where: { id: worldId } }).catch(() => undefined);
+    if (archivedWorldId) await db.world.delete({ where: { id: archivedWorldId } }).catch(() => undefined);
     if (targetId) await db.user.delete({ where: { id: targetId } }).catch(() => undefined);
     if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
     await db.$disconnect();

@@ -507,14 +507,53 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
           Preview deletion blockers
         </button>
         {preview && (
-          <div className="mt-3 space-y-2 text-sm">
+          <div className="mt-3 space-y-3 text-sm">
             <p>Allowed: {preview.allowed ? "Yes" : "No"}</p>
-            {preview.worlds.length > 0 && (
-              <p className="break-all text-red-300">Owned worlds: {preview.worlds.map((world) => `${world.title} (${world.id})`).join(", ")}</p>
+            {!preview.allowed && (
+              <div role="status" className="space-y-3 rounded-lg border border-red-800 bg-red-950/30 px-4 py-3">
+                <h4 className="font-semibold text-red-200">Deletion blocked</h4>
+                {preview.worlds.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-red-100/90">
+                      This account cannot currently be deleted because it owns{" "}
+                      {preview.worlds.length === 1 ? "1 world" : `${preview.worlds.length} worlds`}. Ownership — not the
+                      account role — is blocking deletion.
+                    </p>
+                    <ul className="space-y-1">
+                      {preview.worlds.map((world) => (
+                        <li key={world.id} className="break-all text-zinc-200">
+                          <span className="font-medium">{world.title}</span>{" "}
+                          <span className="text-zinc-400">· {world.deletedAt ? "Archived" : "Active"} · {world.id}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-zinc-300">
+                      Next steps: back up or export these worlds as appropriate, then resolve ownership using the
+                      archive/purge workflow — archive each world you intend to permanently remove, then purge it —
+                      and re-run this preview. Purging permanently destroys the world and its content; deleting the
+                      account never transfers or removes world content.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-red-100/90">
+                    {isSelf && preview.disabled
+                      ? "You cannot delete your own account."
+                      : "This account cannot currently be deleted."}
+                  </p>
+                )}
+                {!preview.disabled && (
+                  <p className="text-zinc-300">The account must also be disabled before it can be deleted.</p>
+                )}
+                {(preview.revisionIds.length > 0 || preview.foundryImportIds.length > 0 || preview.pendingImportIds.length > 0) && (
+                  <div className="space-y-1">
+                    <p className="font-medium text-red-100/90">Other records blocking deletion:</p>
+                    {preview.revisionIds.length > 0 && <p className="break-all text-red-300">Revisions: {preview.revisionIds.join(", ")}</p>}
+                    {preview.foundryImportIds.length > 0 && <p className="break-all text-red-300">Foundry imports: {preview.foundryImportIds.join(", ")}</p>}
+                    {preview.pendingImportIds.length > 0 && <p className="break-all text-red-300">Pending imports: {preview.pendingImportIds.join(", ")}</p>}
+                  </div>
+                )}
+              </div>
             )}
-            {preview.revisionIds.length > 0 && <p className="break-all text-red-300">Revisions: {preview.revisionIds.join(", ")}</p>}
-            {preview.foundryImportIds.length > 0 && <p className="break-all text-red-300">Foundry imports: {preview.foundryImportIds.join(", ")}</p>}
-            {preview.pendingImportIds.length > 0 && <p className="break-all text-red-300">Pending imports: {preview.pendingImportIds.join(", ")}</p>}
           </div>
         )}
         <form
