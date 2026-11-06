@@ -20,6 +20,8 @@ for (const [description, eventName, action, prerelease, expected] of [
   ["stable promotion runs", "release", "released", false, true],
   ["prerelease does not run released", "release", "released", true, false],
   ["packaging pull requests build without publication", "pull_request", "opened", false, true],
+  ["scheduled builds scan without publication", "schedule", "", false, true],
+  ["manual builds scan without publication", "workflow_dispatch", "", false, true],
 ] as const) {
   test(description, () => {
     const github = { event_name: eventName, event: { action, release: { prerelease } } };

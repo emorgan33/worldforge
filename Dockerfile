@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22-bookworm-slim AS base
+FROM node:22-trixie-slim AS base
 ENV PNPM_HOME="/pnpm" \
     COREPACK_HOME="/pnpm/corepack" \
     PATH="/pnpm:$PATH" \
@@ -8,7 +8,7 @@ ENV PNPM_HOME="/pnpm" \
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends openssl ca-certificates sqlite3 \
     && rm -rf /var/lib/apt/lists/*
-RUN corepack enable && corepack prepare pnpm@10.14.0 --activate
+RUN corepack enable && corepack prepare pnpm@10.34.9 --activate
 WORKDIR /app
 
 # Install dependencies without lifecycle scripts; Prisma and native builds are
@@ -25,6 +25,10 @@ FROM base AS runner
 ENV NODE_ENV="production" \
     PORT="3033" \
     WORLDFORGE_ASSET_DIR="/data/assets"
+# Operations use pnpm, Prisma and tsx. The separate npm/npx installation is
+# unused at runtime and brings its own independently vulnerable dependency tree.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
