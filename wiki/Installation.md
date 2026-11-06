@@ -9,7 +9,47 @@ persistent storage for its SQLite database and uploaded assets.
 - Docker Engine with the Compose plugin
 - A reverse proxy and TLS certificate for a public deployment
 
+## Install a published image (no Git checkout)
+
+The image repository is `emorgan33/worldforge` (initially **linux/amd64**).
+Choose a version and digest from a GitHub release whose **Release Docker image**
+workflow succeeded; older releases may not have published images. Do not treat
+this workflow's addition as evidence that an image has already been published.
+
+Download `docker-compose.release.yml` from the repository as `compose.yml` into
+a new directory. Create `.env` alongside it with:
+
+```dotenv
+WORLDFORGE_IMAGE=emorgan33/worldforge:VERSION
+WORLDFORGE_ORIGIN=http://localhost:3033
+WORLDFORGE_TRUSTED_PROXY=0
+```
+
+Replace `VERSION` with a published version (without `v`), then run:
+
+```bash
+docker compose pull
+docker compose up -d --wait
+docker compose exec worldforge pnpm auth:setup
+```
+
+Open `http://localhost:3033/login`. The same storage, HTTPS proxy, and backup
+requirements below apply. Pin a version or the release's digest, not `latest`.
+To upgrade, first stop and back up the database and assets together, change the
+image in `.env`, pull, and start again with `up -d --wait`. Never remove the
+data volume. A rollback may require restoring the matching backup.
+
+For an existing deployment, preserve the Compose project name, named volume,
+and proxy network configuration. An explicit `-f docker-compose.release.yml`
+does not automatically load your existing proxy override; include it with a
+second `-f` option. The source-build path below remains available.
+
+See the repository [deployment guide](https://github.com/emorgan33/worldforge/blob/main/docs/deployment-configuration.md)
+for release-publishing setup and the complete pull-and-run commands.
+
 ## Local installation
+
+This path builds locally and requires Git; the published-image path above does not.
 
 ```bash
 git clone https://github.com/emorgan33/worldforge.git
@@ -98,4 +138,6 @@ See [Configuration](Configuration) for the complete setting reference and
 
 **Source owner:** `wiki/Installation.md`; adapted from `README.md` and
 `docs/deployment-configuration.md`.
-**Verified against:** WorldForge commit `9050d94` (October 31, 2026).
+**Verified against:** WorldForge commit `4ab66c1` (November 6, 2026), plus the
+issue #24 packaging changes (local fresh-volume build/health/login smoke test).
+Docker Hub pull verification remains pending the first published release.

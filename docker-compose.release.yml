@@ -1,0 +1,27 @@
+services:
+  worldforge:
+    image: ${WORLDFORGE_IMAGE:?Set WORLDFORGE_IMAGE to a published version or digest}
+    restart: unless-stopped
+    ports:
+      - "${WORLDFORGE_HOST_BIND:-127.0.0.1}:${WORLDFORGE_HOST_PORT:-3033}:3033"
+    environment:
+      DATABASE_URL: "file:/data/worldforge.db"
+      WORLDFORGE_ASSET_DIR: "/data/assets"
+      PORT: "3033"
+      WORLDFORGE_ORIGIN: "${WORLDFORGE_ORIGIN:?Set the canonical browser origin}"
+      WORLDFORGE_TRUSTED_PROXY: "${WORLDFORGE_TRUSTED_PROXY:-0}"
+    volumes:
+      - worldforge-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3033/login').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  worldforge-data:
