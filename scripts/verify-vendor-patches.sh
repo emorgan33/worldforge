@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Verify vendor backport evidence from the exact image being scanned. A package
-# version is never enough: the installed changelog must name the CVE, and
-# absence claims must hold inside the image.
+# version is never enough: the installed changelog must name the CVE, sibling
+# packages must share the patched source version, and absence claims must hold.
 image="${1:?Usage: bash scripts/verify-vendor-patches.sh IMAGE OUTPUT.json}"
 output="${2:?An output path is required}"
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -14,51 +14,40 @@ encoded=$(base64 -w0 "$manifest")
 docker run --rm --entrypoint sh "$image" -c '
 set -eu
 printf %s "$1" | base64 -d > /tmp/vendor-security-patches.json
-node --input-type=module - /tmp/vendor-security-patches.json <<'\''NODE'\''
+node --input-type=module - <<'\''NODE'\''
 import { readFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { evaluateVendorEvidence } from "/app/scripts/vendor-patch-policy.mjs";
 
-const manifest = JSON.parse(readFileSync(process.argv[2], "utf8"));
-const verified = [];
-const failures = [];
-const dpkgVersion = (name) => execFileSync("dpkg-query", ["-W", "-f=${Version}", name], { encoding: "utf8" }).trim();
-const changelog = (name) => {
-  const path = `/usr/share/doc/${name}/changelog.Debian.gz`;
-  if (!existsSync(path)) throw new Error(`Missing changelog for ${name}`);
-  return execFileSync("zcat", [path], { encoding: "utf8" }).replace(/\s+/g, "");
-};
-
-for (const entry of manifest.packages) {
-  const text = changelog(entry.evidencePackage);
-  for (const cve of entry.cves) {
-    if (!text.includes(cve)) {
-      failures.push(`${entry.evidencePackage} changelog does not name ${cve}`);
-      continue;
-    }
-    for (const name of entry.packages) {
-      verified.push({ cve, package: name, version: dpkgVersion(name), reason: "vendor-backport", evidence: entry.evidence });
-    }
-  }
-}
-for (const entry of manifest.absentComponents) {
-  for (const file of entry.files ?? []) {
-    if (existsSync(file)) failures.push(`Expected absent file exists: ${file}`);
-  }
-  for (const module of entry.perlModules ?? []) {
+const manifest = JSON.parse(readFileSync("/tmp/vendor-security-patches.json", "utf8"));
+const env = {
+  dpkgVersion(name) {
+    return execFileSync("dpkg-query", ["-W", "-f=${Version}", name], { encoding: "utf8" }).trim();
+  },
+  changelog(name) {
+    const path = `/usr/share/doc/${name}/changelog.Debian.gz`;
+    if (!existsSync(path)) throw new Error(`Missing changelog for ${name}`);
+    return execFileSync("zcat", [path], { encoding: "utf8" });
+  },
+  exists: existsSync,
+  perlLoad(module) {
     try {
-      execFileSync("perl", ["-M" + module, "-e", "1"], { stdio: "ignore" });
-      failures.push(`Expected absent Perl module loads: ${module}`);
-    } catch {}
-  }
-  for (const name of entry.packages) {
-    verified.push({ cve: entry.cve, package: name, version: dpkgVersion(name), reason: "component-absent", evidence: entry.evidence });
-  }
-}
-if (failures.length) {
-  console.error(failures.join("\n"));
+      execFileSync("perl", ["-M" + module, "-e", "1"], { stdio: "pipe" });
+      return "loaded";
+    } catch (error) {
+      const stderr = String(error.stderr ?? "");
+      const modulePath = module.replaceAll("::", "/") + ".pm";
+      if (error.status === 2 && stderr.includes("locate " + modulePath)) return "missing";
+      return `error loading ${module}`;
+    }
+  },
+};
+const result = evaluateVendorEvidence(manifest, env);
+if (result.failures.length) {
+  console.error(result.failures.join("\n"));
   process.exit(1);
 }
-console.log(JSON.stringify({ verified }, null, 2));
+console.log(JSON.stringify({ verified: result.verified }, null, 2));
 NODE
 ' sh "$encoded" > "$output"
 

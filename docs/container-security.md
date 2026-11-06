@@ -54,16 +54,17 @@ Install Trivy `0.76.2` (pinned in CI), then run:
 
 ```bash
 docker build --pull -t worldforge-security:test .
-bash scripts/scan-image.sh worldforge-security:test /tmp/worldforge-image-security.json
+bash scripts/verify-vendor-patches.sh worldforge-security:test /tmp/worldforge-vendor-evidence.json
+bash scripts/scan-image.sh worldforge-security:test /tmp/worldforge-image-security.json /tmp/worldforge-vendor-evidence.json
 bash scripts/smoke-release-image.sh worldforge-security:test
 ```
 
 The scanner uses the local Docker daemon and downloads advisory metadata. Set
 `TRIVY_BIN` to an explicit path if needed. JSON retains all severities even
-when the policy check exits nonzero. Re-evaluate an existing report with:
+when the policy check exits nonzero. Re-evaluate existing reports with:
 
 ```bash
-node scripts/check-image-vulnerabilities.mjs /tmp/worldforge-image-security.json
+node scripts/check-image-vulnerabilities.mjs /tmp/worldforge-image-security.json /tmp/worldforge-vendor-evidence.json
 ```
 
 For remaining findings, identify the package/version/path, review distribution

@@ -12,6 +12,7 @@ on:
       - scripts/check-image-vulnerabilities.mjs
       - scripts/verify-vendor-patches.sh
       - scripts/vendor-security-patches.json
+      - scripts/vendor-patch-policy.mjs
       - tests/image-security.test.ts
       - package.json
       - pnpm-lock.yaml
