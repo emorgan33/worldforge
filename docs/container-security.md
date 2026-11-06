@@ -131,9 +131,10 @@ packages; do not mix Debian unstable binaries into the stable image blindly.
 | systemd | CVE-2026-16742 concerns systemd-homed; fixes exist in 258.10/259.8/260.4/261.2/262. Candidate has system libraries but no systemd-homed executable. | The described homed attack path is absent in this image. Keep the source-package finding visible; do not install homed without re-evaluation. |
 | Perl | CVE-2026-9538 is fixed in Archive::Tar 3.10. `perl-base` is present, but loading Archive::Tar fails and no `Archive/Tar.pm` is installed. | The described module attack path is absent. Keep the source-package finding visible; adding the module would require review. |
 
-The container is non-root, but mount/umount retain their distribution SUID bits;
-the observed `/etc/fstab` has no active entries. Those facts limit some attack
-preconditions, not proof that the whole util-linux source package is safe.
+Pre-remediation, the container was non-root but mount/umount retained their
+distribution SUID bits and `/etc/fstab` had no active entries. The current image
+drops that setuid bit. Those facts limit some attack preconditions, not proof
+that the whole util-linux source package is safe.
 No exploit payloads were executed and no CVEs were suppressed for this review.
 
 ### Prisma's SQLite is a separate concern
