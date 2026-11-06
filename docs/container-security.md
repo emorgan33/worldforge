@@ -195,6 +195,16 @@ Result with the vendor layer: **13 of the 51 high matches are evidence-resolved,
 across 4 CVEs), ACL (1), and zlib CVE-2026-76844 (1). Docker does not publish
 those fixes yet. They stay unresolved; no exception was added.
 
+Runtime exposure reduction for the unresolved util-linux set: the image
+removes setuid from `mount` and `umount`. WorldForge does not mount filesystems;
+Docker performs mounts before startup. `nsenter` is not setuid and the described
+issue requires a privileged operator to invoke it against an attacker-controlled
+target. These are mitigations, **not patches**, so the scanner findings remain.
+The ACL pathname issue requires a privileged caller processing an attacker path;
+WorldForge runs unprivileged and does not use those libacl path APIs. zlib
+CVE-2026-76844 concerns the system gz write path; Node uses its own bundled zlib.
+Those applicability observations do not certify the packages safe.
+
 Trivy continues to flag the backported packages because its Debian matcher uses
 the distribution tracker, which does not record vendor changelogs. That is why
 the gate evaluates explicit evidence instead of silently ignoring CVEs.

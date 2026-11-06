@@ -22,6 +22,7 @@ RUN printf '%s\n' \
     && apt-get update -y \
     && apt-get install -y --no-install-recommends \
       sqlite3 libsqlite3-0 ncurses-bin libtinfo6 zlib1g \
+    && chmod u-s /usr/bin/mount /usr/bin/umount \
     && apt-get purge -y --auto-remove curl gnupg \
     && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@10.34.9 --activate
