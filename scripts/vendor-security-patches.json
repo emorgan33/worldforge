@@ -1,0 +1,37 @@
+{
+  "packages": [
+    {
+      "evidencePackage": "sqlite3",
+      "packages": ["sqlite3", "libsqlite3-0"],
+      "cves": ["CVE-2026-119373", "CVE-2026-119374", "CVE-2026-119379"],
+      "evidence": "https://dhi.io/deb/debian/main/pool/trixie/main/s/sq/sqlite3_3.46.1-7+deb13u2+dhi3/sqlite3_3.46.1-7+deb13u2+dhi3_amd64.slsa-provenance-v1.json"
+    },
+    {
+      "evidencePackage": "ncurses-bin",
+      "packages": ["ncurses-bin", "ncurses-base", "libtinfo6"],
+      "cves": ["CVE-2025-69720"],
+      "evidence": "https://dhi.io/deb/debian/main/pool/trixie/main/n/nc/ncurses-bin_6.5+20250216-2+deb13u0+dhi5/ncurses-bin_6.5+20250216-2+deb13u0+dhi5_amd64.slsa-provenance-v1.json"
+    },
+    {
+      "evidencePackage": "zlib1g",
+      "packages": ["zlib1g"],
+      "cves": ["CVE-2026-85091"],
+      "evidence": "https://dhi.io/deb/debian/main/pool/trixie/main/z/zl/zlib1g_1:1.3.dfsg+really1.3.1-1+deb13u0+dhi4/zlib1g_1.3.dfsg+really1.3.1-1+deb13u0+dhi4_amd64.slsa-provenance-v1.json"
+    }
+  ],
+  "absentComponents": [
+    {
+      "cve": "CVE-2026-16742",
+      "packages": ["libsystemd0", "libudev1"],
+      "files": ["/usr/lib/systemd/systemd-homed", "/usr/lib/systemd/systemd-homework", "/usr/bin/homectl"],
+      "evidence": "systemd-homed is not installed; only libsystemd0/libudev1 are present."
+    },
+    {
+      "cve": "CVE-2026-9538",
+      "packages": ["perl-base"],
+      "perlModules": ["Archive::Tar"],
+      "files": ["/usr/share/perl5/Archive/Tar.pm", "/usr/lib/x86_64-linux-gnu/perl5/5.40/Archive/Tar.pm"],
+      "evidence": "Archive::Tar is not installed; perl -MArchive::Tar fails."
+    }
+  ]
+}

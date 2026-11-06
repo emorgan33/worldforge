@@ -5,8 +5,24 @@ ENV PNPM_HOME="/pnpm" \
     COREPACK_HOME="/pnpm/corepack" \
     PATH="/pnpm:$PATH" \
     CI="true"
-RUN apt-get update -y \
-    && apt-get install -y --no-install-recommends openssl ca-certificates sqlite3 \
+# Install the individually reviewed Docker hardened backports for CVEs that
+# Debian 13 has not yet published. Do not upgrade unrelated packages. The slim
+# base excludes docs; re-include only the changelogs used as patch evidence.
+RUN printf '%s\n' \
+      'path-include /usr/share/doc/sqlite3/changelog.Debian.gz' \
+      'path-include /usr/share/doc/ncurses-bin/changelog.Debian.gz' \
+      'path-include /usr/share/doc/zlib1g/changelog.Debian.gz' \
+      > /etc/dpkg/dpkg.cfg.d/worldforge-vendor-evidence \
+    && apt-get update -y \
+    && apt-get install -y --no-install-recommends openssl ca-certificates curl gnupg \
+    && curl -fsSL https://dhi.io/keyring/dhi-deb-gpg.D46852F6925E9F71.key \
+      | gpg --dearmor -o /usr/share/keyrings/dhi-deb.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/dhi-deb.gpg] https://dhi.io/deb/debian/main trixie main" \
+      > /etc/apt/sources.list.d/dhi.list \
+    && apt-get update -y \
+    && apt-get install -y --no-install-recommends \
+      sqlite3 libsqlite3-0 ncurses-bin libtinfo6 zlib1g \
+    && apt-get purge -y --auto-remove curl gnupg \
     && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@10.34.9 --activate
 WORKDIR /app

@@ -166,3 +166,41 @@ Sources (each tracker entry links its upstream patches):
   [ncurses](https://security-tracker.debian.org/tracker/CVE-2025-69720),
   [systemd](https://security-tracker.debian.org/tracker/CVE-2026-16742),
   [Perl](https://security-tracker.debian.org/tracker/CVE-2026-9538)
+
+## Verified vendor backports (post-0.4.2 candidate)
+
+Docker's public Debian 13 hardened repository supplies packages whose
+`changelog.Debian.gz` explicitly names the required fixes. The image installs
+only the reviewed packages; it does not upgrade unrelated packages from that
+repository.
+
+| Package | Installed version | Verified fixes |
+| --- | --- | --- |
+| `sqlite3`, `libsqlite3-0` | `3.46.1-7+deb13u2+dhi3` | CVE-2026-119373, -119374, -119379 |
+| `ncurses-bin`, `ncurses-base`, `libtinfo6` | `6.5+20250216-2+deb13u0+dhi5` | CVE-2025-69720 |
+| `zlib1g` | `1:1.3.dfsg+really1.3.1-1+deb13u0+dhi4` | CVE-2026-85091 |
+
+`systemd-homed` and Perl `Archive::Tar` are absent; CI verifies that absence from
+the built image. Vendor settlements are **not** a version-number allowlist:
+`scripts/verify-vendor-patches.sh` extracts the installed changelog, requires
+the exact CVE text, records the actual package version, and fails closed when
+evidence is missing. `scripts/check-image-vulnerabilities.mjs` applies a
+disposition only when CVE, package name, and installed version all match. The
+full JSON report still shows every finding; the policy output separates
+`vendorResolvedHighCritical` from `unresolvedHighCritical`.
+
+Result with the vendor layer: **13 of the 51 high matches are evidence-resolved,
+38 remain unresolved.** The remaining set is util-linux (36 package matches
+across 4 CVEs), ACL (1), and zlib CVE-2026-76844 (1). Docker does not publish
+those fixes yet. They stay unresolved; no exception was added.
+
+Trivy continues to flag the backported packages because its Debian matcher uses
+the distribution tracker, which does not record vendor changelogs. That is why
+the gate evaluates explicit evidence instead of silently ignoring CVEs.
+
+### Prisma's embedded SQLite
+
+The package layer above patches the SQLite CLI and `libsqlite3-0`. It does not
+patch Prisma's static engine. Prisma sqlite version evidence and options must be
+checked separately. Do not treat the OS package settlement as resolving the
+embedded engine; that work remains a separate prototype.
