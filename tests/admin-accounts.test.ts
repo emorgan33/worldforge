@@ -14,6 +14,9 @@ import {
   revokeAllTargetSessions,
   deletionPreview,
   deleteAccount,
+  listWorldTransferTargets,
+  transferOwnedWorld,
+  purgeOwnedWorld,
   type AdminMutateContext,
   type AdminMutationOptions,
 } from "../src/lib/admin-accounts";
@@ -1384,6 +1387,243 @@ describe("admin account deletion", () => {
       assert.equal(after.value.accountVersion, version);
       assert.deepEqual(after.value.worlds.map(({ id }) => id), [created.id]);
     } finally { await db2.$disconnect(); await cleanup(); }
+  });
+});
+
+describe("admin world remediation", () => {
+  it("transfers owned worlds with their content and access records, then permits account deletion", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor, user: admin } = await createAdminActor(db);
+      const target = await createTargetUser(db, { role: "PLAYER", disabled: true });
+      const recipient = await createTargetUser(db, { role: "AUTHOR" });
+      const disabledRecipient = await createTargetUser(db, { role: "GM", disabled: true });
+      const playerRecipient = await createTargetUser(db, { role: "PLAYER" });
+      const unrelatedOwner = await createTargetUser(db);
+      const unrelatedWorld = await db.world.create({
+        data: { ownerId: unrelatedOwner.id, title: "Unrelated", slug: `remediate-unrelated-${randomUUID()}`, isPublic: true },
+      });
+      const activeWorld = await db.world.create({
+        data: { ownerId: target.id, title: "Active transfer", slug: `remediate-active-${randomUUID()}`, isPublic: true },
+      });
+      const archivedWorld = await db.world.create({
+        data: { ownerId: target.id, title: "Archived transfer", slug: `remediate-archived-${randomUUID()}`, deletedAt: new Date() },
+      });
+      const category = await db.category.create({ data: { worldId: activeWorld.id, name: "Places" } });
+      const article = await db.article.create({
+        data: { worldId: activeWorld.id, categoryId: category.id, title: "Harbor", slug: `harbor-${randomUUID()}` },
+      });
+      const member = await db.worldMember.create({ data: { worldId: activeWorld.id, userId: target.id } });
+      const policy = await db.audiencePolicy.create({
+        data: { worldId: activeWorld.id, resourceKind: "ARTICLE", resourceId: article.id, mode: "PUBLIC", createdById: target.id },
+      });
+      const grant = await db.audienceGrant.create({ data: { policyId: policy.id, userId: target.id, grantedById: admin.id } });
+
+      const candidates = await listWorldTransferTargets(db, actor, target.id);
+      assert.ok(candidates.ok);
+      assert.deepEqual(candidates.value.map(({ id }) => id).sort(), [recipient.id, unrelatedOwner.id, admin.id].sort());
+      assert.equal(candidates.value.some(({ id }) => id === disabledRecipient.id || id === playerRecipient.id || id === target.id), false);
+      assert.ok(candidates.value.every(({ role }) => role === "ADMIN" || role === "AUTHOR" || role === "GM"));
+      assert.ok(!JSON.stringify(candidates.value).includes("passwordHash"));
+      assert.ok(!JSON.stringify(candidates.value).includes("tokenHash"));
+
+      const before = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      const first = await transferOwnedWorld(db, actor, { userId: target.id, expectedVersion: before.accountVersion }, activeWorld.id, { recipientId: recipient.id });
+      assert.equal(first.ok, true);
+      const afterFirst = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      assert.equal(afterFirst.accountVersion, before.accountVersion + 1);
+      const second = await transferOwnedWorld(db, actor, { userId: target.id, expectedVersion: afterFirst.accountVersion }, archivedWorld.id, { recipientId: recipient.id });
+      assert.equal(second.ok, true);
+
+      const movedActive = await db.world.findUniqueOrThrow({ where: { id: activeWorld.id } });
+      assert.equal(movedActive.ownerId, recipient.id);
+      assert.equal(movedActive.isPublic, true);
+      assert.equal(movedActive.title, activeWorld.title);
+      const movedArchived = await db.world.findUniqueOrThrow({ where: { id: archivedWorld.id } });
+      assert.equal(movedArchived.ownerId, recipient.id);
+      assert.ok(movedArchived.deletedAt);
+      assert.deepEqual(await db.article.findUniqueOrThrow({ where: { id: article.id } }), article);
+      assert.deepEqual(await db.category.findUniqueOrThrow({ where: { id: category.id } }), category);
+      assert.deepEqual(await db.worldMember.findUniqueOrThrow({ where: { id: member.id } }), member);
+      assert.deepEqual(await db.audiencePolicy.findUniqueOrThrow({ where: { id: policy.id } }), policy);
+      assert.deepEqual(await db.audienceGrant.findUniqueOrThrow({ where: { id: grant.id } }), grant);
+
+      const audits = await db.installationAuditEvent.findMany({
+        where: { targetIdSnapshot: target.id, action: "WORLD_TRANSFER" },
+        orderBy: { createdAt: "asc" },
+      });
+      assert.equal(audits.length, 2);
+      assert.ok(audits.every((audit) => audit.outcome === "SUCCESS"));
+      const firstDetails = JSON.parse(audits[0].detailsJson);
+      assert.equal(firstDetails.worldId, activeWorld.id);
+      assert.equal(firstDetails.worldTitle, activeWorld.title);
+      assert.equal(firstDetails.recipientId, recipient.id);
+      assert.equal(firstDetails.previousVersion, before.accountVersion);
+      assert.equal(firstDetails.targetVersion, before.accountVersion + 1);
+
+      const preview = await deletionPreview(db, actor, target.id);
+      assert.ok(preview.ok);
+      assert.equal(preview.value.allowed, true);
+      assert.equal(preview.value.worlds.length, 0);
+      const current = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      const deleted = await deleteAccount(db, actor, { userId: target.id, expectedVersion: current.accountVersion }, { confirmEmail: target.email, backupAcknowledged: true });
+      assert.equal(deleted.ok, true);
+      assert.equal(await db.user.findUnique({ where: { id: target.id } }), null);
+      assert.equal((await db.world.findUniqueOrThrow({ where: { id: activeWorld.id } })).ownerId, recipient.id);
+      assert.deepEqual(await db.world.findUniqueOrThrow({ where: { id: unrelatedWorld.id } }), unrelatedWorld);
+      assert.equal(await db.article.count({ where: { id: article.id } }), 1);
+      assert.ok(await db.installationAuditEvent.findFirst({ where: { targetIdSnapshot: target.id, action: "ACCOUNT_DELETE", outcome: "SUCCESS" } }));
+
+      await db.world.deleteMany({ where: { ownerId: recipient.id } });
+      await db.world.deleteMany({ where: { ownerId: unrelatedOwner.id } });
+    } finally { await cleanup(); }
+  });
+
+  it("purges only archived worlds after exact title and backup confirmation and audits the removal", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const target = await createTargetUser(db, { role: "GM", disabled: true });
+      const recipient = await createTargetUser(db, { role: "AUTHOR" });
+      const other = await createTargetUser(db);
+      const activeWorld = await db.world.create({ data: { ownerId: target.id, title: "Active purge", slug: `purge-active-${randomUUID()}` } });
+      const archivedWorld = await db.world.create({ data: { ownerId: target.id, title: "Archived purge", slug: `purge-archived-${randomUUID()}`, deletedAt: new Date() } });
+      const article = await db.article.create({ data: { worldId: archivedWorld.id, title: "Old page", slug: `old-page-${randomUUID()}` } });
+      const asset = await db.imageAsset.create({
+        data: {
+          worldId: archivedWorld.id,
+          title: "Old image",
+          originalName: "old.webp",
+          mimeType: "image/webp",
+          byteSize: 4,
+          width: 1,
+          height: 1,
+          sha256: randomBytes(32).toString("hex"),
+        },
+      });
+      const otherWorld = await db.world.create({ data: { ownerId: other.id, title: "Other owner", slug: `purge-other-${randomUUID()}` } });
+
+      const version = (await db.user.findUniqueOrThrow({ where: { id: target.id } })).accountVersion;
+      const activeAttempt = await purgeOwnedWorld(db, actor, { userId: target.id, expectedVersion: version }, activeWorld.id, { confirmWorldTitle: activeWorld.title, backupAcknowledged: true });
+      assert.ok(!activeAttempt.ok);
+      assert.equal(activeAttempt.error.code, "INVALID_INPUT");
+      const wrongTitle = await purgeOwnedWorld(db, actor, { userId: target.id, expectedVersion: version }, archivedWorld.id, { confirmWorldTitle: "Wrong", backupAcknowledged: true });
+      assert.ok(!wrongTitle.ok);
+      assert.equal(wrongTitle.error.code, "INVALID_INPUT");
+      const noBackup = await purgeOwnedWorld(db, actor, { userId: target.id, expectedVersion: version }, archivedWorld.id, { confirmWorldTitle: archivedWorld.title, backupAcknowledged: false });
+      assert.ok(!noBackup.ok);
+      assert.equal(noBackup.error.code, "INVALID_INPUT");
+      assert.ok(await db.world.findUnique({ where: { id: archivedWorld.id } }));
+
+      const purged = await purgeOwnedWorld(db, actor, { userId: target.id, expectedVersion: version }, archivedWorld.id, { confirmWorldTitle: archivedWorld.title, backupAcknowledged: true });
+      assert.equal(purged.ok, true);
+      assert.equal(await db.world.findUnique({ where: { id: archivedWorld.id } }), null);
+      assert.equal(await db.article.findUnique({ where: { id: article.id } }), null);
+      assert.equal(await db.imageAsset.findUnique({ where: { id: asset.id } }), null);
+      const cleanupJob = await db.assetCleanupJob.findUnique({ where: { assetId: asset.id } });
+      assert.ok(cleanupJob);
+      assert.deepEqual(await db.world.findUniqueOrThrow({ where: { id: otherWorld.id } }), otherWorld);
+      const audit = await db.installationAuditEvent.findFirstOrThrow({ where: { targetIdSnapshot: target.id, action: "WORLD_PURGE", outcome: "SUCCESS" } });
+      const purgeDetails = JSON.parse(audit.detailsJson);
+      assert.equal(purgeDetails.worldId, archivedWorld.id);
+      assert.equal(purgeDetails.worldTitle, archivedWorld.title);
+      assert.equal(purgeDetails.assetCount, 1);
+
+      const afterPurge = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      const transfer = await transferOwnedWorld(db, actor, { userId: target.id, expectedVersion: afterPurge.accountVersion }, activeWorld.id, { recipientId: recipient.id });
+      assert.equal(transfer.ok, true);
+      const current = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+      const deleted = await deleteAccount(db, actor, { userId: target.id, expectedVersion: current.accountVersion }, { confirmEmail: target.email, backupAcknowledged: true });
+      assert.equal(deleted.ok, true);
+
+      await db.world.deleteMany({ where: { ownerId: recipient.id } });
+      await db.world.deleteMany({ where: { ownerId: other.id } });
+      await db.assetCleanupJob.deleteMany({ where: { assetId: asset.id } });
+    } finally { await cleanup(); }
+  });
+
+  it("rejects unauthorized, ineligible, mismatched, stale, and foreign remediation without changing worlds", async () => {
+    const { db, cleanup } = await createIsolatedDatabase();
+    try {
+      const { actor } = await createAdminActor(db);
+      const nonAdmin = await createAdminActor(db, { role: "AUTHOR" });
+      const revoked = await createAdminActor(db);
+      await db.authSession.delete({ where: { id: revoked.sessionId } });
+      const target = await createTargetUser(db, { role: "AUTHOR", disabled: true });
+      const recipient = await createTargetUser(db, { role: "AUTHOR" });
+      const disabledRecipient = await createTargetUser(db, { role: "GM", disabled: true });
+      const playerRecipient = await createTargetUser(db, { role: "PLAYER" });
+      const foreign = await createTargetUser(db);
+      const world = await db.world.create({ data: { ownerId: target.id, title: "Guarded", slug: `guarded-${randomUUID()}` } });
+      const archived = await db.world.create({ data: { ownerId: target.id, title: "Guarded archive", slug: `guarded-archive-${randomUUID()}`, deletedAt: new Date() } });
+      const foreignWorld = await db.world.create({ data: { ownerId: foreign.id, title: "Foreign", slug: `foreign-${randomUUID()}` } });
+      const before = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+
+      const unauthorized = await transferOwnedWorld(db, revoked.actor, { userId: target.id }, world.id, { recipientId: recipient.id });
+      assert.ok(!unauthorized.ok);
+      assert.equal(unauthorized.error.code, "UNAUTHORIZED");
+      const nonAdminAttempt = await transferOwnedWorld(db, nonAdmin.actor, { userId: target.id }, world.id, { recipientId: recipient.id });
+      assert.ok(!nonAdminAttempt.ok);
+      assert.equal(nonAdminAttempt.error.code, "UNAUTHORIZED");
+      const stale = await transferOwnedWorld(db, actor, { userId: target.id, expectedVersion: 999 }, world.id, { recipientId: recipient.id });
+      assert.ok(!stale.ok);
+      assert.equal(stale.error.code, "STALE_ACCOUNT");
+      const missing = await transferOwnedWorld(db, actor, { userId: target.id, expectedVersion: before.accountVersion }, world.id, { recipientId: randomUUID() });
+      assert.ok(!missing.ok);
+      assert.equal(missing.error.code, "NOT_FOUND");
+      const self = await transferOwnedWorld(db, actor, { userId: target.id, expectedVersion: before.accountVersion }, world.id, { recipientId: target.id });
+      assert.ok(!self.ok);
+      assert.equal(self.error.code, "INVALID_INPUT");
+      const disabled = await transferOwnedWorld(db, actor, { userId: target.id, expectedVersion: before.accountVersion }, world.id, { recipientId: disabledRecipient.id });
+      assert.ok(!disabled.ok);
+      assert.equal(disabled.error.code, "ACCOUNT_DISABLED");
+      const player = await transferOwnedWorld(db, actor, { userId: target.id, expectedVersion: before.accountVersion }, world.id, { recipientId: playerRecipient.id });
+      assert.ok(!player.ok);
+      assert.equal(player.error.code, "INVALID_ROLE");
+      const foreignAttempt = await transferOwnedWorld(db, actor, { userId: target.id, expectedVersion: before.accountVersion }, foreignWorld.id, { recipientId: recipient.id });
+      assert.ok(!foreignAttempt.ok);
+      assert.equal(foreignAttempt.error.code, "NOT_FOUND");
+      const activePurge = await purgeOwnedWorld(db, actor, { userId: target.id, expectedVersion: before.accountVersion }, world.id, { confirmWorldTitle: world.title, backupAcknowledged: true });
+      assert.ok(!activePurge.ok);
+      assert.equal(activePurge.error.code, "INVALID_INPUT");
+      const wrongTitle = await purgeOwnedWorld(db, actor, { userId: target.id, expectedVersion: before.accountVersion }, archived.id, { confirmWorldTitle: "Wrong", backupAcknowledged: true });
+      assert.ok(!wrongTitle.ok);
+      assert.equal(wrongTitle.error.code, "INVALID_INPUT");
+
+      assert.deepEqual(await db.world.findUniqueOrThrow({ where: { id: world.id } }), world);
+      assert.deepEqual(await db.world.findUniqueOrThrow({ where: { id: archived.id } }), archived);
+      assert.deepEqual(await db.world.findUniqueOrThrow({ where: { id: foreignWorld.id } }), foreignWorld);
+      assert.equal((await db.user.findUniqueOrThrow({ where: { id: target.id } })).accountVersion, before.accountVersion);
+      assert.equal(await db.installationAuditEvent.count({ where: { targetIdSnapshot: target.id, action: { in: ["WORLD_TRANSFER", "WORLD_PURGE"] }, outcome: "SUCCESS" } }), 0);
+
+      await db.world.update({ where: { id: world.id }, data: { ownerId: foreign.id } });
+      const changed = await transferOwnedWorld(db, actor, { userId: target.id, expectedVersion: before.accountVersion }, world.id, { recipientId: recipient.id });
+      assert.ok(!changed.ok);
+      assert.equal(changed.error.code, "NOT_FOUND");
+      assert.equal((await db.world.findUniqueOrThrow({ where: { id: world.id } })).ownerId, foreign.id);
+
+      const foreignTransfer = await transferOwnedWorld(db, actor, { userId: target.id, expectedVersion: before.accountVersion }, foreignWorld.id, { recipientId: recipient.id });
+      assert.ok(!foreignTransfer.ok);
+      assert.equal(foreignTransfer.error.code, "NOT_FOUND");
+      assert.equal((await db.world.findUniqueOrThrow({ where: { id: foreignWorld.id } })).ownerId, foreign.id);
+
+      // Import recovery removes deterministic asset files when it cannot find
+      // the world under the original owner, so remediation waits for terminal imports.
+      const activeImport = await db.worldTransferImport.create({
+        data: { ownerId: target.id, requestKey: randomUUID(), payloadHash: "hash", payloadJson: "{}", status: "RECOVERY_REQUIRED" },
+      });
+      const importTransfer = await transferOwnedWorld(db, actor, { userId: target.id, expectedVersion: before.accountVersion }, archived.id, { recipientId: recipient.id });
+      assert.ok(!importTransfer.ok);
+      assert.equal(importTransfer.error.code, "HAS_DURABLE_RECORDS");
+      const importPurge = await purgeOwnedWorld(db, actor, { userId: target.id, expectedVersion: before.accountVersion }, archived.id, { confirmWorldTitle: archived.title, backupAcknowledged: true });
+      assert.ok(!importPurge.ok);
+      assert.equal(importPurge.error.code, "HAS_DURABLE_RECORDS");
+      assert.deepEqual(await db.world.findUniqueOrThrow({ where: { id: archived.id } }), archived);
+      await db.worldTransferImport.delete({ where: { id: activeImport.id } });
+
+      await db.world.deleteMany({ where: { ownerId: foreign.id } });
+      await db.world.deleteMany({ where: { ownerId: target.id } });
+    } finally { await cleanup(); }
   });
 });
 

@@ -4,6 +4,7 @@ import type { User, InstallationAdminState, Prisma } from "@prisma/client";
 import type { AdminError, InstallationAuditAction } from "./admin-policy";
 import { activeAdmin, normalizeEmail, validateCreateAccountInput, validateRoleChangeInput, validateStatusChangeInput } from "./admin-policy";
 import { newToken, tokenHash } from "./passwords";
+import { purgeArchivedWorldInTransaction, WorldPurgeConflictError } from "./world-management";
 import {
   appendInstallationAuditEvent,
   recordFailedAdminAttempt,
@@ -11,6 +12,32 @@ import {
   type AuditInput,
   type AuditDetails,
 } from "./admin-audit";
+
+const WORLD_OWNER_ROLES = ["ADMIN", "AUTHOR", "GM"] as const;
+const MAX_IDENTIFIER_LENGTH = 64;
+
+function canOwnWorlds(role: string): boolean {
+  return (WORLD_OWNER_ROLES as readonly string[]).includes(role);
+}
+
+function validIdentifier(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_IDENTIFIER_LENGTH;
+}
+
+/**
+ * Import recovery deletes deterministic asset files when it cannot find the
+ * deterministic world under the original owner. World remediation must wait
+ * until every import is terminal so a later retry cannot target moved content.
+ */
+async function unfinishedImportBlocker(tx: Prisma.TransactionClient, userId: string): Promise<AdminError | null> {
+  const pending = await tx.worldTransferImport.findFirst({
+    where: { ownerId: userId, status: { notIn: ["COMPLETED", "FAILED"] } },
+    select: { id: true },
+  });
+  return pending
+    ? { error: "Resolve unfinished imports before changing world ownership.", code: "HAS_DURABLE_RECORDS" }
+    : null;
+}
 
 export type AdminActor =
   | { type: "WEB_ADMIN"; userId: string; sessionId: string }
@@ -59,6 +86,19 @@ const TRANSACTION_OPTIONS = { maxWait: 5000, timeout: 30000 };
 function actorIdSnapshot(actor: AdminActor): string | null {
   if (actor.type === "LOCAL_OPERATOR") return actor.userId ?? null;
   return actor.userId;
+}
+
+/** Recheck an authenticated administrator inside a read transaction. */
+async function invalidWebAdmin(tx: Prisma.TransactionClient, actor: AdminActor): Promise<AdminError | null> {
+  if (actor.type !== "WEB_ADMIN") return null;
+  const session = await tx.authSession.findUnique({
+    where: { id: actor.sessionId },
+    select: { expiresAt: true, user: { select: { id: true, role: true, disabledAt: true } } },
+  });
+  if (!session || session.expiresAt <= new Date() || session.user.id !== actor.userId || !activeAdmin(session.user)) {
+    return { error: "Admin session is no longer valid.", code: "UNAUTHORIZED" };
+  }
+  return null;
 }
 
 function buildAuditInput(
@@ -519,6 +559,160 @@ export async function deleteAccount(
     await tx.user.delete({ where: { id: user.id } });
     return { value: { userId: user.id }, details: { worldCount: 0, durableRecordCount: 0, membershipCount: preview.membershipCount, grantCount: preview.grantCount } };
   }, { mode: "delete" });
+}
+
+export type WorldTransferTarget = {
+  id: string;
+  name: string;
+  email: string;
+  role: (typeof WORLD_OWNER_ROLES)[number];
+};
+
+/** Eligible active accounts that can receive a world from the target. */
+export async function listWorldTransferTargets(
+  db: PrismaClient,
+  actor: AdminActor,
+  targetUserId: string,
+): Promise<AdminMutationResult<WorldTransferTarget[]>> {
+  try {
+    return await db.$transaction(async (tx) => {
+      const invalid = await invalidWebAdmin(tx, actor);
+      if (invalid) return { ok: false as const, error: invalid };
+      const target = await tx.user.findUnique({ where: { id: targetUserId }, select: { id: true } });
+      if (!target) return { ok: false as const, error: { error: "Account not found.", code: "NOT_FOUND" as const } };
+      const targets = await tx.user.findMany({
+        where: {
+          id: { not: targetUserId },
+          disabledAt: null,
+          role: { in: [...WORLD_OWNER_ROLES] },
+        },
+        select: { id: true, name: true, email: true, role: true },
+        orderBy: [{ name: "asc" }, { id: "asc" }],
+      });
+      return {
+        ok: true as const,
+        value: targets.map((user) => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role as WorldTransferTarget["role"],
+        })),
+      };
+    }, TRANSACTION_OPTIONS);
+  } catch {
+    return { ok: false, error: { error: "Unable to complete this request.", code: "INTERNAL_ERROR" } };
+  }
+}
+
+export type WorldMutationResult = {
+  userId: string;
+  worldId: string;
+  worldTitle: string;
+};
+
+/**
+ * Move a world to another active account without changing its content,
+ * publication state, archived state, memberships, or grants.
+ */
+export async function transferOwnedWorld(
+  db: PrismaClient,
+  actor: AdminActor,
+  target: AdminMutationTarget,
+  worldId: string,
+  body: Record<string, unknown>,
+): Promise<AdminMutationResult<WorldMutationResult>> {
+  const recipientId = body.recipientId;
+  if (!validIdentifier(recipientId) || !validIdentifier(worldId)) {
+    return { ok: false, error: { error: "A recipient account is required.", code: "INVALID_INPUT" } };
+  }
+
+  return runAdminMutation<WorldMutationResult>(db, actor, target, "WORLD_TRANSFER", async ({ tx, target: user }) => {
+    const importBlocker = await unfinishedImportBlocker(tx, user.id);
+    if (importBlocker) return importBlocker;
+    const world = await tx.world.findFirst({
+      where: { id: worldId, ownerId: user.id },
+      select: { id: true, title: true },
+    });
+    if (!world) return { error: "World not found for this account.", code: "NOT_FOUND" };
+    if (recipientId === user.id) {
+      return { error: "Choose a different account to receive this world.", code: "INVALID_INPUT" };
+    }
+    const recipient = await tx.user.findUnique({
+      where: { id: recipientId },
+      select: { id: true, role: true, disabledAt: true },
+    });
+    if (!recipient) return { error: "Recipient account not found.", code: "NOT_FOUND" };
+    if (recipient.disabledAt !== null) {
+      return { error: "Recipient account is disabled.", code: "ACCOUNT_DISABLED" };
+    }
+    if (!canOwnWorlds(recipient.role)) {
+      return { error: "The recipient account cannot own worlds.", code: "INVALID_ROLE" };
+    }
+
+    // Scoping the write to the owner we just read prevents an independent
+    // transfer from being overwritten after the check.
+    const moved = await tx.world.updateMany({
+      where: { id: worldId, ownerId: user.id },
+      data: { ownerId: recipientId },
+    });
+    if (moved.count !== 1) {
+      return { error: "World ownership changed. Refresh and retry.", code: "STALE_WORLD" };
+    }
+
+    return {
+      value: { userId: user.id, worldId: world.id, worldTitle: world.title },
+      details: { worldId: world.id, worldTitle: world.title, recipientId },
+    };
+  });
+}
+
+/**
+ * Permanently remove an archived world after the operator confirms its title
+ * and acknowledges a backup. The archived-state check and delete are scoped to
+ * the owner read inside the same transaction.
+ */
+export async function purgeOwnedWorld(
+  db: PrismaClient,
+  actor: AdminActor,
+  target: AdminMutationTarget,
+  worldId: string,
+  body: Record<string, unknown>,
+): Promise<AdminMutationResult<WorldMutationResult>> {
+  if (!validIdentifier(worldId) || typeof body.confirmWorldTitle !== "string" || body.backupAcknowledged !== true) {
+    return { ok: false, error: { error: "World title confirmation and backup acknowledgement are required.", code: "INVALID_INPUT" } };
+  }
+
+  return runAdminMutation<WorldMutationResult>(db, actor, target, "WORLD_PURGE", async ({ tx, target: user }) => {
+    const importBlocker = await unfinishedImportBlocker(tx, user.id);
+    if (importBlocker) return importBlocker;
+    const world = await tx.world.findFirst({
+      where: { id: worldId, ownerId: user.id },
+      select: { id: true, title: true, deletedAt: true },
+    });
+    if (!world) return { error: "World not found for this account.", code: "NOT_FOUND" };
+    if (world.deletedAt === null) {
+      return { error: "Archive the world before permanently purging it.", code: "INVALID_INPUT" };
+    }
+    if (body.confirmWorldTitle !== world.title) {
+      return { error: "World title confirmation does not match.", code: "INVALID_INPUT" };
+    }
+
+    let purged;
+    try {
+      purged = await purgeArchivedWorldInTransaction(tx, worldId, user.id);
+    } catch (error) {
+      if (error instanceof WorldPurgeConflictError) {
+        return { error: "World state changed. Refresh and retry.", code: "STALE_WORLD" };
+      }
+      throw error;
+    }
+    if (!purged) return { error: "World state changed. Refresh and retry.", code: "STALE_WORLD" };
+
+    return {
+      value: { userId: user.id, worldId: purged.id, worldTitle: purged.title },
+      details: { worldId: purged.id, worldTitle: purged.title, assetCount: purged.cleanupQueued },
+    };
+  });
 }
 
 function resolveEmailArgument(actorOrEmail: AdminActor | string, maybeEmail?: string): string | null {

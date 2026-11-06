@@ -13,6 +13,7 @@ export const ADMIN_ERROR_CODES = [
   "OWNS_WORLDS",
   "HAS_DURABLE_RECORDS",
   "STALE_ACCOUNT",
+  "STALE_WORLD",
   "INVALID_ROLE",
   "INVALID_INPUT",
   "DUPLICATE_EMAIL",
@@ -48,6 +49,8 @@ export const INSTALLATION_AUDIT_ACTIONS = [
   "SESSION_REVOKE",
   "SESSION_REVOKE_ALL",
   "ACCOUNT_DELETE",
+  "WORLD_TRANSFER",
+  "WORLD_PURGE",
   "BOOTSTRAP",
   "LOCAL_RECOVERY",
 ] as const;
@@ -151,6 +154,7 @@ export function adminErrorStatus(code: AdminErrorCode): number {
     case "OWNS_WORLDS":
     case "HAS_DURABLE_RECORDS":
     case "STALE_ACCOUNT":
+    case "STALE_WORLD":
     case "DUPLICATE_EMAIL": return 409;
     case "CONCURRENCY_CONFLICT": return 503;
     default: return 500;

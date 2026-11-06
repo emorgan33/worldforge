@@ -222,7 +222,9 @@ Behavior delivered: `deletionPreview` returns the target's current `accountVersi
 
 Unknown world-import states are treated as nonterminal blockers. Before deletion, any still-unrevoked previews issued by the target are revoked, so nullable issuer attribution cannot leave a live capability behind.
 
-Files affected: `src/lib/admin-accounts.ts`, `tests/admin-accounts.test.ts` (deletion fixtures with explicit cleanup per P1's fixture rules).
+Follow-up #20 adds supported owned-world remediation to the admin detail panel without weakening deletion blockers. `transferOwnedWorld` moves a world to another active `ADMIN`/`AUTHOR`/`GM` account while preserving content, publication/archive state, memberships, and grants. `purgeOwnedWorld` allows only archived worlds after exact-title and backup acknowledgement, reusing the transactional cascade and asset-cleanup path. Both use the serialized admin mutation core, scope their writes to the owner read in the same transaction, audit `WORLD_TRANSFER`/`WORLD_PURGE`, and return `STALE_WORLD` rather than overwriting concurrent ownership changes. Both block with `HAS_DURABLE_RECORDS` until the source account's world imports are terminal, because import recovery may remove deterministic asset files for a world it no longer finds under that owner. Final deletion still recomputes every blocker.
+
+Files affected: `src/lib/admin-accounts.ts`, `src/lib/world-management.ts`, `tests/admin-accounts.test.ts` (deletion fixtures with explicit cleanup per P1's fixture rules).
 
 Dependencies: P2.1 (mutation core and audit service).
 
