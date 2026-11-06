@@ -48,3 +48,10 @@ coverage
 Dockerfile
 .dockerignore
 docker-compose.yml
+docker-compose*.yml
+backups
+.agents
+.opencode
+opencode.json
+skills-lock.json
+*.diff

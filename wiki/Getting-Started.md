@@ -1,10 +1,18 @@
 # Getting Started
 
-This guide takes a clean machine with Git and Docker Compose to a shareable
-WorldForge article. It uses the supported Docker installation and local-only
-defaults.
+This guide takes a clean machine with Docker Compose to a shareable WorldForge
+article. It uses local-only defaults. Published-image installs need no Git or
+local build; the source-build alternative below requires Git.
 
 ## 1. Start WorldForge
+
+For a published image, follow [Installation → Install a published image](Installation#install-a-published-image-no-git-checkout).
+Choose a version whose Docker publishing workflow succeeded, download its
+Compose file, configure `WORLDFORGE_IMAGE` and the origin in `.env`, and run
+`docker compose pull` then `docker compose up -d --wait`. Initial image support
+is linux/amd64; old releases may not have published images.
+
+Alternatively, build from source:
 
 ```bash
 git clone https://github.com/emorgan33/worldforge.git
@@ -77,4 +85,6 @@ WorldForge to a network.
 
 **Source owner:** `wiki/Getting-Started.md`; adapted from `README.md`,
 `docs/deployment-configuration.md`, and current author UI.
-**Verified against:** WorldForge commit `9050d94` (October 31, 2026).
+**Verified against:** Packaging instructions match `12d0bff` (November 6, 2026)
+and local fresh-volume startup checks. The first registry pull remains pending;
+account/article steps retain their prior verification against `9050d94`.

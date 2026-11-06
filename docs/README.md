@@ -13,3 +13,12 @@ here and any affected wiki page in the same pull request.
 
 Do not migrate milestone notes, audits, validation reports, or feature-request
 contracts into the wiki as if they describe current product behavior.
+
+## Deployment and releases
+
+- [Deployment configuration](deployment-configuration.md) — local builds,
+  versioned Docker Hub images, pull-only Compose, and runtime settings.
+- [Release records and publishing](releases/README.md) — image tags/digests,
+  maintainer release checklist, and publication verification.
+- [Backup and restore](backup-restore.md) — matched database-and-assets
+  recovery points required before upgrades.

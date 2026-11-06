@@ -1,0 +1,118 @@
+name: Release Docker image
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/docker-publish.yml
+      - Dockerfile
+      - .dockerignore
+      - docker-compose.release.yml
+      - scripts/smoke-release-image.sh
+  release:
+    types: [published, released]
+
+# Serialize stable-tag updates and never cancel a partially published release.
+concurrency:
+  group: docker-release-${{ github.event_name == 'release' && 'publish' || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    # Stable releases (including promotions) use released. Prereleases use
+    # published, which also covers publication from a draft. Exactly one job
+    # publishes for an ordinary stable release even though both events fire.
+    if: github.event_name == 'pull_request' || (github.event.action == 'published' && github.event.release.prerelease) || (github.event.action == 'released' && !github.event.release.prerelease)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Append the published image/digest to release notes.
+    env:
+      IMAGE: emorgan33/worldforge
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: false
+      - name: Validate release version
+        if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*)?$ ]] || { echo 'Expected vMAJOR.MINOR.PATCH[-prerelease]'; exit 1; }
+          test -f "docs/releases/$RELEASE_TAG.md"
+          echo "VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+          echo "REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Log in to Docker Hub
+        if: github.event_name == 'release'
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+      - name: Reuse an existing version for promotions or retries
+        if: github.event_name == 'release'
+        run: |
+          token=$(curl --fail --silent --show-error "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$IMAGE:pull" | jq -er .token)
+          echo "::add-mask::$token"
+          status=$(curl --silent --show-error -o "$RUNNER_TEMP/manifest.json" -w '%{http_code}' \
+            -H "Authorization: Bearer $token" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+            "https://registry-1.docker.io/v2/$IMAGE/manifests/$VERSION")
+          case "$status" in
+            200)
+              docker pull "$IMAGE:$VERSION"
+              revision=$(docker image inspect "$IMAGE:$VERSION" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+              [[ "$revision" == "$REVISION" ]] || { echo 'Existing version belongs to another commit; publish a new version.'; exit 1; }
+              docker tag "$IMAGE:$VERSION" worldforge-release:test
+              echo 'EXISTING_VERSION=true' >> "$GITHUB_ENV"
+              ;;
+            404) echo 'EXISTING_VERSION=false' >> "$GITHUB_ENV" ;;
+            *) echo "Registry returned $status; refusing to overwrite a version."; exit 1 ;;
+          esac
+      - name: Build linux/amd64 image
+        if: env.EXISTING_VERSION != 'true'
+        run: |
+          docker build --platform linux/amd64 \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
+            -t worldforge-release:test .
+      - name: Smoke test with disposable storage
+        run: bash scripts/smoke-release-image.sh worldforge-release:test
+      - name: Push versioned image
+        if: github.event_name == 'release'
+        run: |
+          if [[ "$EXISTING_VERSION" != true ]]; then
+            docker tag worldforge-release:test "$IMAGE:$VERSION"
+            docker push "$IMAGE:$VERSION"
+          fi
+          docker tag worldforge-release:test "$IMAGE:sha-$REVISION"
+          docker push "$IMAGE:sha-$REVISION"
+          docker pull "$IMAGE:$VERSION"
+          echo "DIGEST=$(docker image inspect "$IMAGE:$VERSION" --format '{{index .RepoDigests 0}}')" >> "$GITHUB_ENV"
+      - name: Verify published image
+        if: github.event_name == 'release'
+        run: bash scripts/smoke-release-image.sh "$DIGEST"
+      - name: Update latest for the current stable release only
+        if: github.event_name == 'release' && !github.event.release.prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          if [[ "$latest" == "$RELEASE_TAG" && "$VERSION" != *-* ]]; then
+            docker tag "$DIGEST" "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+          fi
+      - name: Record image in release notes
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release view "$RELEASE_TAG" --json body --jq .body > "$RUNNER_TEMP/release-notes.md"
+          printf '\n\n### Docker image (linux/amd64)\n\n`%s:%s`\n\nDigest pin: `%s`\n' "$IMAGE" "$VERSION" "$DIGEST" >> "$RUNNER_TEMP/release-notes.md"
+          gh release edit "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+      - name: Log out
+        if: always() && github.event_name == 'release'
+        run: docker logout

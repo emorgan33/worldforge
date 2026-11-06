@@ -1,5 +1,90 @@
 # Deployment configuration
 
+## Published Docker images
+
+Release publishing targets **`emorgan33/worldforge`** on Docker Hub. Images are
+available only after a GitHub release's **Release Docker image** workflow
+succeeds; merging to `main` does not publish. Do not assume an older release
+already has an image. Supported architecture initially: **linux/amd64**.
+
+For an image version listed in its GitHub release notes, install without a
+repository checkout (replace `VERSION` in both the URL and `.env` below with
+that version, without `v`):
+
+```bash
+mkdir worldforge && cd worldforge
+curl -fsSLo compose.yml https://raw.githubusercontent.com/emorgan33/worldforge/vVERSION/docker-compose.release.yml
+cat > .env <<'EOF'
+WORLDFORGE_IMAGE=emorgan33/worldforge:VERSION
+WORLDFORGE_ORIGIN=http://localhost:3033
+WORLDFORGE_TRUSTED_PROXY=0
+EOF
+# Edit .env to select an actually published version before running:
+docker compose pull
+docker compose up -d --wait
+docker compose exec worldforge pnpm auth:setup
+```
+
+Open `http://localhost:3033/login` after completing the interactive account setup.
+The Compose healthcheck verifies `/login`; startup applies pending migrations.
+The `worldforge-data` volume contains both `/data/worldforge.db` and `/data/assets`.
+Keep it across upgrades; never use `down --volumes` against real data. See the
+origin/proxy and UID/GID `10001` requirements below for HTTPS or existing volumes.
+
+Release `vX.Y.Z` publishes `emorgan33/worldforge:X.Y.Z` and a full-commit
+`sha-<commit>` tag. `latest` tracks GitHub's current stable release, never a
+prerelease. Pin a version, or the `emorgan33/worldforge@sha256:...` digest recorded
+in the release notes, rather than `latest` for predictable upgrades. Release tags
+must not be moved or reused; publish a new patch release for a correction.
+
+Before upgrading, stop the service and take a verified **database plus assets**
+backup using [Backup and restore](backup-restore.md). Change `WORLDFORGE_IMAGE`
+in `.env`, then run `docker compose pull` and `docker compose up -d --wait`.
+Check startup logs. An older image may not support a migrated database: rollback
+requires restoring its matching database-and-assets backup as well.
+
+To switch an existing source-build installation, keep its Compose **project
+name**, existing named volume, `.env`, and reverse-proxy network settings. Run
+with `-f docker-compose.release.yml` (and explicitly `-f` any proxy override).
+Changing directories/project names silently creates a different, empty volume.
+The original `docker-compose.yml` remains the local-build path:
+`docker compose up -d --build`.
+
+### Maintainer publishing
+
+1. Create the public Docker Hub repository `emorgan33/worldforge`. Set GitHub
+   Actions secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (a Docker Hub token
+   with write access). Never commit credentials.
+2. Add `docs/releases/vX.Y.Z.md`, finish normal CI/review, and tag the intended
+   reviewed commit `vX.Y.Z`. Publish its GitHub release with those notes. A plain
+   tag push alone does not publish; drafts do not publish either. Mark
+   prereleases as such.
+3. `.github/workflows/docker-publish.yml` builds the release's exact source,
+   tests fresh isolated storage via `scripts/smoke-release-image.sh`, pushes to
+   Docker Hub, pulls and smoke-tests the published digest, then appends the
+   version/digest to that release's notes. Observe the workflow to completion;
+   a published GitHub release is not itself evidence of a published image.
+4. Verify `docker pull emorgan33/worldforge:X.Y.Z` on a clean machine. Packaging
+   pull requests also build and smoke-test without accessing registry secrets.
+
+Release runs serialize their registry updates. Stable publications and
+prerelease-to-stable promotions use the `released` event; prereleases use
+`published` (including publication from a draft). Ordinary stable releases do
+not publish twice. Promotions/retries reuse an existing version only after its
+OCI revision label matches the tagged commit, then smoke-test it again. An
+unexpected registry error fails closed rather than treating the tag as absent.
+A failed run can leave a pushed version without updated notes or `latest`;
+rerun only for the same unchanged release tag, then verify the final notes and
+digest. No release or Docker Hub image is created merely by adding this workflow.
+
+## Runtime settings
+
+`WORLDFORGE_IMAGE` is required only by the pull-only Compose file and accepts
+a published version tag or digest; the source-build file does not use it. The
+release Compose file also requires an explicit `WORLDFORGE_ORIGIN`, whereas
+the source-build file provides the local default shown below. For the complete
+maintainer checklist, see [Release publishing](releases/README.md).
+
 WorldForge reads its SQLite file from `DATABASE_URL`, its upload directory
 from `WORLDFORGE_ASSET_DIR`, its public browser origin from
 `WORLDFORGE_ORIGIN`, and its HTTP listen port from `PORT`.

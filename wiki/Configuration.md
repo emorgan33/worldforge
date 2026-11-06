@@ -1,15 +1,18 @@
 # Configuration
 
-Copy `.env.example` to `.env` for Compose. Changes require the WorldForge
+For source builds, copy `.env.example` to `.env`. For published-image Compose,
+create `.env` using [Installation](Installation), including the image and origin.
+Changes require the WorldForge
 process or Compose service to be recreated unless noted otherwise.
 
 ## Deployment settings
 
 | Variable | Default | Effect | Restart? |
 | --- | --- | --- | --- |
+| `WORLDFORGE_IMAGE` | None; required by `docker-compose.release.yml` | Published image such as `emorgan33/worldforge:VERSION`, or its release-noted digest. Use an actually published version; `VERSION` is a placeholder. Not used by the source-build Compose file. | Recreate service |
 | `DATABASE_URL` | Local example: `file:./dev.db`; Compose forces `file:/data/worldforge.db` | Prisma SQLite URL. Relative paths resolve from `prisma/`. The production container requires a persistent file URL. | Yes |
 | `WORLDFORGE_ASSET_DIR` | `./data/assets`; Compose forces `/data/assets` | Directory for uploaded and selected image files. It must persist with the database. | Yes |
-| `WORLDFORGE_ORIGIN` | Unset in development; `http://localhost:3033` in Compose | Exact public origin used for same-origin write checks, secure cookies, setup/invitation URLs, and HSTS selection. Required in production. | Yes |
+| `WORLDFORGE_ORIGIN` | Unset in development; source-build Compose defaults to `http://localhost:3033`; release Compose requires an explicit value | Exact public origin used for same-origin write checks, secure cookies, setup/invitation URLs, and HSTS selection. Required in production. | Yes |
 | `WORLDFORGE_TRUSTED_PROXY` | `0` in Compose | Set to `1` only for public HTTPS behind a private proxy that overwrites `X-WorldForge-Client-IP`. | Yes |
 | `WORLDFORGE_HOST_BIND` | `127.0.0.1` in Compose | Compose-only host interface for the published application port. | Recreate service |
 | `WORLDFORGE_HOST_PORT` | `3033` | Compose-only host port mapped to container port 3033. | Recreate service |
@@ -50,6 +53,8 @@ uppercase hostname, or explicit default port causes container startup to fail.
 Production permits HTTP only for localhost/loopback.
 
 **Source owner:** `wiki/Configuration.md`; implementation authority is
-`.env.example`, `docker-compose.yml`, `scripts/docker-entrypoint.sh`, Prisma,
+`.env.example`, `docker-compose.yml`, `docker-compose.release.yml`, `scripts/docker-entrypoint.sh`, Prisma,
 and `src/lib` environment reads.
-**Verified against:** WorldForge commit `9050d94` (October 31, 2026).
+**Verified against:** Packaging implementation `12d0bff` (November 6, 2026)
+for Compose interpolation/configuration. Other setting descriptions retain
+their prior verification against `9050d94`.
