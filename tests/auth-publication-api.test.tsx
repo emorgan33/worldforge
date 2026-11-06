@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { randomBytes, createHash, randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { PrismaClient } from "@prisma/client";
 import sharp from "sharp";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { removeAssetFile } from "../src/lib/asset-storage";
@@ -12,7 +12,7 @@ const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 test("owner sessions and public readers enforce drafts, private worlds, GM blocks, related links and image grants", { skip: !origin }, async context => {
-  const db = new PrismaClient(); const stamp = Date.now();
+  const db = testPrismaClient(); const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "Publishing fixture", email: `publisher-${stamp}@example.invalid` } });
   const outsider = await db.user.create({ data: { name: "Other author", email: `outsider-${stamp}@example.invalid` } });
   context.after(async () => { const assets = await db.imageAsset.findMany({ where: { world: { ownerId: owner.id } } }); for (const asset of assets) await removeAssetFile(asset.id); await deleteTestUsers(db, owner.id, outsider.id); await db.$disconnect(); });
@@ -67,7 +67,7 @@ test("owner sessions and public readers enforce drafts, private worlds, GM block
 });
 
 test("one-time account setup, local sign-in, CSRF checks, expiration and logout revocation", { skip: !origin }, async context => {
-  const db = new PrismaClient(); const stamp = Date.now(); const email = `auth-${stamp}@example.invalid`;
+  const db = testPrismaClient(); const stamp = Date.now(); const email = `auth-${stamp}@example.invalid`;
   const user = await db.user.create({ data: { name: "Auth fixture", email } });
   context.after(async () => { await deleteTestUsers(db, user.id); await db.$disconnect(); });
   const token = randomBytes(32).toString("base64url");
@@ -110,7 +110,7 @@ test("one-time account setup, local sign-in, CSRF checks, expiration and logout 
 });
 
 test("disabled accounts cannot use existing sessions, login, or setup; setup is email-bound and replaces credentials atomically", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = randomUUID();
   const password = "Disabled-account fixture passphrase 902!";
   const disabled = await db.user.create({ data: { name: "Disabled auth fixture", email: `disabled-${stamp}@example.invalid`, passwordHash: await hashPassword(password), disabledAt: new Date() } });
@@ -162,7 +162,7 @@ test("disabled accounts cannot use existing sessions, login, or setup; setup is 
 });
 
 test("login and setup races with disable cannot leave sessions on a disabled account", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = randomUUID();
   const admin = await db.user.create({ data: { name: "Lifecycle admin", email: `lifecycle-admin-${stamp}@example.invalid`, role: "ADMIN" } });
   const adminToken = randomBytes(32).toString("base64url");
@@ -202,7 +202,7 @@ test("login and setup races with disable cannot leave sessions on a disabled acc
 });
 
 test("a credential snapshot cannot issue a session after password reset or revoke-all", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = randomUUID();
   const admin = await db.user.create({ data: { name: "Snapshot admin", email: `snapshot-admin-${stamp}@example.invalid`, role: "ADMIN" } });
   const adminToken = randomBytes(32).toString("base64url");

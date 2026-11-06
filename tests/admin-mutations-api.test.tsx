@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
@@ -75,7 +76,7 @@ async function versionOf(db: PrismaClient, id: string) {
 }
 
 test("admin mutations reject missing, wrong, and cross-site origins before reading data", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -127,7 +128,7 @@ test("admin mutations reject missing, wrong, and cross-site origins before readi
 });
 
 test("admin mutations reject anonymous, non-admin, expired, disabled, and revoked admins", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -187,7 +188,7 @@ test("admin mutations reject anonymous, non-admin, expired, disabled, and revoke
 });
 
 test("create returns a safe DTO and one-time setup link and rejects injected fields", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -297,7 +298,7 @@ test("create returns a safe DTO and one-time setup link and rejects injected fie
 });
 
 test("recovery reissues a one-time link, invalidates the old one, and honours disabled and stale guards", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -359,7 +360,7 @@ test("recovery reissues a one-time link, invalidates the old one, and honours di
 });
 
 test("status changes revoke credentials atomically and enforce self and stale guards", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -430,7 +431,7 @@ test("status changes revoke credentials atomically and enforce self and stale gu
 });
 
 test("role changes enforce ownership, self, validation, and stale guards", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -496,7 +497,7 @@ test("role changes enforce ownership, self, validation, and stale guards", { ski
 });
 
 test("session revocation is scoped to the target and revoke-all clears preview capabilities", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -590,7 +591,7 @@ test("session revocation is scoped to the target and revoke-all clears preview c
 });
 
 test("an administrator can revoke a single own session without revoking the acting session", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -627,7 +628,7 @@ test("an administrator can revoke a single own session without revoking the acti
 });
 
 test("owned-world remediation transfers or purges worlds before deletion", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -719,7 +720,7 @@ test("owned-world remediation transfers or purges worlds before deletion", { ski
 });
 
 test("deletion requires a disabled account, matching email, and no durable blockers", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -829,7 +830,7 @@ test("deletion requires a disabled account, matching email, and no durable block
 });
 
 test("concurrent opposing disables leave at least one active administrator", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -874,7 +875,7 @@ test("concurrent opposing disables leave at least one active administrator", { s
 });
 
 test("an administrator cannot mutate another owner's private world through author endpoints", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);

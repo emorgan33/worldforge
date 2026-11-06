@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { testPrismaClient } from "../test-prisma-client";
 import { expect, test as base, type Page, type Route } from "@playwright/test";
 import { SESSION_COOKIE } from "../../src/lib/auth-constants";
 import { WORLD_HISTORY_INDEX_KEY } from "../../src/lib/world-selection";
@@ -10,7 +10,7 @@ type WorkspaceFixture = { page: Page; worldA: { id: string; title: string }; wor
 const test = base.extend<{ workspace: WorkspaceFixture }>({
   workspace: async ({ page, context, baseURL }, run) => {
     assertIsolatedTestEnvironment();
-    const db = new PrismaClient();
+    const db = testPrismaClient();
     let ownerId: string | undefined;
     try {
       const owner = await db.user.create({ data: { name: "Workspace transition fixture", email: `workspace-transitions-${randomUUID()}@example.invalid` } });

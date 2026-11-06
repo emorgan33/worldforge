@@ -1,10 +1,10 @@
 import { test, before, after } from "node:test";
+import { testPrismaClient } from "./test-prisma-client";
 import assert from "node:assert";
 import { randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
-const db = new PrismaClient();
+const db = testPrismaClient();
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 let authenticatedFetch: fetcherType;
 type fetcherType = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;

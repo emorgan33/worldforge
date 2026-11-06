@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { SESSION_COOKIE } from "../src/lib/auth-constants";
 
@@ -9,7 +9,7 @@ const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
 
 test("player invitations are email-bound, single-use, and do not grant author APIs", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = randomUUID();
   const owner = await db.user.create({ data: { name: "Invitation GM", email: `gm-${stamp}@example.invalid` } });
   const world = await db.world.create({ data: { ownerId: owner.id, title: "Invitation world", slug: `invite-${stamp}` } });
@@ -73,7 +73,7 @@ test("player invitations are email-bound, single-use, and do not grant author AP
 });
 
 test("existing author invitation preserves role and ownership; cancelled links cannot be claimed", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = randomUUID();
   const owner = await db.user.create({ data: { name: "Owner", email: `owner-${stamp}@example.invalid` } });
   const invited = await db.user.create({ data: { name: "Other GM", email: `other-${stamp}@example.invalid`, role: "AUTHOR" } });
@@ -116,7 +116,7 @@ test("existing author invitation preserves role and ownership; cancelled links c
 });
 
 test("disabled existing invitees cannot claim membership or receive a session", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = randomUUID();
   const owner = await db.user.create({ data: { name: "Disabled-invite owner", email: `disabled-invite-owner-${stamp}@example.invalid` } });
   const invited = await db.user.create({ data: { name: "Disabled invitee", email: `disabled-invitee-${stamp}@example.invalid`, disabledAt: new Date() } });

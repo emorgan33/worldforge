@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -6,7 +7,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import * as ts from "typescript";
-import { PrismaClient } from "@prisma/client";
 import { assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const rejectedByGuard = [
@@ -65,7 +65,7 @@ test("browser fixture cleanup guards db.world.deleteMany with ownerId", async ()
 
 test("rejected test configuration and origin-unset skips preserve database and asset sentinels", async context => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const assetDir = process.env.WORLDFORGE_ASSET_DIR!;
   mkdirSync(assetDir, { recursive: true });
   const token = randomUUID();

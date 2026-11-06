@@ -1,6 +1,6 @@
 import { test, before, after } from "node:test";
+import { testPrismaClient } from "./test-prisma-client";
 import assert from "node:assert";
-import { PrismaClient } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { mkdir, rm } from "node:fs/promises";
@@ -8,7 +8,7 @@ import { writeAsset, readAsset, removeAssetFile } from "../src/lib/asset-storage
 import { authorFetch as authenticatedAuthorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { drainAssetCleanupJobs } from "../src/lib/world-management";
 
-const db = new PrismaClient();
+const db = testPrismaClient();
 const origin = process.env.WORLDFORGE_TEST_ORIGIN!;
 
 let user: { id: string };

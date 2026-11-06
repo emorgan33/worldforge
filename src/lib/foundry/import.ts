@@ -73,6 +73,20 @@ export function publicCandidate(candidate: FoundryCandidate, existing?: { source
   return { ...safe, status, ...(existing ? { destinationEdited, localEdit: destinationEdited } : {}) };
 }
 
+
+const FOUNDRY_IDENTITY_CHUNK = 400;
+
+async function findKnownProvenance(worldId: string, namespace: string, identities: string[]) {
+  const rows = [];
+  for (let offset = 0; offset < identities.length; offset += FOUNDRY_IDENTITY_CHUNK) {
+    rows.push(...await prisma.foundryProvenance.findMany({
+      where: { worldId, namespace, sourceIdentity: { in: identities.slice(offset, offset + FOUNDRY_IDENTITY_CHUNK) } },
+      include: { block: true },
+    }));
+  }
+  return rows;
+}
+
 export async function storePreview(input: { worldId: string; authorId: string; metadata: FoundryMetadata; candidates: FoundryCandidate[] }) {
   if (input.candidates.length > FOUNDRY_MAX_CANDIDATES) throw new Error("Too many Foundry items in one preview.");
   const expiresAt = new Date(Date.now() + FOUNDRY_PREVIEW_TTL_MS);
@@ -84,7 +98,7 @@ export async function storePreview(input: { worldId: string; authorId: string; m
     candidatesJson: JSON.stringify(input.candidates), expiresAt,
   } });
   const namespace = input.metadata.namespace;
-  const known = await prisma.foundryProvenance.findMany({ where: { worldId: input.worldId, namespace, sourceIdentity: { in: input.candidates.map(c => c.sourceIdentity) } }, include: { block: true } });
+  const known = await findKnownProvenance(input.worldId, namespace, input.candidates.map(c => c.sourceIdentity));
   const byIdentity = new Map(known.map(record => [record.sourceIdentity, record]));
   return { id: preview.id, expiresAt: expiresAt.toISOString(), items: input.candidates.map(c => publicCandidate(c, byIdentity.get(c.sourceIdentity))) };
 }
@@ -93,7 +107,7 @@ export async function getPreviewItems(worldId: string, authorId: string, preview
   const preview = await prisma.foundryPreview.findFirst({ where: { id: previewId, worldId, authorId, expiresAt: { gt: new Date() } } });
   if (!preview) return null;
   const candidates = JSON.parse(preview.candidatesJson) as FoundryCandidate[];
-  const existing = await prisma.foundryProvenance.findMany({ where: { worldId, namespace: JSON.parse(preview.metadataJson).namespace, sourceIdentity: { in: candidates.map(c => c.sourceIdentity) } }, include: { block: true } });
+  const existing = await findKnownProvenance(worldId, JSON.parse(preview.metadataJson).namespace, candidates.map(c => c.sourceIdentity));
   const byIdentity = new Map(existing.map(record => [record.sourceIdentity, record]));
   return { id: preview.id, expiresAt: preview.expiresAt.toISOString(), items: candidates.map(candidate => publicCandidate(candidate, byIdentity.get(candidate.sourceIdentity))) };
 }

@@ -1,5 +1,5 @@
 import { randomBytes, createHash, randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { testPrismaClient } from "../test-prisma-client";
 import { test as base, expect, type Page, type Route } from "@playwright/test";
 import { SESSION_COOKIE } from "../../src/lib/auth-constants";
 import { assertIsolatedTestEnvironment } from "../auth-fixture";
@@ -26,7 +26,7 @@ async function holdWrites(page: Page) {
 const test = base.extend<{ variables: Page }>({
   variables: async ({ page, context, baseURL }, run) => {
     assertIsolatedTestEnvironment();
-    const db = new PrismaClient();
+    const db = testPrismaClient();
     let ownerId: string | undefined;
     try {
       const owner = await db.user.create({ data: { name: "Variable browser fixture", email: `variables-browser-${randomUUID()}@example.invalid` } });

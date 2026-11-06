@@ -1,4 +1,5 @@
 import { randomBytes, createHash, randomUUID } from "node:crypto";
+import { testPrismaClient } from "../test-prisma-client";
 import { PrismaClient } from "@prisma/client";
 import { test as base, expect, type Page } from "@playwright/test";
 import sharp from "sharp";
@@ -8,7 +9,7 @@ import { ARTICLE_DRAFT_WINDOW_PREFIX, articleDraftKey } from "../../src/lib/arti
 const title = (page: Page) => page.getByRole("textbox", { name: "Article Title" });
 const test = base.extend<{ article: { page: Page; db: PrismaClient; ownerId: string; worldId: string; id: string; keyFor: (page: Page) => Promise<string>; open: (page: Page, title?: string) => Promise<void> } }>({
   article: async ({ page, context, baseURL }, run) => {
-    const db = new PrismaClient();
+    const db = testPrismaClient();
     let ownerId: string | undefined;
     try {
       const owner = await db.user.create({ data: { name: "Save browser fixture", email: `save-browser-${randomUUID()}@example.invalid` } });

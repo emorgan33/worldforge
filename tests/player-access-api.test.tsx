@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { createHash, randomBytes } from "node:crypto";
 import { test } from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { writeAsset, removeAssetFile } from "../src/lib/asset-storage";
 import { AccessError } from "../src/lib/access";
@@ -10,7 +10,7 @@ const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
 
 test("player access: denied paths return 404 without leaking resource info", { skip: !origin }, async (context) => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "GM owner", email: `gm-${stamp}@example.invalid` } });
   const playerA = await db.user.create({ data: { name: "Player A", email: `player-a-${stamp}@example.invalid` } });
@@ -77,7 +77,7 @@ test("player access: denied paths return 404 without leaking resource info", { s
 });
 
 test("player access: membership + policy grants access", { skip: !origin }, async (context) => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "GM", email: `gm2-${stamp}@example.invalid` } });
   const player = await db.user.create({ data: { name: "Player", email: `ply-${stamp}@example.invalid` } });
@@ -124,7 +124,7 @@ test("player access: membership + policy grants access", { skip: !origin }, asyn
 });
 
 test("player access: later member does not inherit grants", { skip: !origin }, async (context) => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "GM", email: `gm3-${stamp}@example.invalid` } });
   const playerA = await db.user.create({ data: { name: "Player A", email: `plyA-${stamp}@example.invalid` } });
@@ -166,7 +166,7 @@ test("player access: later member does not inherit grants", { skip: !origin }, a
 });
 
 test("player discovery surfaces only policy-readable article metadata", { skip: !origin }, async (context) => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "Discovery GM", email: `discovery-gm-${stamp}@example.invalid` } });
   const playerA = await db.user.create({ data: { name: "Discovery A", email: `discovery-a-${stamp}@example.invalid` } });
@@ -206,7 +206,7 @@ test("player discovery surfaces only policy-readable article metadata", { skip: 
 });
 
 test("shared articles reveal embedded assets and statblocks only after their own grants", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "Embed GM", email: `embed-gm-${stamp}@example.invalid` } });
   const player = await db.user.create({ data: { name: "Embed player", email: `embed-player-${stamp}@example.invalid` } });
@@ -239,7 +239,7 @@ test("shared articles reveal embedded assets and statblocks only after their own
 });
 
 test("player article metadata removes references to unreadable articles and statblocks", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "Metadata GM", email: `metadata-gm-${stamp}@example.invalid` } });
   const player = await db.user.create({ data: { name: "Metadata player", email: `metadata-player-${stamp}@example.invalid` } });
@@ -286,7 +286,7 @@ test("player article metadata removes references to unreadable articles and stat
 });
 
 test("player access: revocation takes effect immediately", { skip: !origin }, async (context) => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "GM", email: `gm4-${stamp}@example.invalid` } });
   const player = await db.user.create({ data: { name: "Player", email: `ply4-${stamp}@example.invalid` } });
@@ -335,7 +335,7 @@ test("player access: revocation takes effect immediately", { skip: !origin }, as
 });
 
 test("audit: events recorded for member actions", { skip: !origin }, async (context) => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "Audit GM", email: `audit-gm-${stamp}@example.invalid` } });
   const player = await db.user.create({ data: { name: "Audit P", email: `audit-ply-${stamp}@example.invalid` } });
@@ -379,7 +379,7 @@ test("audit: events recorded for member actions", { skip: !origin }, async (cont
 });
 
 test("player access: public reader behavior preserved", { skip: !origin }, async (context) => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "Public GM", email: `pub-gm-${stamp}@example.invalid` } });
 
@@ -402,7 +402,7 @@ test("player access: public reader behavior preserved", { skip: !origin }, async
 });
 
 test("explicit author declarations bind access to their declared identifier and reject cross-origin writes", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "Declaration owner", email: `declaration-owner-${stamp}@example.invalid` } });
   const otherOwner = await db.user.create({ data: { name: "Declaration other", email: `declaration-other-${stamp}@example.invalid` } });
@@ -440,7 +440,7 @@ test("explicit author declarations bind access to their declared identifier and 
 });
 
 test("preview sessions resolve one shared actor and stay confined to the declared world", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "Preview owner", email: `preview-owner-${stamp}@example.invalid` } });
   const player = await db.user.create({ data: { name: "Preview player", email: `preview-player-${stamp}@example.invalid` } });

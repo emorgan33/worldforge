@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 function sessionHash(token: string) {
@@ -18,7 +18,7 @@ function uniqueEmail(prefix: string) {
 
 test("migration preserves sessions with opaque IDs and rejects owner deletion", async context => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
 
   const owner = await db.user.create({
     data: { name: "Migration owner", email: uniqueEmail("migration-owner") },
@@ -99,7 +99,7 @@ test("migration preserves sessions with opaque IDs and rejects owner deletion", 
 
 test("RESTRICT prevents deletion while durable records exist", async context => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
 
   const owner = await db.user.create({
     data: { name: "Durable owner", email: uniqueEmail("durable-owner") },
@@ -182,8 +182,7 @@ test("P1 migration preserves populated pre-upgrade data and backfills session id
     runMigrate();
 
     process.env.DATABASE_URL = databaseUrl;
-    const { PrismaClient: HistoricPrismaClient } = await import("@prisma/client");
-    const historic = new HistoricPrismaClient();
+    const historic = testPrismaClient({ datasources: { db: { url: databaseUrl } } });
     const now = new Date().toISOString();
 
     // Two authors, one of whom owns worlds and durable history.
@@ -227,7 +226,7 @@ test("P1 migration preserves populated pre-upgrade data and backfills session id
     await cp(join(root, "prisma/migrations/20261030120000_installation_admin_p1"), join(migrationsDir, "20261030120000_installation_admin_p1"), { recursive: true });
     runMigrate();
 
-    const after = new PrismaClient();
+    const after = testPrismaClient({ datasources: { db: { url: databaseUrl } } });
     try {
       // Singleton inserted by migration.
       assert.equal(await after.installationAdminState.count(), 1);

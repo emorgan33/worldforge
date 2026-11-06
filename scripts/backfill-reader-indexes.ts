@@ -1,7 +1,8 @@
 import { PrismaClient } from "@prisma/client";
+import { createSqliteAdapter } from "../src/lib/prisma-adapter";
 import { backfillReaderReferenceIndexes } from "../src/lib/reader-reference-index";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: createSqliteAdapter() });
 
 async function main() {
   if (!process.argv.includes("--apply")) {

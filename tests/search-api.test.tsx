@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { test } from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
 test("owner search finds body text, paginates, filters, and hides other campaigns", { skip: !origin }, async context => {
   assert.match(origin!, /^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/);
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = Date.now();
   const owner = await db.user.create({ data: { name: "Search fixture", email: `search-${stamp}@example.invalid` } });
   const outsider = await db.user.create({ data: { name: "Other search author", email: `search-out-${stamp}@example.invalid` } });

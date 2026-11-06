@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { test } from "node:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { PrismaClient } from "@prisma/client";
 
 test("pending-review migration preserves evidence and imported claims while correcting old review labels", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "worldforge-review-migration-"));
-  const db = new PrismaClient({ datasourceUrl: `file:${path.join(root, "test.db")}` });
+  const db = testPrismaClient({ datasourceUrl: `file:${path.join(root, "test.db")}` });
   try {
     await db.$executeRawUnsafe('CREATE TABLE "ImageAsset" ("id" TEXT PRIMARY KEY, "worldId" TEXT NOT NULL)');
     await db.$executeRawUnsafe("INSERT INTO ImageAsset (id, worldId) VALUES ('asset', 'world')");

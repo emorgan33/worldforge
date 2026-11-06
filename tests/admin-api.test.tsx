@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { PrismaClient } from "@prisma/client";
@@ -45,7 +46,7 @@ const ADMIN_READ_PATHS = [
 ];
 
 test("admin read APIs reject anonymous, non-admin, expired, and disabled callers", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -114,7 +115,7 @@ test("admin read APIs reject anonymous, non-admin, expired, and disabled callers
 });
 
 test("admin account list returns safe DTOs only and supports filters and stable cursors", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -249,7 +250,7 @@ test("admin account list returns safe DTOs only and supports filters and stable 
 });
 
 test("admin account detail exposes counts and summaries without content bodies", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -306,7 +307,7 @@ test("admin account detail exposes counts and summaries without content bodies",
 });
 
 test("admin deletion preview reports blockers without enabling deletion", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -340,7 +341,7 @@ test("admin deletion preview reports blockers without enabling deletion", { skip
 });
 
 test("admin audit read returns sanitized entries with stable pagination and filters", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -421,7 +422,7 @@ test("admin audit read returns sanitized entries with stable pagination and filt
 });
 
 test("an administrator cannot read another owner's private world through author endpoints", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);
@@ -448,7 +449,7 @@ test("an administrator cannot read another owner's private world through author 
 });
 
 test("cursor pagination is stable when rows share a createdAt timestamp", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const createdUserIds: string[] = [];
   context.after(async () => {
     await deleteTestUsers(db, ...createdUserIds);

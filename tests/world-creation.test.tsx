@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
 import { deleteAccount, setAccountRole, setAccountStatus } from "../src/lib/admin-accounts";
 import { assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
@@ -13,7 +13,7 @@ test("world creation validates, retries concurrent requests, and allocates colli
   const { prisma } = await import("../src/lib/db");
   const owner = await prisma.user.create({ data: { name: "Creation test", email: `world-create-${randomUUID()}@example.invalid` } });
   const otherOwner = await prisma.user.create({ data: { name: "Creation other owner", email: `world-create-other-${randomUUID()}@example.invalid` } });
-  const db2 = new PrismaClient();
+  const db2 = testPrismaClient();
   const additionalUserIds: string[] = [];
   try {
     const requestId = randomUUID();

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
@@ -9,7 +9,7 @@ if (origin) assertIsolatedTestEnvironment();
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 test("map elements validate, persist, update, delete and stay owner-scoped", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const owner = await db.user.create({ data: { name: "Map owner", email: `map-${randomUUID()}@example.invalid` } });
   const other = await db.user.create({ data: { name: "Other owner", email: `map-other-${randomUUID()}@example.invalid` } });
   context.after(async () => {

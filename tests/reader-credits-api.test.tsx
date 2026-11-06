@@ -1,8 +1,8 @@
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
+import { testPrismaClient } from "./test-prisma-client";
 import { removeAssetFile, writeAsset } from "../src/lib/asset-storage";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
@@ -10,7 +10,7 @@ if (origin) assertIsolatedTestEnvironment();
 
 test("reader credits and image authorization follow publication and revocation", { skip: !origin }, async context => {
   assert.match(origin!, /^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/);
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const user = await db.user.create({ data: { name: "Reader credits fixture", email: `reader-credits-${Date.now()}@example.invalid` } });
   const world = await db.world.create({ data: { ownerId: user.id, title: "Credited world", slug: `credited-${Date.now()}`, isPublic: true } });
   const assetId = randomUUID();

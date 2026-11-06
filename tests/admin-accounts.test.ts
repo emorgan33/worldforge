@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { randomBytes, randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
-import { PrismaClient } from "@prisma/client";
 import {
   runAdminMutation,
   _runAdminMutation,
@@ -279,7 +279,7 @@ describe("admin-accounts mutation core", () => {
 
   it("serializes two independent clients on the singleton", async () => {
     const { db: db1, databaseUrl, cleanup: cleanup1 } = await createIsolatedDatabase();
-    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    const db2 = testPrismaClient({ datasources: { db: { url: databaseUrl } } });
     try {
       const { actor: actor1 } = await createAdminActor(db1);
       const { actor: actor2 } = await createAdminActor(db2);
@@ -378,7 +378,7 @@ describe("admin-accounts mutation core", () => {
 
   it("serializes LOCAL_OPERATOR mutations on the singleton", async () => {
     const { db: db1, databaseUrl, cleanup: cleanup1 } = await createIsolatedDatabase();
-    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    const db2 = testPrismaClient({ datasources: { db: { url: databaseUrl } } });
     try {
       const target1 = await createTargetUser(db1);
       const target2 = await createTargetUser(db2);
@@ -920,7 +920,7 @@ describe("admin account status", () => {
 
   it("serializes opposing admin disables and leaves an active administrator", async () => {
     const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
-    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    const db2 = testPrismaClient({ datasources: { db: { url: databaseUrl } } });
     try {
       const a = await createAdminActor(db);
       const b = await createAdminActor(db2);
@@ -941,7 +941,7 @@ describe("admin account status", () => {
 
   it("serializes competing local disables and rejects removal of the last admin", async () => {
     const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
-    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    const db2 = testPrismaClient({ datasources: { db: { url: databaseUrl } } });
     try {
       const a = await createAdminActor(db);
       const b = await createAdminActor(db2);
@@ -963,7 +963,7 @@ describe("admin account status", () => {
 
   it("rechecks an actor disabled by an earlier serialized mutation", async () => {
     const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
-    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    const db2 = testPrismaClient({ datasources: { db: { url: databaseUrl } } });
     try {
       const { actor, user } = await createAdminActor(db);
       const target = await createTargetUser(db);
@@ -1081,7 +1081,7 @@ describe("admin account roles", () => {
 
   it("serializes a demotion racing a disable and preserves an active admin", async () => {
     const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
-    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    const db2 = testPrismaClient({ datasources: { db: { url: databaseUrl } } });
     try {
       const a = await createAdminActor(db);
       const b = await createAdminActor(db2);
@@ -1368,7 +1368,7 @@ describe("admin account deletion", () => {
 
   it("recomputes ownership blockers after an independent world writer without a version bump", async () => {
     const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
-    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    const db2 = testPrismaClient({ datasources: { db: { url: databaseUrl } } });
     try {
       const { actor } = await createAdminActor(db);
       const user = await createTargetUser(db, { disabled: true });

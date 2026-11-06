@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { testPrismaClient } from "../test-prisma-client";
 import { expect, test } from "@playwright/test";
 import { DEFAULT_APPEARANCE } from "../../src/lib/world-appearance";
 import { assertIsolatedTestEnvironment } from "../auth-fixture";
 
 test("reader CSP allows a supported HTTP background image", async ({ page }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const owner = await db.user.create({ data: { name: "HTTP image CSP fixture", email: `http-csp-${randomUUID()}@example.invalid` } });
   const imageUrl = "http://nas:8080/map.png";
   const world = await db.world.create({ data: {
