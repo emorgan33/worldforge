@@ -23,4 +23,13 @@ address=$("${compose[@]}" port worldforge 3033)
 curl --fail --silent --show-error "http://$address/login" -o /dev/null
 "${compose[@]}" exec -T worldforge sh -c \
   'test "$(sqlite3 /data/worldforge.db "PRAGMA integrity_check;")" = ok && test -d /data/assets'
-echo "Release image healthy; login and fresh database verified."
+# The volume is disposable. Verify operational tooling remains available after
+# runtime hardening, without exposing the one-time account setup token.
+"${compose[@]}" exec -T worldforge sh -c '
+  set -e
+  pnpm exec prisma --version > /dev/null
+  pnpm auth:setup -- --create image-smoke@example.invalid > /dev/null 2>&1
+  pnpm admin:bootstrap -- image-smoke@example.invalid > /dev/null
+  test "$(sqlite3 /data/worldforge.db "SELECT role FROM User WHERE email=\"image-smoke@example.invalid\";")" = ADMIN
+'
+echo "Release image healthy; login, fresh database and setup/admin tooling verified."

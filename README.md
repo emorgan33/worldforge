@@ -196,6 +196,11 @@ set `WORLDFORGE_TRUSTED_PROXY=1` and configure a private proxy as described in t
   Rolling back may require restoring the matching pre-upgrade backup, not just
   selecting an older image, because startup applies database migrations.
 
+Image CI scans for package advisories before publishing and blocks fixable
+HIGH/CRITICAL findings. Unfixed findings remain visible in the full report;
+a green build is **not** a vulnerability-free guarantee. See
+[container security](docs/container-security.md) for policy and scan commands.
+
 See the [wiki upgrade guide](https://github.com/emorgan33/worldforge/wiki/Upgrading-and-Releases)
 for operator steps and [release publishing](docs/releases/README.md) for the
 maintainer checklist.
@@ -245,7 +250,7 @@ task-oriented guide for users and operators. Its reviewable source lives in
 implementation contracts, design decisions, release notes, validation reports,
 and historical records:
 
-- [WorldForge v0.4.1 release notes](docs/releases/v0.4.1.md)
+- [WorldForge v0.4.2 security-update notes](docs/releases/v0.4.2.md) (candidate; check GitHub releases for publication)
 - [Release publishing and image versions](docs/releases/README.md)
 - [Deployment configuration](docs/deployment-configuration.md)
 - [Feature status and roadmap](docs/feature-improvements.md)

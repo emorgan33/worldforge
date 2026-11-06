@@ -18,6 +18,13 @@ Older releases may have source tags only; do not assume an image exists.
 - A GitHub release publication triggers packaging; a `main` push or tag push
   alone does not. A failed publishing run is not a delivered image.
 
+Image publication also scans for package advisories. Fixable HIGH/CRITICAL
+findings block; full reports retain unfixed findings and remain available as
+workflow artifacts. Scheduled/manual builds scan without publishing. A green
+scan gate does not mean the image has no vulnerabilities. See
+[Container security](https://github.com/emorgan33/worldforge/blob/main/docs/container-security.md)
+for policy, remaining-risk review and local scan commands.
+
 ## Before every upgrade
 
 1. Read all release notes between the installed and target versions.
@@ -122,6 +129,9 @@ before announcing it. Never include access tokens in release notes.
 `docs/releases/`, `docs/deployment-configuration.md`, and
 `docs/backup-restore.md`.
 **Verified against:** Packaging implementation `12d0bff` (November 6, 2026).
-Local image/Compose startup is verified; first Docker Hub publication and
-clean-machine pull verification remain pending. Existing reader/UI guidance
-was not reverified for this documentation-only update.
+Local image/Compose startup and the subsequent `0.4.1` registry pull/deployment
+outside the repository were verified. A separately provisioned clean-machine
+test was not performed. Existing reader/UI guidance was not reverified for
+this documentation-only update.
+Security-gate guidance matches the `0.4.2` candidate: local image scanning and
+startup/setup/admin checks pass, but publication of that candidate is pending.

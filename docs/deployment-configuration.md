@@ -52,6 +52,11 @@ The original `docker-compose.yml` remains the local-build path:
 
 ### Maintainer publishing
 
+Publication scans the image before registry updates; fixable HIGH/CRITICAL
+findings block. Full reports include unfixed findings and are retained as
+workflow artifacts. See [Container security](container-security.md) for the
+exact gate, residual-risk limitations and local commands.
+
 1. Create the public Docker Hub repository `emorgan33/worldforge`. Set GitHub
    Actions secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (a Docker Hub token
    with write access). Never commit credentials.
@@ -154,6 +159,9 @@ back up the volume, then run
 `docker compose run --rm --no-deps --user root --entrypoint sh worldforge -c 'chown -R 10001:10001 /data'`.
 For bind mounts, assign the same ownership on the host. The runtime image
 includes SQLite's `sqlite3` CLI for recovery snapshots and integrity checks.
+The security candidate uses Node 22 on Debian 13 with pnpm `10.34.9`; unused
+npm/npx are removed from the runtime. Use supported `pnpm` commands for
+operations, not `npm`/`npx`. The `/data` layout and UID/GID are unchanged.
 It also keeps the installed package tree intact: Prisma CLI is needed for runtime
 migrations, and the setup/admin scripts and their runtime dependencies are
 retained for operations.

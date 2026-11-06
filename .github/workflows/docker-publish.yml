@@ -8,8 +8,17 @@ on:
       - .dockerignore
       - docker-compose.release.yml
       - scripts/smoke-release-image.sh
+      - scripts/scan-image.sh
+      - scripts/check-image-vulnerabilities.mjs
+      - tests/image-security.test.ts
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
   release:
     types: [published, released]
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
 
 # Serialize stable-tag updates and never cancel a partially published release.
 concurrency:
@@ -24,7 +33,7 @@ jobs:
     # Stable releases (including promotions) use released. Prereleases use
     # published, which also covers publication from a draft. Exactly one job
     # publishes for an ordinary stable release even though both events fire.
-    if: github.event_name == 'pull_request' || (github.event.action == 'published' && github.event.release.prerelease) || (github.event.action == 'released' && !github.event.release.prerelease)
+    if: github.event_name != 'release' || (github.event.action == 'published' && github.event.release.prerelease) || (github.event.action == 'released' && !github.event.release.prerelease)
     runs-on: ubuntu-latest
     permissions:
       contents: write # Append the published image/digest to release notes.
@@ -73,10 +82,25 @@ jobs:
       - name: Build linux/amd64 image
         if: env.EXISTING_VERSION != 'true'
         run: |
-          docker build --platform linux/amd64 \
+          docker build --pull --platform linux/amd64 \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
             -t worldforge-release:test .
+      - name: Install vulnerability scanner
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.76.2
+          cache: true
+      - name: Scan image and gate fixable high/critical vulnerabilities
+        run: bash scripts/scan-image.sh worldforge-release:test "$RUNNER_TEMP/image-security.json"
+      - name: Retain full vulnerability report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-security-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/image-security.json
+          if-no-files-found: warn
+          retention-days: 30
       - name: Smoke test with disposable storage
         run: bash scripts/smoke-release-image.sh worldforge-release:test
       - name: Push versioned image

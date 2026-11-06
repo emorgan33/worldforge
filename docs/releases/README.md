@@ -32,7 +32,8 @@ never be moved or reused for a different commit; use a new patch release.
    the matching Markdown notes. Mark prereleases appropriately. A draft or
    tag push alone does not publish an image.
 4. Watch `.github/workflows/docker-publish.yml` complete. It builds the exact
-   tag, smoke-tests fresh isolated storage, publishes version/commit tags,
+   tag, scans vulnerabilities and gates fixable HIGH/CRITICAL findings,
+   smoke-tests fresh isolated storage, publishes version/commit tags,
    pulls and smoke-tests the published digest, and appends image details to
    GitHub release notes. Stable publications/promotions can advance `latest`
    only when they are GitHub's current stable release with a stable version tag.
@@ -50,5 +51,6 @@ can leave the version pushed but notes or `latest` not updated. Investigate
 the failed step and rerun the unchanged release; verify the final digest.
 Do not retag a different commit to repair a failed release.
 
-The first real registry publication/pull must still be verified; local builds
-and packaging CI are not substitutes for that release evidence.
+Verify each real registry publication/pull; local builds and packaging CI are
+not substitutes for that release evidence. The `0.4.1` publication was verified;
+the `0.4.2` security candidate still awaits publication.

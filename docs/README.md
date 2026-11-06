@@ -22,3 +22,5 @@ contracts into the wiki as if they describe current product behavior.
   maintainer release checklist, and publication verification.
 - [Backup and restore](backup-restore.md) — matched database-and-assets
   recovery points required before upgrades.
+- [Container security](container-security.md) — image scanning, the release
+  gate, remaining-risk reporting and local reproduction.

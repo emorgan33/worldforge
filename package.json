@@ -1,6 +1,6 @@
 {
   "name": "worldforge",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -68,5 +68,5 @@
       "@prisma/config>deepmerge-ts": "8.0.2"
     }
   },
-  "packageManager": "pnpm@10.14.0"
+  "packageManager": "pnpm@10.34.9"
 }
