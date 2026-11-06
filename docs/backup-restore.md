@@ -16,6 +16,14 @@ named volume survives container replacement.
 
 From the directory containing `docker-compose.yml`:
 
+For a published-image install, the downloaded file may instead be named
+`compose.yml`; run from that directory with the same Compose project and proxy
+overrides. If you retained the name `docker-compose.release.yml`, add
+`-f docker-compose.release.yml` (plus any proxy override) to every Compose
+command below. Replace `worldforge:local` in helper-container commands with
+your exact deployed image reference, such as the version/digest in
+`WORLDFORGE_IMAGE`; a pull-only installation does not create the local-build tag.
+
 ```bash
 set -euo pipefail
 mkdir -p backups

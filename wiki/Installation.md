@@ -5,8 +5,8 @@ persistent storage for its SQLite database and uploaded assets.
 
 ## Requirements
 
-- Git
 - Docker Engine with the Compose plugin
+- curl for downloading the published-image Compose file, or Git for source builds
 - A reverse proxy and TLS certificate for a public deployment
 
 ## Install a published image (no Git checkout)
@@ -16,8 +16,15 @@ Choose a version and digest from a GitHub release whose **Release Docker image**
 workflow succeeded; older releases may not have published images. Do not treat
 this workflow's addition as evidence that an image has already been published.
 
-Download `docker-compose.release.yml` from the repository as `compose.yml` into
-a new directory. Create `.env` alongside it with:
+Replace `VERSION` with an actually published version (without `v`) in both the
+download URL and `.env`. Download its Compose file into a new directory:
+
+```bash
+mkdir worldforge && cd worldforge
+curl -fsSLo compose.yml https://raw.githubusercontent.com/emorgan33/worldforge/vVERSION/docker-compose.release.yml
+```
+
+Create `.env` alongside it with:
 
 ```dotenv
 WORLDFORGE_IMAGE=emorgan33/worldforge:VERSION
@@ -112,6 +119,14 @@ take a backup; the complete migration command is in the repository
 
 ## Upgrades
 
+For a published image, take the same verified stopped-service backup, change
+`WORLDFORGE_IMAGE` in `.env` to a published version/digest, and run
+`docker compose pull` followed by `docker compose up -d --wait`. See
+[Upgrading and Releases](Upgrading-and-Releases) for both deployment paths,
+version selection, verification, and rollback.
+
+For source builds:
+
 1. Stop WorldForge and create a verified database-and-assets backup.
 2. Pull the desired release or commit.
 3. Rebuild and start the service:
@@ -138,6 +153,7 @@ See [Configuration](Configuration) for the complete setting reference and
 
 **Source owner:** `wiki/Installation.md`; adapted from `README.md` and
 `docs/deployment-configuration.md`.
-**Verified against:** WorldForge commit `4ab66c1` (November 6, 2026), plus the
-issue #24 packaging changes (local fresh-volume build/health/login smoke test).
+**Verified against:** Packaging implementation `12d0bff` (November 6, 2026)
+and local fresh-volume build/health/login smoke test. Existing source-build and
+proxy guidance retains its prior verification against `4ab66c1`.
 Docker Hub pull verification remains pending the first published release.

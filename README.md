@@ -86,7 +86,37 @@ work has no committed release date.
 
 ## Self-host with Docker
 
-The supported way to run WorldForge is Docker Compose.
+The supported way to run WorldForge is Docker Compose. Choose a **published
+release image** (no checkout or local build) or **build from source**.
+
+### Published release image
+
+Images target [`emorgan33/worldforge`](https://hub.docker.com/r/emorgan33/worldforge)
+on Docker Hub, initially for **linux/amd64**. Use a version listed in the
+[GitHub release notes](https://github.com/emorgan33/worldforge/releases) after
+its **Release Docker image** workflow succeeds. Older releases may not have
+images; packaging support alone does not mean the first image is published.
+
+Replace both occurrences of `VERSION` below with that published version
+(without the leading `v`):
+
+```bash
+mkdir worldforge && cd worldforge
+curl -fsSLo compose.yml https://raw.githubusercontent.com/emorgan33/worldforge/vVERSION/docker-compose.release.yml
+cat > .env <<'EOF'
+WORLDFORGE_IMAGE=emorgan33/worldforge:VERSION
+WORLDFORGE_ORIGIN=http://localhost:3033
+WORLDFORGE_TRUSTED_PROXY=0
+EOF
+docker compose pull
+docker compose up -d --wait
+```
+
+Pin a version or its release-noted digest (`emorgan33/worldforge@sha256:...`)
+for predictable upgrades. `latest` follows the current stable release, not
+prereleases. See [releases and upgrades](#releases-and-upgrades) before updating.
+
+### Build from source
 
 ```bash
 git clone https://github.com/emorgan33/worldforge.git
@@ -95,7 +125,9 @@ cp .env.example .env        # adjust if needed; keep WORLDFORGE_ORIGIN correct
 docker compose up -d --build
 ```
 
-Open http://localhost:3033. The container applies database migrations on start.
+### First account
+
+For either path, open http://localhost:3033. The container applies database migrations on start.
 Set `WORLDFORGE_HOST_PORT` to change the host-side port and set
 `WORLDFORGE_ORIGIN` to the URL used in the browser. See the
 [deployment configuration guide](docs/deployment-configuration.md) and
@@ -129,7 +161,7 @@ docker compose exec worldforge pnpm db:seed
 
 ### Persistent data
 
-`docker-compose.yml` mounts a single named volume, `worldforge-data`, at `/data`:
+Both Compose files mount a single named volume, `worldforge-data`, at `/data`:
 
 - `/data/worldforge.db` — the SQLite database.
 - `/data/assets` — uploaded images (`WORLDFORGE_ASSET_DIR`).
@@ -139,12 +171,43 @@ reverse proxy, set `WORLDFORGE_ORIGIN` to the public URL (including scheme and,
 when non-standard, port) so same-origin writes are accepted, and terminate TLS
 at the proxy.
 
+Never remove the data volume with `docker compose down --volumes`. When
+switching deployment methods or directories, preserve the Compose project name,
+existing volume, and any reverse-proxy network overrides. For public HTTPS,
+set `WORLDFORGE_TRUSTED_PROXY=1` and configure a private proxy as described in the
+[deployment guide](docs/deployment-configuration.md).
+
+## Releases and upgrades
+
+- [GitHub releases](https://github.com/emorgan33/worldforge/releases) contain
+  release notes and, after successful publication, the Docker image tag/digest.
+  Repository [release records](docs/releases/) describe historical changes;
+  they are not evidence that a Docker image exists for every old version.
+- Publishing a GitHub release triggers image packaging for its exact tag.
+  A push to `main` or a tag push by itself does **not** publish an image.
+  Versions use `X.Y.Z` image tags for `vX.Y.Z` Git tags; full-commit tags use
+  `sha-<commit>`. Prereleases do not advance `latest`.
+- Before every upgrade, stop the service and take a verified **database plus
+  assets** backup. For a published-image install, change `WORLDFORGE_IMAGE` in
+  `.env`, then run `docker compose pull` and `docker compose up -d --wait`.
+  For a source-build install, select the intended source revision and rebuild
+  with `docker compose up -d --build`.
+- Check startup logs, sign-in, worlds, and uploaded images after upgrading.
+  Rolling back may require restoring the matching pre-upgrade backup, not just
+  selecting an older image, because startup applies database migrations.
+
+See the [wiki upgrade guide](https://github.com/emorgan33/worldforge/wiki/Upgrading-and-Releases)
+for operator steps and [release publishing](docs/releases/README.md) for the
+maintainer checklist.
+
 ## Configuration
 
-Copy `.env.example` to `.env`. Variables:
+For source builds, copy `.env.example` to `.env`; published-image installs use
+the `.env` shown above. Variables:
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
+| `WORLDFORGE_IMAGE` | published-image Compose | Versioned `emorgan33/worldforge` image or digest pin; no default. |
 | `DATABASE_URL` | yes | SQLite path. Relative paths resolve from `prisma/`, so `file:./dev.db` → `prisma/dev.db`. |
 | `WORLDFORGE_ORIGIN` | production | Public origin used for same-origin/CSRF checks. Must match the browser URL or writes return 403. |
 | `WORLDFORGE_TRUSTED_PROXY` | public HTTPS | Set to `1` only behind a private proxy that overwrites `X-WorldForge-Client-IP`. |
@@ -183,6 +246,8 @@ implementation contracts, design decisions, release notes, validation reports,
 and historical records:
 
 - [WorldForge v0.4.0 release notes](docs/releases/v0.4.0.md)
+- [Release publishing and image versions](docs/releases/README.md)
+- [Deployment configuration](docs/deployment-configuration.md)
 - [Feature status and roadmap](docs/feature-improvements.md)
 - [Publishing and permissions](docs/publishing-and-permissions.md)
 - [Article revisions](docs/article-revisions.md)

@@ -14,6 +14,13 @@ Run these commands from the directory containing `docker-compose.yml`. The
 service is deliberately stopped so SQLite and the asset directory form one
 consistent recovery point.
 
+For a published-image installation, run from the directory containing the
+downloaded `compose.yml`. If you kept `docker-compose.release.yml` as its name,
+add `-f docker-compose.release.yml` to every Compose command, along with any
+proxy override. Preserve the existing project name and volume. Substitute
+the exact deployed published image for `worldforge:local` in the helper command
+below; pull-only installations do not create that local-build tag.
+
 ```bash
 set -euo pipefail
 mkdir -p backups
@@ -93,3 +100,5 @@ storage maintenance.
 **Source owner:** `wiki/Backup-and-Restore.md`; adapted from
 `docs/backup-restore.md`.
 **Verified against:** WorldForge commit `fdff259` (October 31, 2026).
+Published-image command adaptations match packaging implementation `12d0bff`;
+backup/restore itself was not rerun for this documentation update.

@@ -8,11 +8,12 @@ succeeds; merging to `main` does not publish. Do not assume an older release
 already has an image. Supported architecture initially: **linux/amd64**.
 
 For an image version listed in its GitHub release notes, install without a
-repository checkout (replace `VERSION` below with that version, without `v`):
+repository checkout (replace `VERSION` in both the URL and `.env` below with
+that version, without `v`):
 
 ```bash
 mkdir worldforge && cd worldforge
-curl -fsSLo compose.yml https://raw.githubusercontent.com/emorgan33/worldforge/main/docker-compose.release.yml
+curl -fsSLo compose.yml https://raw.githubusercontent.com/emorgan33/worldforge/vVERSION/docker-compose.release.yml
 cat > .env <<'EOF'
 WORLDFORGE_IMAGE=emorgan33/worldforge:VERSION
 WORLDFORGE_ORIGIN=http://localhost:3033
@@ -77,6 +78,12 @@ rerun only for the same unchanged release tag, then verify the final notes and
 digest. No release or Docker Hub image is created merely by adding this workflow.
 
 ## Runtime settings
+
+`WORLDFORGE_IMAGE` is required only by the pull-only Compose file and accepts
+a published version tag or digest; the source-build file does not use it. The
+release Compose file also requires an explicit `WORLDFORGE_ORIGIN`, whereas
+the source-build file provides the local default shown below. For the complete
+maintainer checklist, see [Release publishing](releases/README.md).
 
 WorldForge reads its SQLite file from `DATABASE_URL`, its upload directory
 from `WORLDFORGE_ASSET_DIR`, its public browser origin from
