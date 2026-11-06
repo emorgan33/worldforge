@@ -54,16 +54,17 @@ Install Trivy `0.76.2` (pinned in CI), then run:
 
 ```bash
 docker build --pull -t worldforge-security:test .
-bash scripts/scan-image.sh worldforge-security:test /tmp/worldforge-image-security.json
+bash scripts/verify-vendor-patches.sh worldforge-security:test /tmp/worldforge-vendor-evidence.json
+bash scripts/scan-image.sh worldforge-security:test /tmp/worldforge-image-security.json /tmp/worldforge-vendor-evidence.json
 bash scripts/smoke-release-image.sh worldforge-security:test
 ```
 
 The scanner uses the local Docker daemon and downloads advisory metadata. Set
 `TRIVY_BIN` to an explicit path if needed. JSON retains all severities even
-when the policy check exits nonzero. Re-evaluate an existing report with:
+when the policy check exits nonzero. Re-evaluate existing reports with:
 
 ```bash
-node scripts/check-image-vulnerabilities.mjs /tmp/worldforge-image-security.json
+node scripts/check-image-vulnerabilities.mjs /tmp/worldforge-image-security.json /tmp/worldforge-vendor-evidence.json
 ```
 
 For remaining findings, identify the package/version/path, review distribution
@@ -130,9 +131,10 @@ packages; do not mix Debian unstable binaries into the stable image blindly.
 | systemd | CVE-2026-16742 concerns systemd-homed; fixes exist in 258.10/259.8/260.4/261.2/262. Candidate has system libraries but no systemd-homed executable. | The described homed attack path is absent in this image. Keep the source-package finding visible; do not install homed without re-evaluation. |
 | Perl | CVE-2026-9538 is fixed in Archive::Tar 3.10. `perl-base` is present, but loading Archive::Tar fails and no `Archive/Tar.pm` is installed. | The described module attack path is absent. Keep the source-package finding visible; adding the module would require review. |
 
-The container is non-root, but mount/umount retain their distribution SUID bits;
-the observed `/etc/fstab` has no active entries. Those facts limit some attack
-preconditions, not proof that the whole util-linux source package is safe.
+Pre-remediation, the container was non-root but mount/umount retained their
+distribution SUID bits and `/etc/fstab` had no active entries. The current image
+drops that setuid bit. Those facts limit some attack preconditions, not proof
+that the whole util-linux source package is safe.
 No exploit payloads were executed and no CVEs were suppressed for this review.
 
 ### Prisma's SQLite is a separate concern
@@ -166,3 +168,61 @@ Sources (each tracker entry links its upstream patches):
   [ncurses](https://security-tracker.debian.org/tracker/CVE-2025-69720),
   [systemd](https://security-tracker.debian.org/tracker/CVE-2026-16742),
   [Perl](https://security-tracker.debian.org/tracker/CVE-2026-9538)
+
+## Verified vendor backports (post-0.4.2 candidate)
+
+Docker's public Debian 13 hardened repository supplies packages whose
+`changelog.Debian.gz` explicitly names the required fixes. The image installs
+only the reviewed packages; it does not upgrade unrelated packages from that
+repository.
+
+| Package | Installed version | Verified fixes |
+| --- | --- | --- |
+| `sqlite3`, `libsqlite3-0` | `3.46.1-7+deb13u2+dhi3` | CVE-2026-119373, -119374, -119379 |
+| `ncurses-bin`, `ncurses-base`, `libtinfo6` | `6.5+20250216-2+deb13u0+dhi5` | CVE-2025-69720 |
+| `zlib1g` | `1:1.3.dfsg+really1.3.1-1+deb13u0+dhi4` | CVE-2026-85091 |
+
+`systemd-homed` and Perl `Archive::Tar` are absent; CI verifies that absence from
+the built image. Vendor settlements are **not** a version-number allowlist:
+`scripts/verify-vendor-patches.sh` extracts the installed changelog, requires
+the exact CVE text, records the actual package version, and fails closed when
+evidence is missing. `scripts/check-image-vulnerabilities.mjs` applies a
+disposition only when CVE, package name, and installed version all match. The
+full JSON report still shows every finding; the policy output separates
+`vendorResolvedHighCritical` from `unresolvedHighCritical`.
+
+Result with the vendor layer: **13 of the 51 high matches are evidence-resolved,
+38 remain unresolved.** The remaining set is util-linux (36 package matches
+across 4 CVEs), ACL (1), and zlib CVE-2026-76844 (1). Docker does not publish
+those fixes yet. They stay unresolved; no exception was added.
+
+Runtime exposure reduction for the unresolved util-linux set: the image
+removes setuid from `mount` and `umount`. WorldForge does not mount filesystems;
+Docker performs mounts before startup. `nsenter` is not setuid and the described
+issue requires a privileged operator to invoke it against an attacker-controlled
+target. These are mitigations, **not patches**, so the scanner findings remain.
+The ACL pathname issue requires a privileged caller processing an attacker path;
+WorldForge runs unprivileged and does not use those libacl path APIs. zlib
+CVE-2026-76844 concerns the system gz write path; Node uses its own bundled zlib.
+Those applicability observations do not certify the packages safe.
+
+Trivy continues to flag the backported packages because its Debian matcher uses
+the distribution tracker, which does not record vendor changelogs. That is why
+the gate evaluates explicit evidence instead of silently ignoring CVEs.
+
+### Prisma's embedded SQLite
+
+The package layer above patches the SQLite CLI and `libsqlite3-0`. It does not
+patch Prisma's static engine. On November 6, 2026, a prototype built
+`better-sqlite3` against the verified SQLite 3.54.1 amalgamation and connected
+Prisma 6.19.3 through its supported driver adapter. Basic queries, FTS5,
+migrations, timestamp compatibility, and the production image all worked, but
+interactive/concurrent transactions failed (`transaction failed to commit/roll
+back`) with both the bundled 3.49.2 driver and the patched build. The failure
+reproduced with Prisma's JavaScript engine and is not caused by the SQLite
+version. The prototype is **not shipped**.
+
+Therefore Prisma's embedded SQLite remains unresolved in this release. Do not
+claim the OS package settlement fixes it. A future attempt must first establish
+correct transaction/locking behavior across the existing concurrent tests, or
+adopt a supported Prisma/engine upgrade that removes the Rust SQLite engine.

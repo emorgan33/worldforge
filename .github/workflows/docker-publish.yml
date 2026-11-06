@@ -10,6 +10,9 @@ on:
       - scripts/smoke-release-image.sh
       - scripts/scan-image.sh
       - scripts/check-image-vulnerabilities.mjs
+      - scripts/verify-vendor-patches.sh
+      - scripts/vendor-security-patches.json
+      - scripts/vendor-patch-policy.mjs
       - tests/image-security.test.ts
       - package.json
       - pnpm-lock.yaml
@@ -91,14 +94,18 @@ jobs:
         with:
           version: v0.76.2
           cache: true
+      - name: Verify vendor backport evidence from the built image
+        run: bash scripts/verify-vendor-patches.sh worldforge-release:test "$RUNNER_TEMP/vendor-security-patches.json"
       - name: Scan image and gate fixable high/critical vulnerabilities
-        run: bash scripts/scan-image.sh worldforge-release:test "$RUNNER_TEMP/image-security.json"
-      - name: Retain full vulnerability report
+        run: bash scripts/scan-image.sh worldforge-release:test "$RUNNER_TEMP/image-security.json" "$RUNNER_TEMP/vendor-security-patches.json"
+      - name: Retain full vulnerability report and evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: image-security-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/image-security.json
+          path: |
+            ${{ runner.temp }}/image-security.json
+            ${{ runner.temp }}/vendor-security-patches.json
           if-no-files-found: warn
           retention-days: 30
       - name: Smoke test with disposable storage
