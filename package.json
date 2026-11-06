@@ -22,12 +22,17 @@
     "db:seed": "prisma db seed",
     "stock-art:validate": "tsx scripts/validate-stock-art.ts",
     "stock-art:advisories": "tsx scripts/apply-stock-advisories.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "sqlite:build": "node scripts/build-patched-sqlite.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "@prisma/adapter-better-sqlite3": "6.19.3",
+    "@prisma/adapter-libsql": "6.19.3",
+    "@prisma/driver-adapter-utils": "6.19.3",
     "@tiptap/core": "3.32.0",
     "@tiptap/extension-image": "3.32.0",
     "@tiptap/extension-mention": "^3.32.0",
@@ -37,6 +42,7 @@
     "@tiptap/react": "^3.32.0",
     "@tiptap/starter-kit": "^3.32.0",
     "@tiptap/suggestion": "^3.32.0",
+    "better-sqlite3": "11.10.0",
     "clsx": "^2.1.1",
     "htmlparser2": "10.0.0",
     "lucide-react": "^1.57.0",
@@ -66,7 +72,10 @@
   "pnpm": {
     "overrides": {
       "@prisma/config>deepmerge-ts": "8.0.2"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   },
   "packageManager": "pnpm@10.34.9"
 }

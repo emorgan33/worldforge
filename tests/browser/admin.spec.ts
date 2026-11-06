@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { testPrismaClient } from "../test-prisma-client";
 import { PrismaClient } from "@prisma/client";
 import { expect, test } from "@playwright/test";
 import { SESSION_COOKIE } from "../../src/lib/auth-constants";
@@ -23,7 +24,7 @@ test("anonymous admin requests redirect to login", async ({ page }) => {
 
 test("signed-in non-admins see an access-denied page without account data", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let userId: string | undefined;
   try {
     const user = await db.user.create({ data: { name: "Non-admin fixture", email: `admin-browser-nonadmin-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
@@ -42,7 +43,7 @@ test("signed-in non-admins see an access-denied page without account data", asyn
 
 test("direct admin URLs deny GM, PLAYER, disabled, and revoked callers", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const ids: string[] = [];
   try {
     for (const state of [
@@ -78,7 +79,7 @@ test("direct admin URLs deny GM, PLAYER, disabled, and revoked callers", async (
 test("every admin page enforces the complete caller matrix", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
   test.setTimeout(120_000);
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const userIds: string[] = [];
   try {
     const target = await db.user.create({
@@ -156,7 +157,7 @@ test("every admin page enforces the complete caller matrix", async ({ page, cont
 
 test("administrators can create an account and receive a one-time setup link", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   try {
     const admin = await createAdminSession(db);
@@ -184,7 +185,7 @@ test("administrators can create an account and receive a one-time setup link", a
 
 test("setup links are cleared after navigation, Back, and Forward", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   try {
     const admin = await createAdminSession(db);
@@ -215,7 +216,7 @@ test("setup links are cleared after navigation, Back, and Forward", async ({ pag
 
 test("failed account creation restores controls and reports uncertainty", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   try {
     const admin = await createAdminSession(db);
@@ -243,7 +244,7 @@ test("failed account creation restores controls and reports uncertainty", async 
 
 test("truncated successful create responses refresh state and never replay the mutation", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetEmail = "";
   let postCount = 0;
@@ -279,7 +280,7 @@ test("truncated successful create responses refresh state and never replay the m
 
 test("administrators can revoke all of their own sessions and are signed out", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   try {
     const admin = await createAdminSession(db);
@@ -299,7 +300,7 @@ test("administrators can revoke all of their own sessions and are signed out", a
 
 test("administrators can delete an eligible disabled account", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   try {
@@ -331,7 +332,7 @@ test("administrators can delete an eligible disabled account", async ({ page, co
 
 test("long account identifiers do not widen a 320px viewport", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   try {
@@ -357,7 +358,7 @@ test("long account identifiers do not widen a 320px viewport", async ({ page, co
 
 test("dirty workspace changes require confirmation before Administration navigation", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let ownerId: string | undefined;
   try {
     const owner = await db.user.create({ data: { name: "Dirty admin fixture", email: `dirty-admin-${randomUUID()}@example.invalid`, role: "ADMIN" } });
@@ -398,7 +399,7 @@ test("dirty workspace changes require confirmation before Administration navigat
 
 test("account detail exposes accessible control names", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   try {
@@ -418,7 +419,7 @@ test("account detail exposes accessible control names", async ({ page, context, 
 
 test("truncated successful account detail does not crash and can be retried", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const admin = await createAdminSession(db);
   const target = await db.user.create({ data: { name: "Detail retry", email: `detail-retry-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
   try {
@@ -444,7 +445,7 @@ test("truncated successful account detail does not crash and can be retried", as
 
 test("malformed detail refresh keeps the last valid account and offers retry", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const admin = await createAdminSession(db);
   const target = await db.user.create({ data: { name: "Detail refresh", email: `detail-refresh-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
   try {
@@ -478,7 +479,7 @@ test("malformed detail refresh keeps the last valid account and offers retry", a
 
 test("failed filtered pagination keeps applied results and cursor", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const admin = await createAdminSession(db);
   const ids: string[] = [];
   const prefix = `filtered-${randomUUID()}`;
@@ -528,7 +529,7 @@ test("failed filtered pagination keeps applied results and cursor", async ({ pag
 
 test("users pagination applies stable filters", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   const createdIds: string[] = [];
   try {
@@ -568,7 +569,7 @@ test("users pagination applies stable filters", async ({ page, context, baseURL 
 
 test("administrators can issue a recovery link from account detail", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   try {
@@ -596,7 +597,7 @@ test("administrators can issue a recovery link from account detail", async ({ pa
 
 test("administrators can change role and disable an account", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   try {
@@ -631,7 +632,7 @@ test("administrators can change role and disable an account", async ({ page, con
 
 test("administrators can revoke a single target session", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   try {
@@ -657,7 +658,7 @@ test("administrators can revoke a single target session", async ({ page, context
 
 test("blocked deletion shows blockers", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   let worldId: string | undefined;
@@ -707,7 +708,7 @@ test("blocked deletion shows blockers", async ({ page, context, baseURL }) => {
 
 test("transfer and purge resolve owned worlds before account deletion", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let recipientId: string | undefined;
   let transferredWorldId: string | undefined;
@@ -762,7 +763,7 @@ test("transfer and purge resolve owned worlds before account deletion", async ({
 
 test("stale account versions are reported", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   try {
@@ -791,7 +792,7 @@ test("stale account versions are reported", async ({ page, context, baseURL }) =
 
 test("audit pagination disables filter changes while a page is in flight", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   const auditIds: string[] = [];
   const targetId = `audit-page-${randomUUID()}`;
@@ -838,7 +839,7 @@ test("audit pagination disables filter changes while a page is in flight", async
 
 test("late setup responses do not restore secrets after client-side link navigation", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   try {
     const admin = await createAdminSession(db);
@@ -880,7 +881,7 @@ test("late setup responses do not restore secrets after client-side link navigat
 
 test("incomplete recovery responses refresh state and report uncertainty", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   try {
@@ -914,7 +915,7 @@ test("incomplete recovery responses refresh state and report uncertainty", async
 
 test("truncated self revoke-all clears local identity after commit", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   try {
     const admin = await createAdminSession(db);
@@ -942,7 +943,7 @@ test("truncated self revoke-all clears local identity after commit", async ({ pa
 
 test("late recovery responses do not restore secrets after client-side link navigation", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   try {
@@ -981,7 +982,7 @@ test("late recovery responses do not restore secrets after client-side link navi
 
 test("keyboard confirmation returns focus after a status change", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   try {
@@ -1016,7 +1017,7 @@ test("keyboard confirmation returns focus after a status change", async ({ page,
 
 test("non-self revoke-all reports conflicts and network failures and restores controls", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   try {
@@ -1070,7 +1071,7 @@ test("non-self revoke-all reports conflicts and network failures and restores co
 
 test("detail mutations work after returning from another admin page", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   try {
@@ -1101,7 +1102,7 @@ test("detail mutations work after returning from another admin page", async ({ p
 
 test("expired admin sessions are redirected from every admin page", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   let adminId: string | undefined;
   let targetId: string | undefined;
   try {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { test } from "node:test";
 import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
@@ -23,8 +24,7 @@ test("creation migration upgrades populated worlds and preserves multiple null r
     await writeFile(dbPath, "");
     runMigrate();
     process.env.DATABASE_URL = databaseUrl;
-    const { PrismaClient } = await import("@prisma/client");
-    const db = new PrismaClient();
+    const db = testPrismaClient();
     const owner = { id: randomUUID(), email: `migration-${randomUUID()}@example.invalid` };
     const prior = { id: randomUUID(), slug: `existing-${randomUUID()}` };
     const now = new Date().toISOString();
@@ -37,7 +37,7 @@ test("creation migration upgrades populated worlds and preserves multiple null r
       await cp(join(root, "prisma/migrations", name), join(migrationsDir, name), { recursive: true });
     }
     runMigrate();
-    const after = new PrismaClient();
+    const after = testPrismaClient();
     try {
       const restored = await after.world.findUniqueOrThrow({ where: { id: prior.id } });
       assert.equal(restored.title, "Existing world");

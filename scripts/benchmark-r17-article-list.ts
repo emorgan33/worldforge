@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { PrismaClient } from "@prisma/client";
+import { createSqliteAdapter } from "../src/lib/prisma-adapter";
 import { rankSearchArticles } from "../src/lib/campaign-search";
 import { rankedSearchPage } from "../src/lib/campaign-search-db";
 import { publicArticleFilter } from "../src/lib/publication";
@@ -9,7 +10,7 @@ import { assetIsPublic, publicBacklinks } from "../src/lib/public-world";
 import { documentReferences, parseArticleDocument, publicDocument } from "../src/lib/public-content";
 import { backfillReaderReferenceIndexes } from "../src/lib/reader-reference-index";
 
-const prisma = new PrismaClient({ log: [{ emit: "event", level: "query" }] });
+const prisma = new PrismaClient({ adapter: createSqliteAdapter(), log: [{ emit: "event", level: "query" }] });
 const PAGE_SIZE = 200;
 const ARTICLE_COUNT = Number(process.env.R17_ARTICLE_COUNT ?? 2_101);
 let queryCount = 0;

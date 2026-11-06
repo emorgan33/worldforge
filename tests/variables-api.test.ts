@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { interpolateVariables } from "../src/lib/variable-parser";
 import type { VariableCollectionItem } from "../src/types";
@@ -10,7 +10,7 @@ const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
 
 test("variable writes validate scalar fields, persist raw values and render safely on read", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const owner = await db.user.create({ data: { name: "Variable fixture", email: `variables-${randomUUID()}@example.invalid` } });
   context.after(async () => { await deleteTestUsers(db, owner.id); await db.$disconnect(); });
   const world = await db.world.create({ data: { ownerId: owner.id, title: "Variables", slug: `variables-${randomUUID()}` } });
@@ -41,7 +41,7 @@ test("variable writes validate scalar fields, persist raw values and render safe
 });
 
 test("concurrent variable writes preserve both rows and foreign writes are refused", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const owner = await db.user.create({ data: { name: "Variable owner", email: `variables-owner-${randomUUID()}@example.invalid` } });
   const foreign = await db.user.create({ data: { name: "Foreign owner", email: `variables-foreign-${randomUUID()}@example.invalid` } });
   context.after(async () => { await deleteTestUsers(db, owner.id, foreign.id); await db.$disconnect(); });

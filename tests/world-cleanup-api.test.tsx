@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { assetDirectory } from "../src/lib/asset-storage";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
@@ -11,7 +11,7 @@ const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
 
 test("world cleanup leaves shared assets and staged files untouched", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const suffix = randomUUID();
   const ownerA = await db.user.create({ data: { name: "Cleanup owner A", email: `cleanup-a-${suffix}@example.invalid` } });
   const ownerB = await db.user.create({ data: { name: "Cleanup owner B", email: `cleanup-b-${suffix}@example.invalid` } });

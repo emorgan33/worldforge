@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { randomUUID } from "node:crypto";
 import { test, type TestContext } from "node:test";
 import { PrismaClient } from "@prisma/client";
@@ -10,7 +11,7 @@ const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
 
 async function fixture(context: TestContext) {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const owner = await db.user.create({ data: { name: "R14 owner", email: `r14-owner-${randomUUID()}@example.invalid` } });
   const playerA = await db.user.create({ data: { name: "R14 player A", email: `r14-a-${randomUUID()}@example.invalid` } });
   const playerB = await db.user.create({ data: { name: "R14 player B", email: `r14-b-${randomUUID()}@example.invalid` } });

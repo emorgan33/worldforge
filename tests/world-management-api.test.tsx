@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
 import { test } from "node:test";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
@@ -8,7 +8,7 @@ const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
 
 test("authenticated lifecycle API archives privately, restores, duplicates with retries, and purges only archived worlds", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const owner = await db.user.create({ data: { name: "Lifecycle API owner", email: `world-life-${randomUUID()}@example.invalid` } });
   const world = await db.world.create({ data: { ownerId: owner.id, title: "API Realm", slug: `api-realm-${randomUUID()}`, description: "Keep this", system: "PF_2E", isPublic: true } });
   const article = await db.article.create({ data: { worldId: world.id, title: "Published", slug: "published", publicationStatus: "PUBLISHED", visibility: "PUBLIC" } });

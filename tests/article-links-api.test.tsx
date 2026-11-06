@@ -1,12 +1,12 @@
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
+import { testPrismaClient } from "./test-prisma-client";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PrismaClient } from "@prisma/client";
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
 test("article save indexes stable links atomically, deduplicates edges, scopes worlds and removes stale backlinks", { skip: !origin }, async context => {
   assert.match(origin!, /^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/);
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const user = await db.user.create({ data: { name: "Article link fixture", email: `links-${Date.now()}@example.invalid` } });
   context.after(async () => { await deleteTestUsers(db, user.id); await db.$disconnect(); });
   const authenticatedFetch = await authorFetch(db, user.id, origin!);

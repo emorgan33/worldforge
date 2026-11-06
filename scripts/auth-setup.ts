@@ -1,10 +1,11 @@
 import { PrismaClient } from "@prisma/client";
+import { createSqliteAdapter } from "../src/lib/prisma-adapter";
 import { createAccount, issueRecovery } from "../src/lib/admin-accounts";
 import { appendInstallationAuditEvent } from "../src/lib/admin-audit";
 import { withAccountLifecycleLock } from "../src/lib/account-lifecycle";
 import { normalizeEmail, validName } from "../src/lib/admin-policy";
 
-const db = new PrismaClient();
+const db = new PrismaClient({ adapter: createSqliteAdapter() });
 const LOCAL_OPERATOR = { type: "LOCAL_OPERATOR" as const };
 const DEFAULT_GM_EMAIL = "lorekeeper@worldforge.dev";
 

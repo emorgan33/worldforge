@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
+import { createSqliteAdapter } from "../src/lib/prisma-adapter";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: createSqliteAdapter() });
 
 async function main() {
   console.log("Cleaning existing records...");

@@ -31,5 +31,6 @@ curl --fail --silent --show-error "http://$address/login" -o /dev/null
   pnpm auth:setup -- --create image-smoke@example.invalid > /dev/null 2>&1
   pnpm admin:bootstrap -- image-smoke@example.invalid > /dev/null
   test "$(sqlite3 /data/worldforge.db "SELECT role FROM User WHERE email=\"image-smoke@example.invalid\";")" = ADMIN
+  node scripts/assert-sqlite-version.cjs
 '
 echo "Release image healthy; login, fresh database and setup/admin tooling verified."

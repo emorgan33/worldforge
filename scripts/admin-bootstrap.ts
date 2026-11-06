@@ -1,7 +1,8 @@
 import { PrismaClient } from "@prisma/client";
+import { createSqliteAdapter } from "../src/lib/prisma-adapter";
 import { bootstrapAdmin } from "../src/lib/admin-accounts";
 
-const db = new PrismaClient();
+const db = new PrismaClient({ adapter: createSqliteAdapter() });
 async function main() {
   const args = process.argv.slice(2).filter(argument => argument !== "--");
   const email = args[0]?.trim().toLowerCase();

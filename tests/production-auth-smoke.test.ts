@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { test } from "node:test";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { chromium } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
 import { assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { hashPassword } from "../src/lib/passwords";
 import { SESSION_COOKIE } from "../src/lib/auth-constants";
@@ -12,7 +12,7 @@ const origin = process.env.WORLDFORGE_PRODUCTION_TEST_ORIGIN;
 test("production login issues a session accepted by authenticated APIs", { skip: !origin }, async context => {
   if (!origin) return;
   assertIsolatedTestEnvironment();
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const email = `production-auth-${randomUUID()}@example.invalid`;
   const password = "Isolated production smoke passphrase 2046!";
   const user = await db.user.create({

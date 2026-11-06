@@ -149,9 +149,11 @@ have not been demonstrated through normal WorldForge input; this is not a
 comprehensive non-exploitability proof.
 
 A system-library upgrade or different base image cannot patch this statically
-bundled engine. Resolving that independently requires a supported Prisma engine
-update or a separately designed/tested driver change. Do not disable FTS5 or
-silently change existing databases to make a scanner score look better.
+bundled engine. The remediation candidate removes the Rust SQLite engine and
+uses Prisma's client engine with a driver adapter built against SQLite 3.54.1;
+see [Prisma SQLite remediation candidate](#prisma-sqlite-remediation-candidate).
+Do not disable FTS5 or silently change existing databases to make a scanner
+score look better.
 
 Sources (each tracker entry links its upstream patches):
 
@@ -210,19 +212,53 @@ Trivy continues to flag the backported packages because its Debian matcher uses
 the distribution tracker, which does not record vendor changelogs. That is why
 the gate evaluates explicit evidence instead of silently ignoring CVEs.
 
-### Prisma's embedded SQLite
+### Prisma SQLite remediation candidate
 
-The package layer above patches the SQLite CLI and `libsqlite3-0`. It does not
-patch Prisma's static engine. On November 6, 2026, a prototype built
-`better-sqlite3` against the verified SQLite 3.54.1 amalgamation and connected
-Prisma 6.19.3 through its supported driver adapter. Basic queries, FTS5,
-migrations, timestamp compatibility, and the production image all worked, but
-interactive/concurrent transactions failed (`transaction failed to commit/roll
-back`) with both the bundled 3.49.2 driver and the patched build. The failure
-reproduced with Prisma's JavaScript engine and is not caused by the SQLite
-version. The prototype is **not shipped**.
+The package layer above patches the SQLite CLI and `libsqlite3-0`; it does not
+patch Prisma's native Rust engine. The remediation candidate removes that engine
+from the application path:
 
-Therefore Prisma's embedded SQLite remains unresolved in this release. Do not
-claim the OS package settlement fixes it. A future attempt must first establish
-correct transaction/locking behavior across the existing concurrent tests, or
-adopt a supported Prisma/engine upgrade that removes the Rust SQLite engine.
+- `prisma/schema.prisma` uses `engineType = "client"`; runtime queries and
+  `prisma migrate deploy` use the JavaScript schema engine through
+  `@prisma/adapter-better-sqlite3`.
+- `scripts/build-patched-sqlite.mjs` downloads the SQLite **3.54.1**
+  amalgamation, verifies SHA3-256
+  `e2b869d3003b33c942b7dd7063604fbc53553e1b66609570df39b9b7b558ee81`, enables
+  FTS3/FTS5, JSON, math, DBSTAT and foreign keys, and rebuilds `better-sqlite3`.
+- The Docker build runs that script and the smoke test asserts the embedded
+  version is at least 3.54.0. This SQLite includes the fixes for
+  CVE-2026-119373/-119374/-119379.
+
+`better-sqlite3` is synchronous, so the adapter is wrapped with a process-wide
+async lock. A transaction holds the lock until commit/rollback; other clients
+wait asynchronously instead of blocking the event loop on a SQLite write lock.
+Tests reuse one application client through `tests/test-prisma-client.ts`, while
+isolated-database tests get a separate adapter for the copied file. Foundry
+provenance lookups are chunked because the adapter does not split large `IN`
+lists the way Prisma's native engine did.
+
+Evidence from the candidate (not yet published):
+
+- Embedded runtime reports SQLite 3.54.1; fresh-volume migrations, setup,
+  admin bootstrap, login and integrity checks pass.
+- Unit 242/242, service 99/99, HTTP 112/112 and browser 66/66 pass.
+- A disposable upgrade from published `0.4.2` preserved the admin role and
+  native millisecond timestamps (integer storage unchanged) and served
+  `/login`.
+- The container production-auth smoke could not run locally because rootless
+  bind-mounted SQLite sidecar files are not writable by the host test process.
+  CI runs production authentication against `next start` separately; container
+  login/setup/admin checks pass, but this local gap must remain disclosed.
+
+Residual limits: MySQL/PostgreSQL-style multi-process concurrency is not
+created by this adapter, but every SQLite process still serializes writes.
+The adapter path must keep the process-wide lock and must not be combined with
+unserialized additional in-process clients. Do not ship it without the full
+suite and an image scan.
+
+The Docker image always runs `scripts/build-patched-sqlite.mjs`. A native source
+deployment must run `pnpm sqlite:build` to replace `better-sqlite3`'s bundled
+SQLite; ordinary `pnpm install` leaves 3.49.2 in place. CI's production-auth job
+builds and asserts the patched runtime; behavior suites use the bundled driver.
+The security remediation claim applies to the image and to source deployments
+that run the documented build script.

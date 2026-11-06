@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { characterRowsKey } from "../src/lib/character-sheet";
 
@@ -9,7 +9,7 @@ const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
 
 test("character sheets persist through edits, revisions and world export/import without losing lore or profile data", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const owner = await db.user.create({ data: { name: "Sheet owner", email: `sheet-${randomUUID()}@example.invalid` } });
   const foreign = await db.user.create({ data: { name: "Other owner", email: `sheet-other-${randomUUID()}@example.invalid` } });
   context.after(async () => { await deleteTestUsers(db, owner.id, foreign.id); await db.$disconnect(); });

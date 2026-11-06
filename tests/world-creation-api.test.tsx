@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { test } from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 
@@ -8,7 +8,7 @@ const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
 
 test("world collection API validates creation, authorizes PATCH targets, and returns explicit summaries", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const owner = await db.user.create({ data: { name: "World API owner", email: `world-api-${randomUUID()}@example.invalid` } });
   const otherOwner = await db.user.create({ data: { name: "World API other", email: `world-api-other-${randomUUID()}@example.invalid` } });
   const foreign = await db.world.create({ data: { ownerId: otherOwner.id, title: "Foreign", slug: `foreign-${randomUUID()}` } });

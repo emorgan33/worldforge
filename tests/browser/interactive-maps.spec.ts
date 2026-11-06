@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { testPrismaClient } from "../test-prisma-client";
 import { PrismaClient } from "@prisma/client";
 import { expect, test as base, type Page, type Route } from "@playwright/test";
 import { SESSION_COOKIE } from "../../src/lib/auth-constants";
@@ -7,7 +8,7 @@ import { assertIsolatedTestEnvironment } from "../auth-fixture";
 const test = base.extend<{ mapEditor: { page: Page; db: PrismaClient; mapId: string } }>({
   mapEditor: async ({ page, context, baseURL }, run) => {
     assertIsolatedTestEnvironment();
-    const db = new PrismaClient();
+    const db = testPrismaClient();
     let ownerId: string | undefined;
     try {
       const owner = await db.user.create({ data: { name: "Map browser fixture", email: `map-browser-${randomUUID()}@example.invalid` } });

@@ -1,6 +1,7 @@
 import { test, before, after } from "node:test";
+import { testPrismaClient } from "./test-prisma-client";
 import assert from "node:assert/strict";
-import { PrismaClient, type PrismaClient as PrismaClientType } from "@prisma/client";
+import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { execFileSync } from "node:child_process";
@@ -26,12 +27,12 @@ before(async () => {
   });
   await writeFile(path.join(tempDir, "roundtrip.db"), "");
   execFileSync("pnpm", ["exec", "prisma", "migrate", "deploy"], { cwd: process.cwd(), env: process.env, stdio: "pipe" });
-  const [{ PrismaClient }, service, storage] = await Promise.all([
+  const [, service, storage] = await Promise.all([
     import("@prisma/client"),
     import("../src/lib/world-export"),
     import("../src/lib/asset-storage"),
   ]);
-  db = new PrismaClient();
+  db = testPrismaClient();
   exportService = service;
   normalizeImage = storage.normalizeImage;
   writeAsset = storage.writeAsset;
@@ -71,7 +72,7 @@ test("v4 roundtrip preserves timeline eras and ordered ink/erase/ink drawings", 
   const admin = await db.user.create({ data: { name: "Import race admin", email: `import-race-admin-${randomUUID()}@example.invalid`, role: "ADMIN" } });
   const adminSession = await db.authSession.create({ data: { userId: admin.id, tokenHash: createHash("sha256").update(randomUUID()).digest("hex"), expiresAt: new Date(Date.now() + 60_000) } });
   const actor = { type: "WEB_ADMIN" as const, userId: admin.id, sessionId: adminSession.id };
-  const adminClient = new PrismaClient();
+  const adminClient = testPrismaClient();
   try {
     let signalEntered!: () => void;
     let release!: () => void;

@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { testPrismaClient } from "./test-prisma-client";
 import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -74,7 +75,7 @@ export async function createIsolatedDatabase(): Promise<{
   const assetDir = join(dir, "assets");
   await mkdir(assetDir, { recursive: true });
   const databaseUrl = `file:${dbFile}?connection_limit=1`;
-  const db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+  const db = testPrismaClient({ datasources: { db: { url: databaseUrl } } });
   return {
     db,
     databaseUrl,

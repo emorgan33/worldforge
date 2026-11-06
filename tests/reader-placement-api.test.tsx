@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { test, type TestContext } from "node:test";
 import { createHash, randomUUID } from "node:crypto";
-import { PrismaClient, type Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import sharp from "sharp";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { writeAsset, removeAssetFile } from "../src/lib/asset-storage";
@@ -15,7 +16,7 @@ function descriptions(html: string, url: string) {
 }
 
 async function publicImageFixture(context: TestContext) {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const assetIds: string[] = [];
   const ownerIds: string[] = [];
   context.after(async () => {
@@ -243,7 +244,7 @@ test("public image authorization excludes private references and revokes on publ
 });
 
 test("public and campaign readers preserve informative, decorative and fallback descriptions", { skip: !origin }, async context => {
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const stamp = randomUUID();
   const owner = await db.user.create({ data: { name: "Placement GM", email: `placement-gm-${stamp}@example.invalid` } });
   const player = await db.user.create({ data: { name: "Placement player", email: `placement-player-${stamp}@example.invalid`, role: "PLAYER" } });

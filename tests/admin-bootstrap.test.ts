@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { testPrismaClient } from "./test-prisma-client";
 import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { bootstrapAdmin, localRecoverAccount } from "../src/lib/admin-accounts";
 import { tokenHash } from "../src/lib/passwords";
 import { createIsolatedDatabase, createAdminActor, createTargetUser } from "./admin-accounts-fixture";
@@ -70,7 +70,7 @@ describe("bootstrapAdmin", () => {
 
   it("leaves exactly one active admin when two bootstraps race", async () => {
     const { db, databaseUrl, cleanup } = await createIsolatedDatabase();
-    const db2 = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    const db2 = testPrismaClient({ datasources: { db: { url: databaseUrl } } });
     try {
       const a = await createTargetUser(db, { role: "AUTHOR" });
       const b = await createTargetUser(db, { role: "AUTHOR" });

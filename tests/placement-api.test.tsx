@@ -1,7 +1,7 @@
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
+import { testPrismaClient } from "./test-prisma-client";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
@@ -9,7 +9,7 @@ if (origin) assertIsolatedTestEnvironment();
 
 test("placement descriptions persist, clone, restore and validate", { skip: !origin }, async context => {
   assert.match(origin!, /^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/);
-  const db = new PrismaClient();
+  const db = testPrismaClient();
   const user = await db.user.create({ data: { name: "Placement test fixture", email: `placement-${Date.now()}@example.invalid` } });
   context.after(async () => { await db.world.deleteMany({ where: { ownerId: user.id } }); await deleteTestUsers(db, user.id); await db.$disconnect(); });
   const authenticatedFetch = await authorFetch(db, user.id, origin!);

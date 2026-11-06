@@ -35,8 +35,13 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
 FROM deps AS build
+RUN apt-get update -y \
+    && apt-get install -y --no-install-recommends build-essential python3 unzip \
+    && rm -rf /var/lib/apt/lists/*
 COPY . .
-RUN pnpm db:generate && pnpm stock-art:validate && pnpm build
+RUN export DATABASE_URL=file:/tmp/worldforge-build.db \
+    && node scripts/build-patched-sqlite.mjs \
+    && pnpm db:generate && pnpm stock-art:validate && pnpm build
 
 FROM base AS runner
 ENV NODE_ENV="production" \
@@ -52,6 +57,7 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/resources ./resources
 COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 COPY --from=build /app/next.config.ts ./next.config.ts
 COPY --from=build /app/tsconfig.json ./tsconfig.json
 COPY --from=build /app/src ./src
