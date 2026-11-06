@@ -10,7 +10,18 @@ import type {
   Transaction,
 } from "@prisma/driver-adapter-utils";
 
+export function loadLocalEnv() {
+  if (process.env.DATABASE_URL) return;
+  const loader = (process as typeof process & { loadEnvFile?: (path?: string) => void }).loadEnvFile;
+  if (!loader) return;
+  try { loader(); } catch {}
+}
+
 export function sqliteFilePath(url = process.env.DATABASE_URL): string {
+  if (!url) {
+    loadLocalEnv();
+    url = process.env.DATABASE_URL;
+  }
   if (!url) throw new Error("DATABASE_URL is required.");
   if (!url.startsWith("file:")) throw new Error("DATABASE_URL must use a file: SQLite URL.");
   const [rawPath] = url.slice("file:".length).split("?");

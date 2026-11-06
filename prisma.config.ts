@@ -1,5 +1,7 @@
 import { defineConfig } from "prisma/config";
-import { createSqliteAdapter } from "./src/lib/prisma-adapter";
+import { createSqliteAdapter, loadLocalEnv } from "./src/lib/prisma-adapter";
+
+loadLocalEnv();
 export default defineConfig({
   schema: "prisma/schema.prisma",
   experimental: { adapter: true },

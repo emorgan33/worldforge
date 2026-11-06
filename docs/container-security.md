@@ -255,3 +255,10 @@ created by this adapter, but every SQLite process still serializes writes.
 The adapter path must keep the process-wide lock and must not be combined with
 unserialized additional in-process clients. Do not ship it without the full
 suite and an image scan.
+
+The Docker image always runs `scripts/build-patched-sqlite.mjs`. A native source
+deployment must run `pnpm sqlite:build` to replace `better-sqlite3`'s bundled
+SQLite; ordinary `pnpm install` leaves 3.49.2 in place. CI's production-auth job
+builds and asserts the patched runtime; behavior suites use the bundled driver.
+The security remediation claim applies to the image and to source deployments
+that run the documented build script.

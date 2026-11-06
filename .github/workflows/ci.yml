@@ -140,6 +140,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate
+      - name: Build patched SQLite for production runtime
+        run: pnpm sqlite:build
+      - name: Verify patched SQLite
+        run: node scripts/assert-sqlite-version.cjs
       - name: Prepare isolated production storage
         run: mkdir -p "$WORLDFORGE_ASSET_DIR"
       - run: pnpm db:deploy
