@@ -201,6 +201,16 @@ the gate evaluates explicit evidence instead of silently ignoring CVEs.
 ### Prisma's embedded SQLite
 
 The package layer above patches the SQLite CLI and `libsqlite3-0`. It does not
-patch Prisma's static engine. Prisma sqlite version evidence and options must be
-checked separately. Do not treat the OS package settlement as resolving the
-embedded engine; that work remains a separate prototype.
+patch Prisma's static engine. On November 6, 2026, a prototype built
+`better-sqlite3` against the verified SQLite 3.54.1 amalgamation and connected
+Prisma 6.19.3 through its supported driver adapter. Basic queries, FTS5,
+migrations, timestamp compatibility, and the production image all worked, but
+interactive/concurrent transactions failed (`transaction failed to commit/roll
+back`) with both the bundled 3.49.2 driver and the patched build. The failure
+reproduced with Prisma's JavaScript engine and is not caused by the SQLite
+version. The prototype is **not shipped**.
+
+Therefore Prisma's embedded SQLite remains unresolved in this release. Do not
+claim the OS package settlement fixes it. A future attempt must first establish
+correct transaction/locking behavior across the existing concurrent tests, or
+adopt a supported Prisma/engine upgrade that removes the Rust SQLite engine.
