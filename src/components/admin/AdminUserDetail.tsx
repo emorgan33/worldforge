@@ -35,6 +35,8 @@ type DeletionPreview = {
 
 type SetupLink = { url: string; expiresAt: string };
 
+type TransferTarget = { id: string; name: string; email: string; role: string };
+
 function isDetail(value: unknown): value is Detail {
   if (!value || typeof value !== "object") return false;
   const data = value as Partial<Detail>;
@@ -64,6 +66,11 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
   const [confirmEmail, setConfirmEmail] = useState("");
   const [backupAcknowledged, setBackupAcknowledged] = useState(false);
   const [setupLink, setSetupLink] = useState<SetupLink | null>(null);
+  const [transferTargets, setTransferTargets] = useState<TransferTarget[] | null>(null);
+  const [transferTargetsError, setTransferTargetsError] = useState("");
+  const [transferSelection, setTransferSelection] = useState<Record<string, string>>({});
+  const [purgeTitles, setPurgeTitles] = useState<Record<string, string>>({});
+  const [purgeAcks, setPurgeAcks] = useState<Record<string, boolean>>({});
   const activeMutation = useRef(0);
   const departureSeq = useRef(0);
   const unmounted = useRef(false);
@@ -146,13 +153,43 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
     }
   }
 
+  async function loadTransferTargets() {
+    setTransferTargetsError("");
+    try {
+      const response = await fetch(`/api/admin/users/${id}/world-transfer-targets`);
+      const data: { targets?: unknown; error?: string } = await response.json();
+      if (unmounted.current) return;
+      if (!response.ok) {
+        setTransferTargetsError(data.error || "Unable to load eligible recipient accounts.");
+        setTransferTargets([]);
+        return;
+      }
+      const targets = Array.isArray(data.targets)
+        ? data.targets.filter((target): target is TransferTarget =>
+            Boolean(target && typeof target === "object" &&
+              typeof (target as TransferTarget).id === "string" &&
+              typeof (target as TransferTarget).name === "string" &&
+              typeof (target as TransferTarget).email === "string" &&
+              typeof (target as TransferTarget).role === "string"))
+        : [];
+      setTransferTargets(targets);
+    } catch {
+      if (!unmounted.current) {
+        setTransferTargetsError("Unable to load eligible recipient accounts.");
+        setTransferTargets([]);
+      }
+    }
+  }
+
   async function loadPreview() {
     try {
       const response = await fetch(`/api/admin/users/${id}/deletion-preview`);
       const data = await response.json();
       if (unmounted.current) return;
-      if (response.ok) setPreview(data);
-      else setError(data.error || "Unable to load deletion preview.");
+      if (response.ok) {
+        setPreview(data);
+        await loadTransferTargets();
+      } else setError(data.error || "Unable to load deletion preview.");
     } catch {
       if (!unmounted.current) setError("Unable to load deletion preview.");
     }
@@ -176,7 +213,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      let data: { setup?: SetupLink; error?: string; code?: string; user?: { id?: string; accountVersion?: number }; deleted?: boolean; userId?: string; revoked?: number; sessionCount?: number; previewCount?: number } = {};
+      let data: { setup?: SetupLink; error?: string; code?: string; user?: { id?: string; accountVersion?: number }; deleted?: boolean; userId?: string; revoked?: number; sessionCount?: number; previewCount?: number; world?: { id?: string; title?: string } } = {};
       let parseFailed = false;
       try {
         data = await response.json();
@@ -188,7 +225,10 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
       if (mutationId !== activeMutation.current || unmounted.current || departureSeq.current !== departureAtStart) return false;
 
       if (!response.ok) {
-        if (data.code === "STALE_ACCOUNT") await loadDetail();
+        if (data.code === "STALE_ACCOUNT" || data.code === "STALE_WORLD") {
+          await loadDetail();
+          await loadPreview();
+        }
         setError(data.error || "Unable to complete this request.");
         return false;
       }
@@ -198,6 +238,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
       const role = url.endsWith("/role");
       const singleSession = /\/sessions\/[^/]+$/.test(url);
       const revokeAll = url.endsWith("/revoke-all");
+      const worldMutation = /\/worlds\/[^/]+\/(?:transfer|purge)$/.test(url);
       const accountDelete = /\/api\/admin\/users\/[^/]+$/.test(url);
 
       const validSuccess =
@@ -207,6 +248,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
          role ? Boolean(data.user?.id) :
          singleSession ? typeof data.revoked === "number" :
          revokeAll ? typeof data.sessionCount === "number" && typeof data.previewCount === "number" :
+         worldMutation ? Boolean(data.user?.id && data.world?.id) :
          accountDelete ? data.deleted === true && typeof data.userId === "string" :
          true);
 
@@ -519,19 +561,119 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                       {preview.worlds.length === 1 ? "1 world" : `${preview.worlds.length} worlds`}. Ownership — not the
                       account role — is blocking deletion.
                     </p>
-                    <ul className="space-y-1">
-                      {preview.worlds.map((world) => (
-                        <li key={world.id} className="break-all text-zinc-200">
-                          <span className="font-medium">{world.title}</span>{" "}
-                          <span className="text-zinc-400">· {world.deletedAt ? "Archived" : "Active"} · {world.id}</span>
-                        </li>
-                      ))}
+                    <ul className="space-y-3">
+                      {preview.worlds.map((world) => {
+                        const selectedRecipient = transferSelection[world.id] ?? "";
+                        const recipient = transferTargets?.find((target) => target.id === selectedRecipient);
+                        return (
+                          <li key={world.id} className="min-w-0 space-y-3 rounded-lg border border-red-900/60 bg-zinc-950/40 px-3 py-3 text-zinc-200">
+                            <div className="break-all">
+                              <span className="font-medium">{world.title}</span>{" "}
+                              <span className="text-zinc-400">· {world.deletedAt ? "Archived" : "Active"} · {world.id}</span>
+                            </div>
+                            <div className="flex flex-col gap-2 lg:flex-row lg:items-end">
+                              <label className="min-w-0 flex-1 text-sm font-medium text-zinc-200">
+                                Transfer to
+                                <select
+                                  aria-label={`Transfer ${world.title} (${world.id}) to`}
+                                  value={selectedRecipient}
+                                  onChange={(event) => setTransferSelection((current) => ({ ...current, [world.id]: event.target.value }))}
+                                  disabled={busy || !transferTargets?.length}
+                                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 disabled:opacity-50"
+                                >
+                                  <option value="">Select an active account</option>
+                                  {(transferTargets ?? []).map((target) => (
+                                    <option key={target.id} value={target.id}>
+                                      {target.name} ({target.email}) · {target.role}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <button
+                                type="button"
+                                disabled={busy || !recipient}
+                                onClick={() => {
+                                  if (!recipient) return;
+                                  if (!window.confirm(`Transfer "${world.title}" to ${recipient.name}? The world and its contents stay intact.`)) return;
+                                  void mutate(
+                                    `/api/admin/users/${id}/worlds/${world.id}/transfer`,
+                                    "POST",
+                                    { recipientId: recipient.id, expectedVersion: account.accountVersion },
+                                    async () => {
+                                      await loadDetail();
+                                      await loadPreview();
+                                    },
+                                  );
+                                }}
+                                className="rounded-lg border border-indigo-700 px-4 py-2 text-sm font-semibold text-indigo-100 hover:bg-indigo-900/40 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                              >
+                                Transfer ownership
+                              </button>
+                            </div>
+                            {transferTargetsError && <p role="alert" className="text-xs text-red-300">{transferTargetsError}</p>}
+                            {transferTargets && transferTargets.length === 0 && !transferTargetsError && (
+                              <p className="text-xs text-zinc-400">No other active account can own worlds. Create or enable an AUTHOR, GM, or ADMIN account first.</p>
+                            )}
+                            {world.deletedAt ? (
+                              <details className="rounded-lg border border-red-900/60 px-3 py-2">
+                                <summary className="cursor-pointer text-sm font-medium text-red-200">Permanently purge world</summary>
+                                <p className="mt-2 text-xs text-red-100/80">
+                                  Purging permanently destroys this world and its content. Confirm that a current backup
+                                  exists before continuing.
+                                </p>
+                                <div className="mt-3 space-y-3">
+                                  <label className="block text-sm font-medium text-zinc-200">
+                                    Type the world title to confirm
+                                    <input
+                                      aria-label={`Confirm purge title for ${world.title} (${world.id})`}
+                                      value={purgeTitles[world.id] ?? ""}
+                                      onChange={(event) => setPurgeTitles((current) => ({ ...current, [world.id]: event.target.value }))}
+                                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+                                    />
+                                  </label>
+                                  <label className="flex items-center gap-2 text-sm text-zinc-200">
+                                    <input
+                                      type="checkbox"
+                                      aria-label={`Acknowledge backup of ${world.title} (${world.id})`}
+                                      checked={purgeAcks[world.id] ?? false}
+                                      onChange={(event) => setPurgeAcks((current) => ({ ...current, [world.id]: event.target.checked }))}
+                                    />
+                                    I acknowledge this world has been backed up.
+                                  </label>
+                                  <button
+                                    type="button"
+                                    disabled={busy || (purgeTitles[world.id] ?? "") !== world.title || !purgeAcks[world.id]}
+                                    onClick={() => {
+                                      if (!window.confirm(`Permanently purge "${world.title}" and all of its content? This cannot be undone.`)) return;
+                                      void mutate(
+                                        `/api/admin/users/${id}/worlds/${world.id}/purge`,
+                                        "POST",
+                                        { confirmWorldTitle: world.title, backupAcknowledged: true, expectedVersion: account.accountVersion },
+                                        async () => {
+                                          await loadDetail();
+                                          await loadPreview();
+                                        },
+                                      );
+                                    }}
+                                    className="w-fit rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+                                  >
+                                    Permanently purge world
+                                  </button>
+                                </div>
+                              </details>
+                            ) : (
+                              <p className="text-xs text-zinc-400">
+                                Archive this world in its workspace before permanently purging it, or transfer it instead.
+                              </p>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                     <p className="text-zinc-300">
-                      Next steps: back up or export these worlds as appropriate, then resolve ownership using the
-                      archive/purge workflow — archive each world you intend to permanently remove, then purge it —
-                      and re-run this preview. Purging permanently destroys the world and its content; deleting the
-                      account never transfers or removes world content.
+                      Account deletion itself never transfers or removes world content. Resolve ownership above —
+                      transfer each world you want to retain, or archive and then permanently purge a world you no
+                      longer need — then re-run this preview. Purging cannot be undone.
                     </p>
                   </div>
                 ) : (

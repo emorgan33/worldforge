@@ -71,15 +71,27 @@ remove durable content.
 1. Create and verify a complete database-and-assets backup.
 2. Disable the target account.
 3. Open its admin detail page and select **Preview deletion blockers**.
-4. Resolve world ownership through the application's archive, transfer, or
-   purge workflows according to your retention decision.
-5. Do not delete revision or import history merely to bypass a blocker.
-6. Preview again, confirm the exact email and backup acknowledgement, then
+4. In the blocked preview, transfer each world you want to keep to another
+   active `ADMIN`, `AUTHOR`, or `GM` account. The recipient cannot be disabled,
+   a `PLAYER`, or the source account. The world, its contents, publication and
+   archive state, memberships, and grants stay intact.
+5. For an archived world you intend to destroy, expand **Permanently purge
+   world**, type its exact title, acknowledge the backup, and confirm. Active
+   worlds must be archived in their workspace first.
+6. Do not delete revision or import history merely to bypass a blocker.
+7. Preview again, confirm the exact email and backup acknowledgement, then
    delete only when no blockers remain.
 
-The service recomputes blockers during final deletion. Owned active or archived
-worlds produce `OWNS_WORLDS`; durable revisions, Foundry history, or unfinished
-imports produce `HAS_DURABLE_RECORDS`. Unrelated world content is not removed.
+Transfer and purge actions are audited, recheck the administrator session,
+require the current account version, and refuse stale ownership changes rather
+than overwriting them. They are also blocked while that account has an
+unfinished world import, because import recovery could otherwise target the
+moved or purged world's assets; resolve or discard the import first. The
+service recomputes blockers during final deletion.
+Owned active or archived worlds produce `OWNS_WORLDS`; durable revisions,
+Foundry history, or unfinished imports produce `HAS_DURABLE_RECORDS`. Final
+deletion never silently cascades worlds, and unrelated world content is not
+removed.
 
 ## Use the correct installation
 
@@ -90,4 +102,4 @@ environment. Never point rehearsals or tests at real installation data.
 
 **Source owner:** `wiki/Installation-Administration.md`; adapted from
 `docs/installation-administration.md`.
-**Verified against:** WorldForge commit `fdff259` (October 31, 2026).
+**Verified against:** WorldForge commit `bda48a7` plus the issue #20 working candidate (November 5, 2026); advance to the merge commit before publishing.

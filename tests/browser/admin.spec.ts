@@ -685,8 +685,10 @@ test("blocked deletion shows blockers", async ({ page, context, baseURL }) => {
     await expect(previewStatus.getByText(/Active · /)).toBeVisible();
     await expect(previewStatus.getByText(/Archived · /)).toBeVisible();
     await expect(page.getByText(/re-run this preview/i)).toBeVisible();
-    await expect(page.getByText(/permanently destroys the world/i)).toBeVisible();
     await expect(page.getByText(/never transfers or removes world content/i)).toBeVisible();
+    await expect(page.getByLabel(`Transfer ${world.title} (${world.id}) to`)).toBeVisible();
+    await page.locator("summary", { hasText: "Permanently purge world" }).click();
+    await expect(page.getByText(/Purging permanently destroys this world/i)).toBeVisible();
 
     // Attempt blocked deletion
     await page.getByLabel("Confirm current email").fill(target.email);
@@ -698,6 +700,61 @@ test("blocked deletion shows blockers", async ({ page, context, baseURL }) => {
     if (worldId) await db.world.delete({ where: { id: worldId } }).catch(() => undefined);
     if (archivedWorldId) await db.world.delete({ where: { id: archivedWorldId } }).catch(() => undefined);
     if (targetId) await db.user.delete({ where: { id: targetId } }).catch(() => undefined);
+    if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
+test("transfer and purge resolve owned worlds before account deletion", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = new PrismaClient();
+  let adminId: string | undefined;
+  let recipientId: string | undefined;
+  let transferredWorldId: string | undefined;
+  let purgedWorldId: string | undefined;
+  try {
+    const admin = await createAdminSession(db);
+    adminId = admin.user.id;
+    const source = await db.user.create({ data: { name: "Remediation Target", email: `remediation-target-${randomUUID()}@example.invalid`, role: "GM", disabledAt: new Date() } });
+    const recipient = await db.user.create({ data: { name: "Remediation Recipient", email: `remediation-recipient-${randomUUID()}@example.invalid`, role: "AUTHOR" } });
+    recipientId = recipient.id;
+    const transferred = await db.world.create({ data: { ownerId: source.id, title: "Transferred World", slug: `transferred-${randomUUID()}` } });
+    transferredWorldId = transferred.id;
+    const purged = await db.world.create({ data: { ownerId: source.id, title: "Purged World", slug: `purged-${randomUUID()}`, deletedAt: new Date() } });
+    purgedWorldId = purged.id;
+    await context.addCookies([{ name: SESSION_COOKIE, value: admin.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+
+    await page.goto(`/admin/users/${source.id}`);
+    await expect(page.locator("#loading-account")).not.toBeVisible({ timeout: 40000 });
+    await page.getByRole("button", { name: "Preview deletion blockers" }).click();
+    await expect(page.getByRole("heading", { name: "Deletion blocked" })).toBeVisible();
+
+    const transferredItem = page.getByRole("listitem").filter({ hasText: transferred.title });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByLabel(`Transfer ${transferred.title} (${transferred.id}) to`).selectOption(recipient.id);
+    await transferredItem.getByRole("button", { name: "Transfer ownership" }).click();
+    await expect(page.getByText(/owns 1 world/i)).toBeVisible();
+    await expect.poll(async () => (await db.world.findUniqueOrThrow({ where: { id: transferred.id } })).ownerId).toBe(recipient.id);
+
+    const purgedItem = page.getByRole("listitem").filter({ hasText: purged.title });
+    await purgedItem.locator("summary", { hasText: "Permanently purge world" }).click();
+    await page.getByLabel(`Confirm purge title for ${purged.title} (${purged.id})`).fill(purged.title);
+    await page.getByLabel(`Acknowledge backup of ${purged.title} (${purged.id})`).check();
+    page.once("dialog", (dialog) => dialog.accept());
+    await purgedItem.getByRole("button", { name: "Permanently purge world" }).click();
+    await expect(page.getByText("Allowed: Yes")).toBeVisible();
+    await expect.poll(async () => db.world.findUnique({ where: { id: purged.id } })).toBeNull();
+
+    await page.getByLabel("Confirm current email").fill(source.email);
+    await page.getByLabel("I acknowledge the account data has been backed up.").check();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Delete account" }).click();
+    await expect(page).toHaveURL(/\/admin\/users$/);
+    expect(await db.user.findUnique({ where: { id: source.id } })).toBeNull();
+  } finally {
+    if (transferredWorldId) await db.world.delete({ where: { id: transferredWorldId } }).catch(() => undefined);
+    if (purgedWorldId) await db.world.delete({ where: { id: purgedWorldId } }).catch(() => undefined);
+    if (recipientId) await db.user.delete({ where: { id: recipientId } }).catch(() => undefined);
     if (adminId) await db.user.delete({ where: { id: adminId } }).catch(() => undefined);
     await db.$disconnect();
   }

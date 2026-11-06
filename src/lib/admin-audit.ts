@@ -29,6 +29,8 @@ const ACTION_ALLOWED_DETAIL_KEYS: Partial<Record<InstallationAuditAction, Set<st
   SESSION_REVOKE: new Set([]),
   SESSION_REVOKE_ALL: new Set(["sessionCount", "previewCount"]),
   ACCOUNT_DELETE: new Set(["worldCount", "durableRecordCount", "membershipCount", "grantCount"]),
+  WORLD_TRANSFER: new Set(["worldId", "worldTitle", "recipientId"]),
+  WORLD_PURGE: new Set(["worldId", "worldTitle", "assetCount"]),
   BOOTSTRAP: new Set([]),
   LOCAL_RECOVERY: new Set(["reason"]),
 };

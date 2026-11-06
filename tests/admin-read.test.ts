@@ -96,6 +96,7 @@ test("admin error codes map onto the documented HTTP statuses", () => {
   assert.equal(adminErrorStatus("OWNS_WORLDS"), 409);
   assert.equal(adminErrorStatus("HAS_DURABLE_RECORDS"), 409);
   assert.equal(adminErrorStatus("STALE_ACCOUNT"), 409);
+  assert.equal(adminErrorStatus("STALE_WORLD"), 409);
   assert.equal(adminErrorStatus("DUPLICATE_EMAIL"), 409);
   assert.equal(adminErrorStatus("CONCURRENCY_CONFLICT"), 503);
   assert.equal(adminErrorStatus("INTERNAL_ERROR"), 500);

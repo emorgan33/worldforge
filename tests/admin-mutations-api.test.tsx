@@ -53,13 +53,19 @@ function send(method: string, path: string, body: unknown, options: SendOptions 
   return fetch(`${origin}${path}`, init);
 }
 
-const ADMIN_MUTATION_PATHS = (id: string, sessionId = "00000000-0000-0000-0000-000000000000") => [
+const ADMIN_MUTATION_PATHS = (
+  id: string,
+  sessionId = "00000000-0000-0000-0000-000000000000",
+  worldId = "00000000-0000-0000-0000-000000000001",
+) => [
   { label: "create", method: "POST", path: "/api/admin/users", body: { email: "probe@example.invalid", name: "Probe", role: "AUTHOR" } },
   { label: "recovery", method: "POST", path: `/api/admin/users/${id}/recovery`, body: { expectedVersion: 0 } },
   { label: "status", method: "PATCH", path: `/api/admin/users/${id}/status`, body: { disabled: true, expectedVersion: 0 } },
   { label: "role", method: "PATCH", path: `/api/admin/users/${id}/role`, body: { role: "GM", expectedVersion: 0 } },
   { label: "session", method: "DELETE", path: `/api/admin/users/${id}/sessions/${sessionId}`, body: { expectedVersion: 0 } },
   { label: "revoke-all", method: "POST", path: `/api/admin/users/${id}/sessions/revoke-all`, body: { expectedVersion: 0 } },
+  { label: "transfer", method: "POST", path: `/api/admin/users/${id}/worlds/${worldId}/transfer`, body: { recipientId: "recipient", expectedVersion: 0 } },
+  { label: "purge", method: "POST", path: `/api/admin/users/${id}/worlds/${worldId}/purge`, body: { confirmWorldTitle: "World", backupAcknowledged: true, expectedVersion: 0 } },
   { label: "delete", method: "DELETE", path: `/api/admin/users/${id}`, body: { expectedVersion: 0, confirmEmail: "x@example.invalid", backupAcknowledged: true } },
 ];
 
@@ -84,6 +90,7 @@ test("admin mutations reject missing, wrong, and cross-site origins before readi
   createdUserIds.push(target.id);
   const version = await versionOf(db, target.id);
   const stamp = randomUUID().slice(0, 8);
+  const worldId = randomUUID();
 
   const cases = [
     { label: "create", method: "POST", path: "/api/admin/users", body: { email: `origin-probe-${stamp}@example.invalid`, name: "Origin probe", role: "AUTHOR" } },
@@ -92,6 +99,8 @@ test("admin mutations reject missing, wrong, and cross-site origins before readi
     { label: "role", method: "PATCH", path: `/api/admin/users/${target.id}/role`, body: { role: "GM", expectedVersion: version } },
     { label: "session", method: "DELETE", path: `/api/admin/users/${target.id}/sessions/does-not-exist`, body: { expectedVersion: version } },
     { label: "revoke-all", method: "POST", path: `/api/admin/users/${target.id}/sessions/revoke-all`, body: { expectedVersion: version } },
+    { label: "transfer", method: "POST", path: `/api/admin/users/${target.id}/worlds/${worldId}/transfer`, body: { recipientId: randomUUID(), expectedVersion: version } },
+    { label: "purge", method: "POST", path: `/api/admin/users/${target.id}/worlds/${worldId}/purge`, body: { confirmWorldTitle: "World", backupAcknowledged: true, expectedVersion: version } },
     { label: "delete", method: "DELETE", path: `/api/admin/users/${target.id}`, body: { expectedVersion: version, confirmEmail: target.email, backupAcknowledged: true } },
   ];
 
@@ -615,6 +624,98 @@ test("an administrator can revoke a single own session without revoking the acti
 
   const acting = await send("GET", "/api/admin/users", undefined, { token: admin.token });
   assert.equal(acting.status, 200, "the acting session remains valid");
+});
+
+test("owned-world remediation transfers or purges worlds before deletion", { skip: !origin }, async context => {
+  const db = new PrismaClient();
+  const createdUserIds: string[] = [];
+  context.after(async () => {
+    await deleteTestUsers(db, ...createdUserIds);
+    await db.$disconnect();
+  });
+
+  const admin = await createUserWithSession(db, { role: "ADMIN" });
+  createdUserIds.push(admin.user.id);
+  const source = await db.user.create({
+    data: { name: "Remediation source", email: `remediation-${randomUUID()}@example.invalid`, role: "GM", disabledAt: new Date() },
+  });
+  createdUserIds.push(source.id);
+  const recipient = await db.user.create({
+    data: { name: "Remediation recipient", email: `recipient-${randomUUID()}@example.invalid`, role: "AUTHOR" },
+  });
+  createdUserIds.push(recipient.id);
+  const player = await db.user.create({
+    data: { name: "Remediation player", email: `player-recipient-${randomUUID()}@example.invalid`, role: "PLAYER" },
+  });
+  createdUserIds.push(player.id);
+
+  const activeWorld = await db.world.create({ data: { ownerId: source.id, title: "Transferred world", slug: `transferred-${randomUUID()}` } });
+  const archivedWorld = await db.world.create({ data: { ownerId: source.id, title: "Purged world", slug: `purged-${randomUUID()}`, deletedAt: new Date() } });
+  const article = await db.article.create({ data: { worldId: activeWorld.id, title: "Preserved article", slug: `preserved-${randomUUID()}` } });
+  const archivedArticle = await db.article.create({ data: { worldId: archivedWorld.id, title: "Removed article", slug: `removed-${randomUUID()}` } });
+
+  const targets = await send("GET", `/api/admin/users/${source.id}/world-transfer-targets`, undefined, { token: admin.token });
+  assert.equal(targets.status, 200);
+  const targetBody = await targets.json();
+  assert.ok(targetBody.targets.some((target: { id: string }) => target.id === recipient.id));
+  assert.equal(targetBody.targets.some((target: { id: string }) => target.id === player.id), false);
+  assert.equal(targetBody.targets.some((target: { id: string }) => target.id === source.id), false);
+  assert.equal(JSON.stringify(targetBody).includes("tokenHash"), false);
+  assert.equal(JSON.stringify(targetBody).includes("passwordHash"), false);
+
+  const playerAttempt = await send("POST", `/api/admin/users/${source.id}/worlds/${activeWorld.id}/transfer`, {
+    recipientId: player.id,
+    expectedVersion: source.accountVersion,
+  }, { token: admin.token });
+  assert.equal(playerAttempt.status, 400);
+  assert.equal((await playerAttempt.json()).code, "INVALID_ROLE");
+
+  const transfer = await send("POST", `/api/admin/users/${source.id}/worlds/${activeWorld.id}/transfer`, {
+    recipientId: recipient.id,
+    expectedVersion: source.accountVersion,
+  }, { token: admin.token });
+  assert.equal(transfer.status, 200);
+  const transferBody = await transfer.json();
+  assert.equal(transferBody.world.id, activeWorld.id);
+  assert.equal(transferBody.user.accountVersion, source.accountVersion + 1);
+  assert.equal((await db.world.findUniqueOrThrow({ where: { id: activeWorld.id } })).ownerId, recipient.id);
+
+  const titleMismatch = await send("POST", `/api/admin/users/${source.id}/worlds/${archivedWorld.id}/purge`, {
+    confirmWorldTitle: "Wrong title",
+    backupAcknowledged: true,
+    expectedVersion: source.accountVersion + 1,
+  }, { token: admin.token });
+  assert.equal(titleMismatch.status, 400);
+  assert.equal((await titleMismatch.json()).code, "INVALID_INPUT");
+
+  const purge = await send("POST", `/api/admin/users/${source.id}/worlds/${archivedWorld.id}/purge`, {
+    confirmWorldTitle: archivedWorld.title,
+    backupAcknowledged: true,
+    expectedVersion: source.accountVersion + 1,
+  }, { token: admin.token });
+  assert.equal(purge.status, 200);
+  const purgeBody = await purge.json();
+  assert.equal(purgeBody.world.id, archivedWorld.id);
+  assert.equal(purgeBody.user.accountVersion, source.accountVersion + 2);
+  assert.equal(await db.world.findUnique({ where: { id: archivedWorld.id } }), null);
+  assert.equal(await db.article.findUnique({ where: { id: archivedArticle.id } }), null);
+  assert.ok(await db.article.findUnique({ where: { id: article.id } }));
+
+  const preview = await send("GET", `/api/admin/users/${source.id}/deletion-preview`, undefined, { token: admin.token });
+  assert.equal(preview.status, 200);
+  assert.equal((await preview.json()).allowed, true);
+
+  const deleted = await send("DELETE", `/api/admin/users/${source.id}`, {
+    expectedVersion: source.accountVersion + 2,
+    confirmEmail: source.email,
+    backupAcknowledged: true,
+  }, { token: admin.token });
+  assert.equal(deleted.status, 200);
+  assert.equal(await db.user.findUnique({ where: { id: source.id } }), null);
+  assert.equal((await db.world.findUniqueOrThrow({ where: { id: activeWorld.id } })).ownerId, recipient.id);
+  assert.ok(await db.article.findUnique({ where: { id: article.id } }));
+  assert.ok(await db.installationAuditEvent.findFirst({ where: { targetIdSnapshot: source.id, action: "WORLD_TRANSFER", outcome: "SUCCESS" } }));
+  assert.ok(await db.installationAuditEvent.findFirst({ where: { targetIdSnapshot: source.id, action: "WORLD_PURGE", outcome: "SUCCESS" } }));
 });
 
 test("deletion requires a disabled account, matching email, and no durable blockers", { skip: !origin }, async context => {
