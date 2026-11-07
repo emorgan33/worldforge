@@ -85,6 +85,5 @@ WorldForge to a network.
 
 **Source owner:** `wiki/Getting-Started.md`; adapted from `README.md`,
 `docs/deployment-configuration.md`, and current author UI.
-**Verified against:** Packaging instructions match `12d0bff` (November 6, 2026)
-and local fresh-volume startup checks. The first registry pull remains pending;
-account/article steps retain their prior verification against `9050d94`.
+**Verified against:** `v0.4.3` (`94c694c`), published-image isolated rehearsal
+and source/UI contract audit; see [Wiki Verification](Wiki-Verification).

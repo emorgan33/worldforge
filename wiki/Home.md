@@ -26,8 +26,8 @@ Your content stays in a SQLite database and an image directory you control.
 
 WorldForge also supports player accounts and invitations, audience policies,
 interactive maps, D&D and Pathfinder character sheets, world export/import,
-and full-installation backup and restore. Feature guides will be added to this
-wiki as they are adapted from the repository documentation.
+and full-installation backup and restore. Use the sidebar for task-oriented
+feature guides, operations, and contributor references.
 
 ## See the workspace
 
@@ -50,10 +50,13 @@ campaign or account data.
 
 ## Documentation status
 
-This wiki is being built in the delivery order tracked by
-[issue #15](https://github.com/emorgan33/worldforge/issues/15). The repository's
-`docs/` directory remains authoritative for implementation contracts,
-historical records, and feature details that have not yet moved here.
+The repository's `wiki/` directory is the canonical review source for these
+guides; `docs/` retains implementation contracts and historical records. See
+[Wiki Maintenance](Wiki-Maintenance) to propose an update and
+[Wiki Verification](Wiki-Verification) for source versions, checks, and limits.
+Each page records its own verification baseline; this is not a claim that every
+workflow was rerun in a browser on every documentation edit.
 
 **Source owner:** `wiki/Home.md` in the WorldForge repository.
-**Verified against:** WorldForge commit `eb117d5` (November 1, 2026).
+**Verified against:** `v0.4.3` (`94c694c`), source/navigation audit. Existing
+Aethelgard screenshots are retained from `eb117d5`; no new screenshots were taken.

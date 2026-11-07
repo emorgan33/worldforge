@@ -73,11 +73,11 @@ docker compose logs worldforge
 
 ## Build from a release source tag
 
-Replace `v0.4.0` with the intended release:
+Replace `v0.4.3` with the intended release:
 
 ```bash
 git fetch --tags
-git checkout v0.4.0
+git checkout v0.4.3
 docker compose up -d --build
 docker compose ps
 docker compose logs worldforge
@@ -88,9 +88,11 @@ starting the application. A configuration failure occurs before migrations;
 a migration failure leaves the service stopped and must be investigated rather
 than bypassed.
 
-Native installations run `pnpm install`, `pnpm db:generate`,
-`pnpm db:deploy`, build, and restart using the release's documented Node and
-pnpm versions. Docker remains the supported self-hosting path.
+Native installations run `pnpm install`, `pnpm sqlite:build` for the patched
+SQLite runtime, `pnpm db:generate`, `pnpm db:deploy`, build, and restart using
+the release's documented Node and pnpm versions. Ordinary dependency installation
+alone does not apply the SQLite patch. Docker remains the supported self-hosting
+path and builds the patched driver automatically.
 
 ## Verify after upgrading
 
@@ -128,10 +130,7 @@ before announcing it. Never include access tokens in release notes.
 **Source owner:** `wiki/Upgrading-and-Releases.md`; adapted from
 `docs/releases/`, `docs/deployment-configuration.md`, and
 `docs/backup-restore.md`.
-**Verified against:** Packaging implementation `12d0bff` (November 6, 2026).
-Local image/Compose startup and the subsequent `0.4.1` registry pull/deployment
-outside the repository were verified. A separately provisioned clean-machine
-test was not performed. Existing reader/UI guidance was not reverified for
-this documentation-only update.
-Security-gate guidance matches the `0.4.2` candidate: local image scanning and
-startup/setup/admin checks pass, but publication of that candidate is pending.
+**Verified against:** `v0.4.3` (`94c694c`), published image/release metadata and
+source audit. The release includes verified OS backports and embedded SQLite
+3.54.1; 38 HIGH OS package matches remain unresolved, not suppressed. See
+[Wiki Verification](Wiki-Verification) for executed rehearsals and limits.

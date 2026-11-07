@@ -102,4 +102,6 @@ environment. Never point rehearsals or tests at real installation data.
 
 **Source owner:** `wiki/Installation-Administration.md`; adapted from
 `docs/installation-administration.md`.
-**Verified against:** WorldForge commit `bda48a7` plus the issue #20 working candidate (November 5, 2026); advance to the merge commit before publishing.
+**Verified against:** `v0.4.3` (`94c694c`), including merged issue #20 remediation
+(`4ab66c1`); source/contract audit. CLI setup/bootstrap were rehearsed on isolated
+storage; see [Wiki Verification](Wiki-Verification).

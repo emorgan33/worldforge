@@ -34,6 +34,29 @@ a maintainer can clone the wiki repository, copy the reviewed Markdown files
 from `wiki/`, inspect the diff, commit, and push. Do not copy unrelated files or
 force-push the wiki history.
 
+Example (Bash, from the main checkout after the documentation PR is merged):
+
+```bash
+pnpm docs:check
+publish_root=$(mktemp -d)
+git clone https://github.com/emorgan33/worldforge.wiki.git "$publish_root/wiki"
+cp wiki/*.md "$publish_root/wiki/"
+git -C "$publish_root/wiki" diff --check
+git -C "$publish_root/wiki" diff --stat
+```
+
+Inspect the full diff before committing. After review, commit the copied pages
+in that clone with a message identifying the merged source commit, then push
+its existing branch. Do not publish a branch with unreviewed edits. Removed
+pages need an explicit migration/redirect decision; copying does not delete
+published-only files. Never delete unfamiliar published work automatically.
+
+`pnpm docs:check` verifies required pages, sidebar coverage, relative page and
+heading links, and source/verification labels. It does not authenticate to
+GitHub, render screenshots, test operator commands, or prove prose correct.
+Recheck changed claims against source and document runtime checks/skips in
+[Wiki Verification](Wiki-Verification). CI runs this lightweight check.
+
 ## Release and feature checklist
 
 For any pull request that changes user-visible behavior:
@@ -52,4 +75,5 @@ decisions, validation reports, release notes, and historical records. The wiki
 is the task-oriented user and operator guide.
 
 **Source owner:** `wiki/Wiki-Maintenance.md`.
-**Verified against:** WorldForge commit `9050d94` (October 31, 2026).
+**Verified against:** `v0.4.3` (`94c694c`), source/workflow audit; publication
+is verified by comparing tracked page bytes with the pushed wiki repository.

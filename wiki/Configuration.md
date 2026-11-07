@@ -38,11 +38,20 @@ production behavior, logging, security requirements, and stock-art review
 gates. Do not set it manually in `.env`; `next dev`, `next build`, and the
 production image manage it.
 
-`CI` and the `WORLDFORGE_TEST_*`, `WORLD_CREATION_TEST_DATABASE_URL`, and
-`WORLD_TEST_TMP_ROOT` variables belong to test tooling rather than a deployed
-WorldForge server. Their safe, isolated setup is documented in
-[CONTRIBUTING.md](https://github.com/emorgan33/worldforge/blob/main/CONTRIBUTING.md).
-`R17_ARTICLE_COUNT` is only a benchmark input.
+The remaining code-read variables are tooling, not server configuration:
+
+| Variable | Default / effect | Restart? |
+| --- | --- | --- |
+| `CI` | Unset; enables CI-specific runner behavior | New tooling process |
+| `WORLDFORGE_TEST_ORIGIN` | Unset; HTTP test origin (missing can skip tests) | New test process |
+| `WORLDFORGE_PRODUCTION_TEST_ORIGIN` | Unset; production-auth smoke origin | New test process |
+| `WORLD_CREATION_TEST_DATABASE_URL` | Unset; safety assertion, must equal isolated `DATABASE_URL` | New test process |
+| `WORLD_TEST_TMP_ROOT` | Host temporary directory selected in testing instructions | New setup shell |
+| `R17_ARTICLE_COUNT` | `2101`; article-count input to the R17 benchmark | New benchmark process |
+
+Use [Testing and Isolated Databases](Testing-and-Isolated-Databases), never
+production storage, for these settings. Standard platform variables such as
+`PATH`, `HOME`, and `TMPDIR` are managed by the host/runtime rather than WorldForge.
 
 ## Origin rules
 
@@ -55,6 +64,6 @@ Production permits HTTP only for localhost/loopback.
 **Source owner:** `wiki/Configuration.md`; implementation authority is
 `.env.example`, `docker-compose.yml`, `docker-compose.release.yml`, `scripts/docker-entrypoint.sh`, Prisma,
 and `src/lib` environment reads.
-**Verified against:** Packaging implementation `12d0bff` (November 6, 2026)
-for Compose interpolation/configuration. Other setting descriptions retain
-their prior verification against `9050d94`.
+**Verified against:** `v0.4.3` (`94c694c`), code-read environment inventory,
+Compose configuration, and isolated runtime rehearsal; see
+[Wiki Verification](Wiki-Verification).
