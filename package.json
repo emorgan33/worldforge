@@ -23,7 +23,8 @@
     "stock-art:validate": "tsx scripts/validate-stock-art.ts",
     "stock-art:advisories": "tsx scripts/apply-stock-advisories.ts",
     "postinstall": "prisma generate",
-    "sqlite:build": "node scripts/build-patched-sqlite.mjs"
+    "sqlite:build": "node scripts/build-patched-sqlite.mjs",
+    "docs:check": "node scripts/check-wiki.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

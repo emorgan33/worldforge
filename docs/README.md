@@ -11,6 +11,12 @@ canonical source for published wiki pages is the repository's [`wiki/`](../wiki/
 directory. When behavior changes, update the relevant implementation document
 here and any affected wiki page in the same pull request.
 
+The wiki [sidebar](../wiki/_Sidebar.md) indexes all user/operator/contributor
+topics. Its [verification record](../wiki/Wiki-Verification.md) separates runtime
+rehearsals from source review and inherited evidence. Run `pnpm docs:check` for
+page completeness, sidebar coverage, local links, and verification labels; this
+does not replace checking changed claims against code and isolated storage.
+
 Do not migrate milestone notes, audits, validation reports, or feature-request
 contracts into the wiki as if they describe current product behavior.
 

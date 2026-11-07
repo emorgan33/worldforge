@@ -13,26 +13,26 @@ persistent storage for its SQLite database and uploaded assets.
 
 The image repository is `emorgan33/worldforge` (initially **linux/amd64**).
 Choose a version and digest from a GitHub release whose **Release Docker image**
-workflow succeeded; older releases may not have published images. Do not treat
-this workflow's addition as evidence that an image has already been published.
+workflow succeeded; older releases may not have published images. Version
+**0.4.3** is published and verified; use it in the example below, or check the
+release notes for a newer version and its matching Compose file.
 
-Replace `VERSION` with an actually published version (without `v`) in both the
-download URL and `.env`. Download its Compose file into a new directory:
+Download the release's Compose file into a new directory:
 
 ```bash
 mkdir worldforge && cd worldforge
-curl -fsSLo compose.yml https://raw.githubusercontent.com/emorgan33/worldforge/vVERSION/docker-compose.release.yml
+curl -fsSLo compose.yml https://raw.githubusercontent.com/emorgan33/worldforge/v0.4.3/docker-compose.release.yml
 ```
 
 Create `.env` alongside it with:
 
 ```dotenv
-WORLDFORGE_IMAGE=emorgan33/worldforge:VERSION
+WORLDFORGE_IMAGE=emorgan33/worldforge:0.4.3
 WORLDFORGE_ORIGIN=http://localhost:3033
 WORLDFORGE_TRUSTED_PROXY=0
 ```
 
-Replace `VERSION` with a published version (without `v`), then run:
+Then run:
 
 ```bash
 docker compose pull
@@ -153,7 +153,6 @@ See [Configuration](Configuration) for the complete setting reference and
 
 **Source owner:** `wiki/Installation.md`; adapted from `README.md` and
 `docs/deployment-configuration.md`.
-**Verified against:** Packaging implementation `12d0bff` (November 6, 2026)
-and local fresh-volume build/health/login smoke test. Existing source-build and
-proxy guidance retains its prior verification against `4ab66c1`.
-Docker Hub pull verification remains pending the first published release.
+**Verified against:** `v0.4.3` (`94c694c`), source/configuration audit and
+published-image isolated Compose rehearsal; see [Wiki Verification](Wiki-Verification).
+Proxy guidance is source-reviewed, not a newly provisioned TLS deployment.
