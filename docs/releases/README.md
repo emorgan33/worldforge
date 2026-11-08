@@ -52,5 +52,6 @@ the failed step and rerun the unchanged release; verify the final digest.
 Do not retag a different commit to repair a failed release.
 
 Verify each real registry publication/pull; local builds and packaging CI are
-not substitutes for that release evidence. The `0.4.1` publication was verified;
-the `0.4.2` security candidate still awaits publication.
+not substitutes for that release evidence. The `0.4.3` publication was verified;
+the `0.4.4` notes are prepared for publication, so check the GitHub release and
+its workflow before relying on an image.
