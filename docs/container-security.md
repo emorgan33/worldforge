@@ -64,7 +64,9 @@ The scanner uses the local Docker daemon and downloads advisory metadata. Set
 when the policy check exits nonzero. Re-evaluate existing reports with:
 
 ```bash
-node scripts/check-image-vulnerabilities.mjs /tmp/worldforge-image-security.json /tmp/worldforge-vendor-evidence.json
+node scripts/check-image-vulnerabilities.mjs /tmp/worldforge-image-security.json \
+  /tmp/worldforge-vendor-evidence.json \
+  "$(docker image inspect worldforge-security:test --format '{{.Architecture}}')"
 ```
 
 For remaining findings, identify the package/version/path, review distribution
@@ -185,7 +187,12 @@ repository.
 | `zlib1g` | `1:1.3.dfsg+really1.3.1-1+deb13u0+dhi4` | CVE-2026-85091 |
 
 `systemd-homed` and Perl `Archive::Tar` are absent; CI verifies that absence from
-the built image. Vendor settlements are **not** a version-number allowlist:
+the built image. Evidence is scoped to the image architecture: `amd64` and
+`arm64` have separate reviewed dispositions and architecture-specific absence
+paths. A matching package version never justifies reusing another architecture's
+evidence; the scan gate also requires the evidence architecture to match the
+scanned image and fails closed otherwise. Vendor settlements are **not** a
+version-number allowlist:
 `scripts/verify-vendor-patches.sh` extracts the installed changelog, requires
 the exact CVE text, records the actual package version, and fails closed when
 evidence is missing. `scripts/check-image-vulnerabilities.mjs` applies a

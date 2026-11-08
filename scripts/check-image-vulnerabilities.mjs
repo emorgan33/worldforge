@@ -3,9 +3,17 @@ import { readFileSync } from "node:fs";
 try {
   const report = JSON.parse(readFileSync(process.argv[2], "utf8"));
   const verificationPath = process.argv[3];
+  const imageArchitecture = process.argv[4];
   const verified = new Map();
   if (verificationPath) {
+    if (!imageArchitecture) throw new Error("An image architecture is required with vendor evidence.");
     const evidence = JSON.parse(readFileSync(verificationPath, "utf8"));
+    if (typeof evidence.architecture !== "string" || !evidence.architecture) {
+      throw new Error("Malformed vendor evidence architecture.");
+    }
+    if (evidence.architecture !== imageArchitecture) {
+      throw new Error(`Vendor evidence architecture ${evidence.architecture} does not match image architecture ${imageArchitecture}.`);
+    }
     if (!Array.isArray(evidence.verified)) throw new Error("Malformed vendor evidence.");
     for (const item of evidence.verified) {
       if (typeof item.cve !== "string" || typeof item.package !== "string" ||

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 const checker = new URL("../scripts/check-image-vulnerabilities.mjs", import.meta.url);
-function check(value: unknown, evidence?: unknown) {
+function check(value: unknown, evidence?: unknown, architecture: string | null = "amd64") {
   const directory = mkdtempSync(join(tmpdir(), "worldforge-scan-policy-"));
   try {
     const file = join(directory, "report.json");
@@ -16,6 +16,7 @@ function check(value: unknown, evidence?: unknown) {
       const evidenceFile = join(directory, "evidence.json");
       writeFileSync(evidenceFile, JSON.stringify(evidence));
       args.push(evidenceFile);
+      if (architecture !== null) args.push(architecture);
     }
     return spawnSync(process.execPath, args, { encoding: "utf8" });
   } finally {
@@ -28,6 +29,7 @@ function report(Severity: string, FixedVersion?: unknown) {
   }] }] };
 }
 const verified = {
+  architecture: "amd64",
   verified: [{ cve: "CVE-test", package: "example", version: "1.0", reason: "vendor-backport", evidence: "https://example.invalid/evidence" }],
 };
 
@@ -52,16 +54,28 @@ test("accepts an exact version-matched vendor backport disposition", () => {
   assert.equal(body.vendorResolvedHighCritical, 1);
   assert.equal(body.vendorResolved[0].reason, "vendor-backport");
 });
+test("rejects evidence produced for another architecture", () => {
+  const result = check(report("HIGH"), { ...verified, architecture: "arm64" });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /does not match image architecture/);
+});
+test("rejects vendor evidence without an image architecture", () => {
+  const result = check(report("HIGH"), verified, null);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /architecture is required/);
+});
 test("does not apply evidence to a different package version", () => {
-  const mismatch = { verified: [{ ...verified.verified[0], version: "0.9" }] };
+  const mismatch = { ...verified, verified: [{ ...verified.verified[0], version: "0.9" }] };
   const result = check(report("HIGH"), mismatch);
   assert.equal(result.status, 0);
   assert.equal(JSON.parse(result.stdout).unresolvedHighCritical, 1);
   assert.equal(JSON.parse(result.stdout).vendorResolvedHighCritical, 0);
 });
 test("fails closed on malformed vendor evidence", () => {
-  for (const value of [{}, { verified: "bad" }, { verified: [{}] },
-    { verified: [{ ...verified.verified[0], reason: "ignore" }] }]) {
+  for (const value of [{}, { architecture: "amd64" }, { architecture: "amd64", verified: "bad" },
+    { architecture: "amd64", verified: [{}] },
+    { architecture: "amd64", verified: [{ ...verified.verified[0], reason: "ignore" }] },
+    { verified: verified.verified }]) {
     assert.equal(check(report("HIGH"), value).status, 1);
   }
 });
