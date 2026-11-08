@@ -9,7 +9,9 @@ const workflow = readFileSync(new URL("../.github/workflows/docker-publish.yml",
 const condition = workflow.match(/^    if: (.+)$/m)?.[1];
 assert.ok(condition);
 const publishJob = workflow.slice(workflow.indexOf("  publish:"), workflow.indexOf("  tag:"));
-const tagJob = workflow.slice(workflow.indexOf("  tag:"));
+const tagJob = workflow.slice(workflow.indexOf("  tag:"), workflow.indexOf("  verify-published:"));
+const verifyPublishedJob = workflow.slice(workflow.indexOf("  verify-published:"), workflow.indexOf("  finalize:"));
+const finalizeJob = workflow.slice(workflow.indexOf("  finalize:"));
 
 test("release workflow subscribes to both publication and stable promotion", () => {
   assert.match(workflow, /types: \[published, released\]/);
@@ -120,6 +122,8 @@ test("registry credentials appear only in release publication jobs", () => {
   assert.match(tagJob, /docker login/);
   assert.match(tagJob, /DOCKERHUB_USERNAME/);
   assert.match(tagJob, /DOCKERHUB_TOKEN/);
+  assert.match(finalizeJob, /docker login/);
+  assert.doesNotMatch(verifyPublishedJob, /DOCKERHUB_/);
 });
 
 test("release index publication is release-only and gated on child publication", () => {
@@ -147,4 +151,32 @@ test("immutable tag publication is idempotent and conflict-safe", () => {
   assert.match(tagJob, /check-release-index\.mjs/);
   assert.match(tagJob, /--platforms "linux\/amd64,linux\/arm64" > \/dev\/null/);
   assert.doesNotMatch(tagJob, /docker push/);
+});
+
+test("published children are re-verified on both native platforms", () => {
+  assert.match(verifyPublishedJob, /needs: \[preflight, tag\]/);
+  assert.match(verifyPublishedJob, /if: github\.event_name == 'release'/);
+  assert.match(verifyPublishedJob, /runner: ubuntu-latest/);
+  assert.match(verifyPublishedJob, /runner: ubuntu-24\.04-arm/);
+  assert.match(verifyPublishedJob, /worldforge-release-index-/);
+  assert.match(verifyPublishedJob, /docker pull "\$IMAGE@\$INDEX_DIGEST"/);
+  assert.match(verifyPublishedJob, /docker pull "\$IMAGE@\$EXPECTED_CHILD"/);
+  assert.match(verifyPublishedJob, /selected=[\s\S]*imagetools inspect/);
+  assert.match(verifyPublishedJob, /\[\[ "\$selected" == "\$EXPECTED_CHILD" \]\]/);
+  assert.match(verifyPublishedJob, /WORLDFORGE_EXPECTED_ARCH/);
+  assert.doesNotMatch(verifyPublishedJob, /docker login|docker push/);
+  assert.doesNotMatch(verifyPublishedJob, /"\$IMAGE:latest"/);
+});
+
+test("finalization waits for both published children and is release-only", () => {
+  assert.match(finalizeJob, /needs: \[preflight, tag, verify-published\]/);
+  assert.match(finalizeJob, /if: github\.event_name == 'release'/);
+  assert.match(finalizeJob, /contents: write/);
+  assert.match(finalizeJob, /release-finalize\.mjs latest/);
+  assert.match(finalizeJob, /release-finalize\.mjs notes/);
+  assert.match(finalizeJob, /docker buildx imagetools create -t "\$IMAGE:latest"/);
+  assert.match(finalizeJob, /gh release edit/);
+  assert.match(finalizeJob, /cmp -s/);
+  assert.match(finalizeJob, /releases\/latest/);
+  assert.doesNotMatch(finalizeJob, /docker push/);
 });

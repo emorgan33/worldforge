@@ -19,12 +19,14 @@ on:
       - scripts/release-artifact.mjs
       - scripts/release-publish.mjs
       - scripts/release-index.mjs
+      - scripts/release-finalize.mjs
       - tests/docker-release.test.ts
       - tests/docker-release-policy.test.ts
       - tests/docker-release-registry.test.ts
       - tests/release-artifact.test.ts
       - tests/release-publish.test.ts
       - tests/release-index.test.ts
+      - tests/release-finalize.test.ts
       - tests/image-security.test.ts
       - package.json
       - pnpm-lock.yaml
@@ -455,3 +457,165 @@ jobs:
           path: ${{ runner.temp }}/release-index.json
           if-no-files-found: error
           retention-days: 30
+
+  verify-published:
+    needs: [preflight, tag]
+    if: github.event_name == 'release'
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            architecture: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            architecture: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      IMAGE: emorgan33/worldforge
+      PLATFORM: ${{ matrix.platform }}
+      ARCHITECTURE: ${{ matrix.architecture }}
+      VERSION: ${{ needs.preflight.outputs.version }}
+      REVISION: ${{ needs.preflight.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: false
+      - name: Download release index metadata
+        uses: actions/download-artifact@v7
+        with:
+          name: worldforge-release-index-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-index
+      - name: Resolve published index and expected child
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/release-index/release-index.json"
+          index_digest=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).indexDigest)' "$RUNNER_TEMP/release-index/release-index.json")
+          if [[ "$ARCHITECTURE" == "amd64" ]]; then
+            expected_child=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).amd64Digest)' "$RUNNER_TEMP/release-index/release-index.json")
+          else
+            expected_child=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).arm64Digest)' "$RUNNER_TEMP/release-index/release-index.json")
+          fi
+          [[ "$index_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Invalid published index digest."; exit 1; }
+          [[ "$expected_child" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Invalid expected child digest."; exit 1; }
+          echo "INDEX_DIGEST=$index_digest" >> "$GITHUB_ENV"
+          echo "EXPECTED_CHILD=$expected_child" >> "$GITHUB_ENV"
+      - name: Pull and verify the selected published child
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE@$INDEX_DIGEST"
+          selected=$(docker buildx imagetools inspect "$IMAGE@$INDEX_DIGEST" --raw | jq -r --arg arch "$ARCHITECTURE" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest')
+          [[ "$selected" == "$EXPECTED_CHILD" ]] || { echo "Published index selected $selected, expected $EXPECTED_CHILD."; exit 1; }
+          docker pull "$IMAGE@$EXPECTED_CHILD"
+          docker tag "$IMAGE@$EXPECTED_CHILD" worldforge-published-verify:test
+          pulled_id=$(docker image inspect "$IMAGE@$EXPECTED_CHILD" --format '{{.Id}}')
+          tagged_id=$(docker image inspect worldforge-published-verify:test --format '{{.Id}}')
+          [[ "$pulled_id" == "$tagged_id" ]] || { echo "Selected child content changed while tagging."; exit 1; }
+          image_arch=$(docker image inspect worldforge-published-verify:test --format '{{.Architecture}}')
+          [[ "$image_arch" == "$ARCHITECTURE" ]] || { echo "Published child architecture $image_arch does not match $ARCHITECTURE."; exit 1; }
+          image_revision=$(docker image inspect worldforge-published-verify:test --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+          [[ "$image_revision" == "$REVISION" ]] || { echo "Published child revision $image_revision does not match $REVISION."; exit 1; }
+      - name: Install vulnerability scanner
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.76.2
+          cache: true
+      - name: Verify vendor backport evidence from the published child
+        run: bash scripts/verify-vendor-patches.sh worldforge-published-verify:test "$RUNNER_TEMP/vendor-security-patches-published-$ARCHITECTURE.json"
+      - name: Scan the published child
+        run: bash scripts/scan-image.sh worldforge-published-verify:test "$RUNNER_TEMP/image-security-published-$ARCHITECTURE.json" "$RUNNER_TEMP/vendor-security-patches-published-$ARCHITECTURE.json"
+      - name: Retain published-child vulnerability reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-security-published-${{ matrix.architecture }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/image-security-published-${{ matrix.architecture }}.json
+            ${{ runner.temp }}/vendor-security-patches-published-${{ matrix.architecture }}.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Smoke test the published child
+        env:
+          WORLDFORGE_EXPECTED_ARCH: ${{ matrix.architecture }}
+        run: bash scripts/smoke-release-image.sh worldforge-published-verify:test
+
+  finalize:
+    needs: [preflight, tag, verify-published]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      IMAGE: emorgan33/worldforge
+      VERSION: ${{ needs.preflight.outputs.version }}
+      REVISION: ${{ needs.preflight.outputs.revision }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      PRERELEASE: ${{ github.event.release.prerelease }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: false
+      - name: Download release index metadata
+        uses: actions/download-artifact@v7
+        with:
+          name: worldforge-release-index-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-index
+      - name: Resolve release index metadata
+        run: |
+          set -euo pipefail
+          metadata="$RUNNER_TEMP/release-index/release-index.json"
+          test -f "$metadata"
+          index_digest=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).indexDigest)' "$metadata")
+          amd64_digest=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).amd64Digest)' "$metadata")
+          arm64_digest=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).arm64Digest)' "$metadata")
+          [[ "$index_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Invalid release index digest."; exit 1; }
+          echo "INDEX_DIGEST=$index_digest" >> "$GITHUB_ENV"
+          echo "AMD64_CHILD=$amd64_digest" >> "$GITHUB_ENV"
+          echo "ARM64_CHILD=$arm64_digest" >> "$GITHUB_ENV"
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+      - name: Advance latest to the verified index only when eligible
+        run: |
+          set -euo pipefail
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || true)
+          advance=$(node scripts/release-finalize.mjs latest --latest-tag "$latest" --release-tag "$RELEASE_TAG" --prerelease "$PRERELEASE")
+          if [[ "$advance" != "true" ]]; then
+            echo "latest is not advanced for this release."
+            exit 0
+          fi
+          docker buildx imagetools create -t "$IMAGE:latest" "$IMAGE@$INDEX_DIGEST"
+          output=$(mktemp)
+          GITHUB_OUTPUT="$output" node scripts/check-release-index.mjs \
+            --image "$IMAGE" \
+            --tag latest \
+            --revision "$REVISION" \
+            --platforms "linux/amd64,linux/arm64" > /dev/null
+          status=$(sed -n 's/^status=//p' "$output" | tail -n1)
+          digest=$(sed -n 's/^index_digest=//p' "$output" | tail -n1)
+          rm -f "$output"
+          [[ "$status" == "existing" ]] || { echo "latest did not resolve to a complete release."; exit 1; }
+          [[ "$digest" == "$INDEX_DIGEST" ]] || { echo "latest points to $digest, expected $INDEX_DIGEST."; exit 1; }
+      - name: Update release notes idempotently
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --json body --jq .body > "$RUNNER_TEMP/body.md"
+          node scripts/release-finalize.mjs notes \
+            --body "$RUNNER_TEMP/body.md" \
+            --output "$RUNNER_TEMP/notes.md" \
+            --image "$IMAGE" \
+            --version "$VERSION" \
+            --index-digest "$INDEX_DIGEST" \
+            --amd64-digest "$AMD64_CHILD" \
+            --arm64-digest "$ARM64_CHILD"
+          if ! cmp -s "$RUNNER_TEMP/body.md" "$RUNNER_TEMP/notes.md"; then
+            gh release edit "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          fi

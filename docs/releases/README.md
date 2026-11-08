@@ -38,10 +38,14 @@ never be moved or reused for a different commit; use a new patch release.
    both resolve to the same validated multi-platform index. Existing
    same-content tags are no-ops; conflicting tags fail closed. `latest` and
    release-note updates are separate finalization steps.
-5. Verify the version/digest in the release notes and perform a clean-machine
-   `docker pull emorgan33/worldforge:X.Y.Z`, followed by the pull-only Compose
-   install in the [deployment guide](../deployment-configuration.md). Require
-   a healthy container and `/login` response before declaring delivery complete.
+5. After both published children pass re-verification, the workflow updates the
+   release notes with an idempotent image section and, only when this is
+   GitHub's current stable release with a stable version tag, advances `latest`
+   to the same validated index. Verify the version/index digest in the release
+   notes and perform a clean-machine `docker pull emorgan33/worldforge:X.Y.Z`,
+   followed by the pull-only Compose install in the
+   [deployment guide](../deployment-configuration.md). Require a healthy
+   container and `/login` response before declaring delivery complete.
 6. Publish the reviewed tracked wiki pages after merge using
    [Wiki Maintenance](../../wiki/Wiki-Maintenance.md). Keep the README, operator
    instructions, and any advertised architecture support synchronized.
@@ -51,6 +55,13 @@ may point at a single architecture. A partially completed publication is
 recovered by rerunning the unchanged release: matching tags are left untouched,
 only missing tags are created, and any conflicting reference fails closed.
 Staging images and indexes are run-scoped and are not operator release tags.
+
+Published children are re-pulled and re-verified on both platforms before
+`latest` or release notes are updated. If a post-publication step fails, the
+version and SHA tags may already exist; rerun the unchanged release to
+revalidate them and finish finalization. Release notes use a marked image block
+that is replaced in place, and `latest` is rechecked against GitHub's current
+stable release immediately before advancing.
 
 Promotion of an existing prerelease and retries reuse an already-published
 version only after the release preflight resolves the complete multi-platform
