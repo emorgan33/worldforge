@@ -29,23 +29,41 @@ for (const [description, eventName, action, prerelease, expected] of [
   });
 }
 
-test("release preflight validates the complete multi-platform index", () => {
-  assert.match(workflow, /name: Resolve existing release index\n\s+if: github\.event_name == 'release'/);
+test("release preflight resolves the complete multi-platform index", () => {
+  assert.match(workflow, /name: Resolve release mode/);
   assert.match(workflow, /scripts\/check-release-index\.mjs/);
   assert.match(workflow, /--platforms "linux\/amd64,linux\/arm64"/);
+  assert.match(workflow, /status: \$\{\{ steps\.release\.outputs\.status \}\}/);
 });
 
-test("release preflight replaces local single-image revision inspection", () => {
-  assert.doesNotMatch(workflow, /docker image inspect .*org\.opencontainers\.image\.revision/);
+test("verification runs natively on both architectures", () => {
+  assert.match(workflow, /runs-on: \$\{\{ matrix\.runner \}\}/);
+  assert.match(workflow, /runner: ubuntu-latest/);
+  assert.match(workflow, /runner: ubuntu-24\.04-arm/);
+  assert.match(workflow, /platform: linux\/amd64/);
+  assert.match(workflow, /platform: linux\/arm64/);
+  assert.match(workflow, /WORLDFORGE_EXPECTED_ARCH: \$\{\{ matrix\.architecture \}\}/);
+  assert.match(workflow, /docker build --pull --platform "\$PLATFORM"/);
 });
 
-test("existing release reuse is pinned to the validated index digest", () => {
-  assert.match(workflow, /INDEX_DIGEST: \$\{\{ steps\.existing\.outputs\.index_digest \}\}/);
-  assert.match(workflow, /docker pull "\$IMAGE@\$INDEX_DIGEST"/);
-  assert.doesNotMatch(workflow, /Reuse an existing unchanged release[\s\S]{0,500}docker pull "\$IMAGE:\$VERSION"/);
-  assert.match(workflow, /docker buildx imagetools create -t "\$IMAGE:latest" "\$IMAGE@\$INDEX_DIGEST"/);
+test("existing child images are reused by validated digest", () => {
+  assert.match(workflow, /EXISTING_DIGEST:[\s\S]*linux_amd64_digest[\s\S]*linux_arm64_digest/);
+  assert.match(workflow, /docker pull "\$IMAGE@\$EXISTING_DIGEST"/);
+  assert.doesNotMatch(workflow, /docker pull "\$IMAGE:\$VERSION"/);
 });
 
-test("Docker Hub credentials remain release-only", () => {
-  assert.match(workflow, /name: Log in to Docker Hub\n\s+if: github\.event_name == 'release'/);
+test("matrix verification never publishes or uses registry credentials", () => {
+  assert.doesNotMatch(workflow, /docker push/);
+  assert.doesNotMatch(workflow, /docker login/);
+  assert.doesNotMatch(workflow, /DOCKERHUB_/);
+  assert.doesNotMatch(workflow, /gh release edit/);
+  assert.doesNotMatch(workflow, /imagetools create/);
+});
+
+test("both platform results and reports are retained for publication", () => {
+  assert.match(workflow, /needs: preflight/);
+  assert.match(workflow, /name: worldforge-image-\$\{\{ matrix\.architecture \}\}-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
+  assert.match(workflow, /name: image-security-\$\{\{ matrix\.architecture \}\}-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
+  assert.match(workflow, /scripts\/release-artifact\.mjs write/);
+  assert.match(workflow, /scripts\/release-artifact\.mjs verify/);
 });

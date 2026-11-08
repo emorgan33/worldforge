@@ -16,9 +16,11 @@ on:
       - scripts/docker-release-policy.mjs
       - scripts/docker-release-registry.mjs
       - scripts/check-release-index.mjs
+      - scripts/release-artifact.mjs
       - tests/docker-release.test.ts
       - tests/docker-release-policy.test.ts
       - tests/docker-release-registry.test.ts
+      - tests/release-artifact.test.ts
       - tests/image-security.test.ts
       - package.json
       - pnpm-lock.yaml
@@ -38,16 +40,23 @@ permissions:
   contents: read
 
 jobs:
-  image:
+  preflight:
     # Stable releases (including promotions) use released. Prereleases use
     # published, which also covers publication from a draft. Exactly one job
     # publishes for an ordinary stable release even though both events fire.
     if: github.event_name != 'release' || (github.event.action == 'published' && github.event.release.prerelease) || (github.event.action == 'released' && !github.event.release.prerelease)
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Append the published image/digest to release notes.
+      contents: read
     env:
       IMAGE: emorgan33/worldforge
+    outputs:
+      status: ${{ steps.release.outputs.status }}
+      index_digest: ${{ steps.release.outputs.index_digest }}
+      linux_amd64_digest: ${{ steps.release.outputs.linux_amd64_digest }}
+      linux_arm64_digest: ${{ steps.release.outputs.linux_arm64_digest }}
+      version: ${{ steps.version.outputs.version }}
+      revision: ${{ steps.version.outputs.revision }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -55,109 +64,129 @@ jobs:
           persist-credentials: false
       - name: Validate release version
         if: github.event_name == 'release'
+        id: version
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*)?$ ]] || { echo 'Expected vMAJOR.MINOR.PATCH[-prerelease]'; exit 1; }
           test -f "docs/releases/$RELEASE_TAG.md"
-          echo "VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
-          echo "REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-      - name: Resolve existing release index
-        if: github.event_name == 'release'
-        id: existing
-        run: |
-          node scripts/check-release-index.mjs \
-            --image "$IMAGE" \
-            --tag "$VERSION" \
-            --revision "$REVISION" \
-            --platforms "linux/amd64,linux/arm64"
-      - name: Log in to Docker Hub
-        if: github.event_name == 'release'
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Resolve release mode
+        id: release
         env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
-      - name: Reuse an existing unchanged release
-        if: github.event_name == 'release' && steps.existing.outputs.status == 'existing'
-        env:
-          INDEX_DIGEST: ${{ steps.existing.outputs.index_digest }}
+          VERSION: ${{ steps.version.outputs.version }}
+          REVISION: ${{ steps.version.outputs.revision }}
         run: |
-          [[ "$INDEX_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Preflight did not return a valid index digest.'; exit 1; }
-          docker pull "$IMAGE@$INDEX_DIGEST"
-          docker tag "$IMAGE@$INDEX_DIGEST" worldforge-release:test
-          echo 'EXISTING_VERSION=true' >> "$GITHUB_ENV"
-      - name: Mark a new release build
-        if: github.event_name == 'release' && steps.existing.outputs.status == 'absent'
-        run: echo 'EXISTING_VERSION=false' >> "$GITHUB_ENV"
-      - name: Build linux/amd64 image
-        if: env.EXISTING_VERSION != 'true'
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            node scripts/check-release-index.mjs \
+              --image "$IMAGE" \
+              --tag "$VERSION" \
+              --revision "$REVISION" \
+              --platforms "linux/amd64,linux/arm64"
+          else
+            echo "status=build" >> "$GITHUB_OUTPUT"
+          fi
+
+  verify:
+    needs: preflight
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            architecture: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            architecture: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      IMAGE: emorgan33/worldforge
+      PLATFORM: ${{ matrix.platform }}
+      ARCHITECTURE: ${{ matrix.architecture }}
+      EXISTING_STATUS: ${{ needs.preflight.outputs.status }}
+      EXISTING_DIGEST: ${{ matrix.architecture == 'amd64' && needs.preflight.outputs.linux_amd64_digest || needs.preflight.outputs.linux_arm64_digest }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: false
+      - name: Resolve source revision
+        run: echo "REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Build or reuse the tested platform image
         run: |
-          docker build --pull --platform linux/amd64 \
-            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
-            -t worldforge-release:test .
+          set -euo pipefail
+          if [[ "$EXISTING_STATUS" == "existing" ]]; then
+            [[ "$EXISTING_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Preflight did not return a valid child digest.'; exit 1; }
+            docker pull "$IMAGE@$EXISTING_DIGEST"
+            docker tag "$IMAGE@$EXISTING_DIGEST" worldforge-release:test
+            echo "IMAGE_MODE=reused" >> "$GITHUB_ENV"
+            echo "SOURCE_DIGEST=$EXISTING_DIGEST" >> "$GITHUB_ENV"
+          else
+            docker build --pull --platform "$PLATFORM" \
+              --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+              --label "org.opencontainers.image.revision=$REVISION" \
+              -t worldforge-release:test .
+            echo "IMAGE_MODE=built" >> "$GITHUB_ENV"
+            echo "SOURCE_DIGEST=$(docker image inspect worldforge-release:test --format '{{.Id}}')" >> "$GITHUB_ENV"
+          fi
+          image_arch=$(docker image inspect worldforge-release:test --format '{{.Architecture}}')
+          [[ "$image_arch" == "$ARCHITECTURE" ]] || { echo "Image architecture $image_arch does not match $ARCHITECTURE."; exit 1; }
+          image_revision=$(docker image inspect worldforge-release:test --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+          [[ "$image_revision" == "$REVISION" ]] || { echo "Image revision $image_revision does not match $REVISION."; exit 1; }
       - name: Install vulnerability scanner
         uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
         with:
           version: v0.76.2
           cache: true
-      - name: Verify vendor backport evidence from the built image
-        run: bash scripts/verify-vendor-patches.sh worldforge-release:test "$RUNNER_TEMP/vendor-security-patches.json"
-      - name: Scan image and gate fixable high/critical vulnerabilities
-        run: bash scripts/scan-image.sh worldforge-release:test "$RUNNER_TEMP/image-security.json" "$RUNNER_TEMP/vendor-security-patches.json"
+      - name: Verify vendor backport evidence from the platform image
+        run: bash scripts/verify-vendor-patches.sh worldforge-release:test "$RUNNER_TEMP/vendor-security-patches-$ARCHITECTURE.json"
+      - name: Scan platform image and gate fixable high/critical vulnerabilities
+        run: bash scripts/scan-image.sh worldforge-release:test "$RUNNER_TEMP/image-security-$ARCHITECTURE.json" "$RUNNER_TEMP/vendor-security-patches-$ARCHITECTURE.json"
       - name: Retain full vulnerability report and evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: image-security-${{ github.run_id }}-${{ github.run_attempt }}
+          name: image-security-${{ matrix.architecture }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/image-security.json
-            ${{ runner.temp }}/vendor-security-patches.json
+            ${{ runner.temp }}/image-security-${{ matrix.architecture }}.json
+            ${{ runner.temp }}/vendor-security-patches-${{ matrix.architecture }}.json
           if-no-files-found: warn
           retention-days: 30
       - name: Smoke test with disposable storage
+        env:
+          WORLDFORGE_EXPECTED_ARCH: ${{ matrix.architecture }}
         run: bash scripts/smoke-release-image.sh worldforge-release:test
-      - name: Push versioned image
-        if: github.event_name == 'release'
+      - name: Export tested platform image
         run: |
-          if [[ "$EXISTING_VERSION" != true ]]; then
-            docker tag worldforge-release:test "$IMAGE:$VERSION"
-            docker push "$IMAGE:$VERSION"
-            docker tag worldforge-release:test "$IMAGE:sha-$REVISION"
-            docker push "$IMAGE:sha-$REVISION"
-            docker pull "$IMAGE:$VERSION"
-            echo "DIGEST=$(docker image inspect "$IMAGE:$VERSION" --format '{{index .RepoDigests 0}}')" >> "$GITHUB_ENV"
-          else
-            echo "DIGEST=$IMAGE@${{ steps.existing.outputs.index_digest }}" >> "$GITHUB_ENV"
-          fi
-      - name: Verify published image
-        if: github.event_name == 'release'
-        run: bash scripts/smoke-release-image.sh "$DIGEST"
-      - name: Update latest for the current stable release only
-        if: github.event_name == 'release' && !github.event.release.prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          INDEX_DIGEST: ${{ steps.existing.outputs.index_digest }}
-        run: |
-          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
-          if [[ "$latest" == "$RELEASE_TAG" && "$VERSION" != *-* ]]; then
-            if [[ "$EXISTING_VERSION" == true ]]; then
-              docker buildx imagetools create -t "$IMAGE:latest" "$IMAGE@$INDEX_DIGEST"
-            else
-              docker tag "$DIGEST" "$IMAGE:latest"
-              docker push "$IMAGE:latest"
-            fi
-          fi
-      - name: Record image in release notes
-        if: github.event_name == 'release'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          gh release view "$RELEASE_TAG" --json body --jq .body > "$RUNNER_TEMP/release-notes.md"
-          printf '\n\n### Docker image (linux/amd64)\n\n`%s:%s`\n\nDigest pin: `%s`\n' "$IMAGE" "$VERSION" "$DIGEST" >> "$RUNNER_TEMP/release-notes.md"
-          gh release edit "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
-      - name: Log out
-        if: always() && github.event_name == 'release'
-        run: docker logout
+          set -euo pipefail
+          archive="$RUNNER_TEMP/worldforge-$ARCHITECTURE.tar.gz"
+          docker save worldforge-release:test | gzip -9 > "$archive"
+          image_id=$(docker image inspect worldforge-release:test --format '{{.Id}}')
+          node scripts/release-artifact.mjs write \
+            --output "$RUNNER_TEMP/worldforge-$ARCHITECTURE.json" \
+            --archive "$archive" \
+            --platform "$PLATFORM" \
+            --architecture "$ARCHITECTURE" \
+            --revision "$REVISION" \
+            --image-id "$image_id" \
+            --mode "$IMAGE_MODE" \
+            --source-digest "$SOURCE_DIGEST"
+          node scripts/release-artifact.mjs verify \
+            --metadata "$RUNNER_TEMP/worldforge-$ARCHITECTURE.json" \
+            --archive "$archive" \
+            --platform "$PLATFORM" \
+            --architecture "$ARCHITECTURE" \
+            --revision "$REVISION"
+      - name: Upload tested platform image
+        uses: actions/upload-artifact@v7
+        with:
+          name: worldforge-image-${{ matrix.architecture }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/worldforge-${{ matrix.architecture }}.tar.gz
+            ${{ runner.temp }}/worldforge-${{ matrix.architecture }}.json
+          if-no-files-found: error
+          retention-days: 30
