@@ -28,3 +28,24 @@ for (const [description, eventName, action, prerelease, expected] of [
     assert.equal(runInNewContext(condition, { github }, { timeout: 1000 }), expected);
   });
 }
+
+test("release preflight validates the complete multi-platform index", () => {
+  assert.match(workflow, /name: Resolve existing release index\n\s+if: github\.event_name == 'release'/);
+  assert.match(workflow, /scripts\/check-release-index\.mjs/);
+  assert.match(workflow, /--platforms "linux\/amd64,linux\/arm64"/);
+});
+
+test("release preflight replaces local single-image revision inspection", () => {
+  assert.doesNotMatch(workflow, /docker image inspect .*org\.opencontainers\.image\.revision/);
+});
+
+test("existing release reuse is pinned to the validated index digest", () => {
+  assert.match(workflow, /INDEX_DIGEST: \$\{\{ steps\.existing\.outputs\.index_digest \}\}/);
+  assert.match(workflow, /docker pull "\$IMAGE@\$INDEX_DIGEST"/);
+  assert.doesNotMatch(workflow, /Reuse an existing unchanged release[\s\S]{0,500}docker pull "\$IMAGE:\$VERSION"/);
+  assert.match(workflow, /docker buildx imagetools create -t "\$IMAGE:latest" "\$IMAGE@\$INDEX_DIGEST"/);
+});
+
+test("Docker Hub credentials remain release-only", () => {
+  assert.match(workflow, /name: Log in to Docker Hub\n\s+if: github\.event_name == 'release'/);
+});

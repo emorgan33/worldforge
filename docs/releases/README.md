@@ -46,10 +46,16 @@ never be moved or reused for a different commit; use a new patch release.
    instructions, and any advertised architecture support synchronized.
 
 Promotion of an existing prerelease and retries reuse an already-published
-version only if its OCI revision label matches the release commit. A failure
-can leave the version pushed but notes or `latest` not updated. Investigate
-the failed step and rerun the unchanged release; verify the final digest.
-Do not retag a different commit to repair a failed release.
+version only after the release preflight resolves the complete multi-platform
+index, verifies every fetched index, child manifest, and config blob against its
+claimed SHA-256 digest, and confirms one unambiguous `linux/amd64` and
+`linux/arm64` child, each with the release commit's revision label. Only a
+definite version-not-found permits a new build; single-platform historical
+versions, mismatched revisions, malformed registries, and
+authentication/rate-limit/server errors fail closed. A failure can leave the
+version pushed but notes or `latest` not updated. Investigate the failed step
+and rerun the unchanged release; verify the final digest. Do not retag a
+different commit to repair a failed release.
 
 Verify each real registry publication/pull; local builds and packaging CI are
 not substitutes for that release evidence. The `0.4.3` publication was verified;

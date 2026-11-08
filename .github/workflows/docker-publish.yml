@@ -13,6 +13,12 @@ on:
       - scripts/verify-vendor-patches.sh
       - scripts/vendor-security-patches.json
       - scripts/vendor-patch-policy.mjs
+      - scripts/docker-release-policy.mjs
+      - scripts/docker-release-registry.mjs
+      - scripts/check-release-index.mjs
+      - tests/docker-release.test.ts
+      - tests/docker-release-policy.test.ts
+      - tests/docker-release-registry.test.ts
       - tests/image-security.test.ts
       - package.json
       - pnpm-lock.yaml
@@ -56,32 +62,33 @@ jobs:
           test -f "docs/releases/$RELEASE_TAG.md"
           echo "VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
           echo "REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Resolve existing release index
+        if: github.event_name == 'release'
+        id: existing
+        run: |
+          node scripts/check-release-index.mjs \
+            --image "$IMAGE" \
+            --tag "$VERSION" \
+            --revision "$REVISION" \
+            --platforms "linux/amd64,linux/arm64"
       - name: Log in to Docker Hub
         if: github.event_name == 'release'
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
-      - name: Reuse an existing version for promotions or retries
-        if: github.event_name == 'release'
+      - name: Reuse an existing unchanged release
+        if: github.event_name == 'release' && steps.existing.outputs.status == 'existing'
+        env:
+          INDEX_DIGEST: ${{ steps.existing.outputs.index_digest }}
         run: |
-          token=$(curl --fail --silent --show-error "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$IMAGE:pull" | jq -er .token)
-          echo "::add-mask::$token"
-          status=$(curl --silent --show-error -o "$RUNNER_TEMP/manifest.json" -w '%{http_code}' \
-            -H "Authorization: Bearer $token" \
-            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
-            "https://registry-1.docker.io/v2/$IMAGE/manifests/$VERSION")
-          case "$status" in
-            200)
-              docker pull "$IMAGE:$VERSION"
-              revision=$(docker image inspect "$IMAGE:$VERSION" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
-              [[ "$revision" == "$REVISION" ]] || { echo 'Existing version belongs to another commit; publish a new version.'; exit 1; }
-              docker tag "$IMAGE:$VERSION" worldforge-release:test
-              echo 'EXISTING_VERSION=true' >> "$GITHUB_ENV"
-              ;;
-            404) echo 'EXISTING_VERSION=false' >> "$GITHUB_ENV" ;;
-            *) echo "Registry returned $status; refusing to overwrite a version."; exit 1 ;;
-          esac
+          [[ "$INDEX_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Preflight did not return a valid index digest.'; exit 1; }
+          docker pull "$IMAGE@$INDEX_DIGEST"
+          docker tag "$IMAGE@$INDEX_DIGEST" worldforge-release:test
+          echo 'EXISTING_VERSION=true' >> "$GITHUB_ENV"
+      - name: Mark a new release build
+        if: github.event_name == 'release' && steps.existing.outputs.status == 'absent'
+        run: echo 'EXISTING_VERSION=false' >> "$GITHUB_ENV"
       - name: Build linux/amd64 image
         if: env.EXISTING_VERSION != 'true'
         run: |
@@ -116,11 +123,13 @@ jobs:
           if [[ "$EXISTING_VERSION" != true ]]; then
             docker tag worldforge-release:test "$IMAGE:$VERSION"
             docker push "$IMAGE:$VERSION"
+            docker tag worldforge-release:test "$IMAGE:sha-$REVISION"
+            docker push "$IMAGE:sha-$REVISION"
+            docker pull "$IMAGE:$VERSION"
+            echo "DIGEST=$(docker image inspect "$IMAGE:$VERSION" --format '{{index .RepoDigests 0}}')" >> "$GITHUB_ENV"
+          else
+            echo "DIGEST=$IMAGE@${{ steps.existing.outputs.index_digest }}" >> "$GITHUB_ENV"
           fi
-          docker tag worldforge-release:test "$IMAGE:sha-$REVISION"
-          docker push "$IMAGE:sha-$REVISION"
-          docker pull "$IMAGE:$VERSION"
-          echo "DIGEST=$(docker image inspect "$IMAGE:$VERSION" --format '{{index .RepoDigests 0}}')" >> "$GITHUB_ENV"
       - name: Verify published image
         if: github.event_name == 'release'
         run: bash scripts/smoke-release-image.sh "$DIGEST"
@@ -129,11 +138,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INDEX_DIGEST: ${{ steps.existing.outputs.index_digest }}
         run: |
           latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
           if [[ "$latest" == "$RELEASE_TAG" && "$VERSION" != *-* ]]; then
-            docker tag "$DIGEST" "$IMAGE:latest"
-            docker push "$IMAGE:latest"
+            if [[ "$EXISTING_VERSION" == true ]]; then
+              docker buildx imagetools create -t "$IMAGE:latest" "$IMAGE@$INDEX_DIGEST"
+            else
+              docker tag "$DIGEST" "$IMAGE:latest"
+              docker push "$IMAGE:latest"
+            fi
           fi
       - name: Record image in release notes
         if: github.event_name == 'release'
