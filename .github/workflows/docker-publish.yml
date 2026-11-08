@@ -18,11 +18,13 @@ on:
       - scripts/check-release-index.mjs
       - scripts/release-artifact.mjs
       - scripts/release-publish.mjs
+      - scripts/release-index.mjs
       - tests/docker-release.test.ts
       - tests/docker-release-policy.test.ts
       - tests/docker-release-registry.test.ts
       - tests/release-artifact.test.ts
       - tests/release-publish.test.ts
+      - tests/release-index.test.ts
       - tests/image-security.test.ts
       - package.json
       - pnpm-lock.yaml
@@ -288,5 +290,168 @@ jobs:
         with:
           name: worldforge-published-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/images/published-*.json
+          if-no-files-found: error
+          retention-days: 30
+
+  tag:
+    needs: [preflight, publish]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      IMAGE: emorgan33/worldforge
+      VERSION: ${{ needs.preflight.outputs.version }}
+      REVISION: ${{ needs.preflight.outputs.revision }}
+      RELEASE_STATUS: ${{ needs.preflight.outputs.status }}
+      PREFLIGHT_INDEX_DIGEST: ${{ needs.preflight.outputs.index_digest }}
+      PREFLIGHT_AMD64_DIGEST: ${{ needs.preflight.outputs.linux_amd64_digest }}
+      PREFLIGHT_ARM64_DIGEST: ${{ needs.preflight.outputs.linux_arm64_digest }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: false
+      - name: Download publication metadata
+        uses: actions/download-artifact@v7
+        with:
+          name: worldforge-published-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/published
+      - name: Verify publication metadata
+        run: |
+          set -euo pipefail
+          for entry in "linux/amd64 amd64" "linux/arm64 arm64"; do
+            read -r platform architecture <<< "$entry"
+            metadata="$RUNNER_TEMP/published/published-$architecture.json"
+            test -f "$metadata"
+            node scripts/release-publish.mjs verify \
+              --metadata "$metadata" \
+              --platform "$platform" \
+              --architecture "$architecture" \
+              --revision "$REVISION"
+          done
+          amd64_child=$(node scripts/release-publish.mjs child --metadata "$RUNNER_TEMP/published/published-amd64.json" --platform "linux/amd64" --architecture "amd64" --revision "$REVISION")
+          arm64_child=$(node scripts/release-publish.mjs child --metadata "$RUNNER_TEMP/published/published-arm64.json" --platform "linux/arm64" --architecture "arm64" --revision "$REVISION")
+          echo "AMD64_CHILD=$amd64_child" >> "$GITHUB_ENV"
+          echo "ARM64_CHILD=$arm64_child" >> "$GITHUB_ENV"
+          if [[ "$RELEASE_STATUS" == "existing" ]]; then
+            [[ "$amd64_child" == "$PREFLIGHT_AMD64_DIGEST" ]] || { echo "amd64 child differs from the validated preflight digest."; exit 1; }
+            [[ "$arm64_child" == "$PREFLIGHT_ARM64_DIGEST" ]] || { echo "arm64 child differs from the validated preflight digest."; exit 1; }
+          fi
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+      - name: Verify child manifests exist
+        run: |
+          set -euo pipefail
+          for digest in "$AMD64_CHILD" "$ARM64_CHILD"; do
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Invalid child digest $digest."; exit 1; }
+            docker buildx imagetools inspect "$IMAGE@$digest" > /dev/null
+          done
+      - name: Assemble and validate the release index
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_STATUS" == "existing" ]]; then
+            [[ "$PREFLIGHT_INDEX_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Preflight did not return a valid index digest."; exit 1; }
+            echo "INDEX_DIGEST=$PREFLIGHT_INDEX_DIGEST" >> "$GITHUB_ENV"
+            echo "INDEX_MODE=existing" >> "$GITHUB_ENV"
+            echo "STAGING_INDEX_TAG=" >> "$GITHUB_ENV"
+          else
+            staging="staging-index-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            docker buildx imagetools create -t "$IMAGE:$staging" "$IMAGE@$AMD64_CHILD" "$IMAGE@$ARM64_CHILD"
+            index_output=$(mktemp)
+            GITHUB_OUTPUT="$index_output" node scripts/check-release-index.mjs \
+              --image "$IMAGE" \
+              --tag "$staging" \
+              --revision "$REVISION" \
+              --platforms "linux/amd64,linux/arm64"
+            status=$(sed -n 's/^status=//p' "$index_output" | tail -n1)
+            digest=$(sed -n 's/^index_digest=//p' "$index_output" | tail -n1)
+            rm -f "$index_output"
+            [[ "$status" == "existing" ]] || { echo "Assembled index was not recognized as an existing release."; exit 1; }
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Assembled index did not return a valid digest."; exit 1; }
+            echo "INDEX_DIGEST=$digest" >> "$GITHUB_ENV"
+            echo "INDEX_MODE=created" >> "$GITHUB_ENV"
+            echo "STAGING_INDEX_TAG=$staging" >> "$GITHUB_ENV"
+          fi
+      - name: Plan immutable version and SHA tags
+        run: |
+          set -euo pipefail
+          inspect_tag() {
+            local tag="$1" output status digest
+            output=$(mktemp)
+            if ! GITHUB_OUTPUT="$output" node scripts/check-release-index.mjs \
+              --image "$IMAGE" \
+              --tag "$tag" \
+              --revision "$REVISION" \
+              --platforms "linux/amd64,linux/arm64" > /dev/null; then
+              rm -f "$output"
+              return 1
+            fi
+            status=$(sed -n 's/^status=//p' "$output" | tail -n1)
+            digest=$(sed -n 's/^index_digest=//p' "$output" | tail -n1)
+            rm -f "$output"
+            case "$status" in
+              existing) printf '%s\n' "$digest" ;;
+              absent) printf 'absent\n' ;;
+              *) return 1 ;;
+            esac
+          }
+          version_existing=$(inspect_tag "$VERSION") || { echo "Version tag $VERSION is not a valid immutable release."; exit 1; }
+          sha_existing=$(inspect_tag "sha-$REVISION") || { echo "SHA tag sha-$REVISION is not a valid immutable release."; exit 1; }
+          node scripts/release-index.mjs plan \
+            --expected "$INDEX_DIGEST" \
+            --target "$VERSION=$version_existing" \
+            --target "sha-$REVISION=$sha_existing" \
+            --output "$RUNNER_TEMP/index-plan.json"
+          node -e 'for (const item of JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).actions) if (item.action === "create") console.log(item.tag)' "$RUNNER_TEMP/index-plan.json" > "$RUNNER_TEMP/create-tags.txt"
+      - name: Publish missing immutable tags
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            docker buildx imagetools create -t "$IMAGE:$tag" "$IMAGE@$INDEX_DIGEST"
+          done < "$RUNNER_TEMP/create-tags.txt"
+      - name: Verify version and SHA tags resolve to the same index
+        run: |
+          set -euo pipefail
+          inspect_tag() {
+            local tag="$1" output status digest
+            output=$(mktemp)
+            GITHUB_OUTPUT="$output" node scripts/check-release-index.mjs \
+              --image "$IMAGE" \
+              --tag "$tag" \
+              --revision "$REVISION" \
+              --platforms "linux/amd64,linux/arm64" > /dev/null
+            status=$(sed -n 's/^status=//p' "$output" | tail -n1)
+            digest=$(sed -n 's/^index_digest=//p' "$output" | tail -n1)
+            rm -f "$output"
+            [[ "$status" == "existing" ]] || return 1
+            printf '%s\n' "$digest"
+          }
+          version_after=$(inspect_tag "$VERSION") || { echo "Version tag $VERSION did not resolve after publication."; exit 1; }
+          sha_after=$(inspect_tag "sha-$REVISION") || { echo "SHA tag sha-$REVISION did not resolve after publication."; exit 1; }
+          node scripts/release-index.mjs verify \
+            --expected "$INDEX_DIGEST" \
+            --target "$VERSION=$version_after" \
+            --target "sha-$REVISION=$sha_after"
+          node scripts/release-index.mjs write \
+            --output "$RUNNER_TEMP/release-index.json" \
+            --version "$VERSION" \
+            --revision "$REVISION" \
+            --index-digest "$INDEX_DIGEST" \
+            --amd64-digest "$AMD64_CHILD" \
+            --arm64-digest "$ARM64_CHILD" \
+            --mode "$INDEX_MODE" \
+            --staging-index-tag "$STAGING_INDEX_TAG" \
+            --target "$VERSION=$version_after" \
+            --target "sha-$REVISION=$sha_after"
+      - name: Upload release index metadata
+        uses: actions/upload-artifact@v7
+        with:
+          name: worldforge-release-index-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-index.json
           if-no-files-found: error
           retention-days: 30

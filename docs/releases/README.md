@@ -31,12 +31,13 @@ never be moved or reused for a different commit; use a new patch release.
 3. Create tag `vX.Y.Z` at the reviewed commit. Publish its GitHub release using
    the matching Markdown notes. Mark prereleases appropriately. A draft or
    tag push alone does not publish an image.
-4. Watch `.github/workflows/docker-publish.yml` complete. It builds the exact
-   tag, scans vulnerabilities and gates fixable HIGH/CRITICAL findings,
-   smoke-tests fresh isolated storage, publishes version/commit tags,
-   pulls and smoke-tests the published digest, and appends image details to
-   GitHub release notes. Stable publications/promotions can advance `latest`
-   only when they are GitHub's current stable release with a stable version tag.
+4. Watch `.github/workflows/docker-publish.yml` complete. It builds and
+   verifies both platforms natively, scans vulnerabilities and gates fixable
+   HIGH/CRITICAL findings, smoke-tests fresh isolated storage, publishes the
+   verified child images, and creates the version and full-SHA tags only when
+   both resolve to the same validated multi-platform index. Existing
+   same-content tags are no-ops; conflicting tags fail closed. `latest` and
+   release-note updates are separate finalization steps.
 5. Verify the version/digest in the release notes and perform a clean-machine
    `docker pull emorgan33/worldforge:X.Y.Z`, followed by the pull-only Compose
    install in the [deployment guide](../deployment-configuration.md). Require
@@ -44,6 +45,12 @@ never be moved or reused for a different commit; use a new patch release.
 6. Publish the reviewed tracked wiki pages after merge using
    [Wiki Maintenance](../../wiki/Wiki-Maintenance.md). Keep the README, operator
    instructions, and any advertised architecture support synchronized.
+
+Version and full-SHA tags are references to one multi-platform index; neither
+may point at a single architecture. A partially completed publication is
+recovered by rerunning the unchanged release: matching tags are left untouched,
+only missing tags are created, and any conflicting reference fails closed.
+Staging images and indexes are run-scoped and are not operator release tags.
 
 Promotion of an existing prerelease and retries reuse an already-published
 version only after the release preflight resolves the complete multi-platform

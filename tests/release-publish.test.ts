@@ -97,6 +97,26 @@ test("CLI writes and verifies publication metadata", () => {
     ], { encoding: "utf8" });
     assert.equal(verify.status, 0, verify.stderr);
 
+    const child = spawnSync(process.execPath, [
+      cli.pathname, "child",
+      "--metadata", metadataPath,
+      "--platform", "linux/amd64",
+      "--architecture", "amd64",
+      "--revision", revision,
+    ], { encoding: "utf8" });
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stdout.trim(), childDigest);
+
+    const wrongChild = spawnSync(process.execPath, [
+      cli.pathname, "child",
+      "--metadata", metadataPath,
+      "--platform", "linux/arm64",
+      "--architecture", "arm64",
+      "--revision", revision,
+    ], { encoding: "utf8" });
+    assert.equal(wrongChild.status, 1);
+    assert.match(wrongChild.stderr, /does not match/);
+
     const mismatch = spawnSync(process.execPath, [
       cli.pathname, "verify",
       "--metadata", metadataPath,

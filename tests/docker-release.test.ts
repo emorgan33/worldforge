@@ -8,6 +8,8 @@ const workflow = readFileSync(new URL("../.github/workflows/docker-publish.yml",
 // Exercise the expression in the actual workflow rather than a copied policy.
 const condition = workflow.match(/^    if: (.+)$/m)?.[1];
 assert.ok(condition);
+const publishJob = workflow.slice(workflow.indexOf("  publish:"), workflow.indexOf("  tag:"));
+const tagJob = workflow.slice(workflow.indexOf("  tag:"));
 
 test("release workflow subscribes to both publication and stable promotion", () => {
   assert.match(workflow, /types: \[published, released\]/);
@@ -70,7 +72,7 @@ test("both platform results and reports are retained for publication", () => {
 });
 
 test("publication is release-only and gated on both platform jobs", () => {
-  const publishJob = workflow.slice(workflow.indexOf("  publish:"));
+
   assert.match(publishJob, /needs: \[preflight, verify\]/);
   assert.match(publishJob, /if: github\.event_name == 'release'/);
   assert.match(publishJob, /actions\/download-artifact@v7/);
@@ -79,7 +81,7 @@ test("publication is release-only and gated on both platform jobs", () => {
 });
 
 test("publication revalidates archives and pushes only run-scoped staging tags", () => {
-  const publishJob = workflow.slice(workflow.indexOf("  publish:"));
+
   assert.doesNotMatch(publishJob, /docker build/);
   assert.match(publishJob, /scripts\/release-artifact\.mjs verify/);
   assert.match(publishJob, /docker load -i "\$archive"/);
@@ -92,7 +94,7 @@ test("publication revalidates archives and pushes only run-scoped staging tags",
 });
 
 test("publication binds loaded content to the tested artifact and platform", () => {
-  const publishJob = workflow.slice(workflow.indexOf("  publish:"));
+
   assert.match(publishJob, /docker load -i "\$archive"/);
   assert.match(publishJob, /image_id=\$\(docker image inspect worldforge-release:test --format '\{\{\.Id\}\}'\)/);
   assert.match(publishJob, /source_digest=[\s\S]*sourceDigest/);
@@ -103,19 +105,46 @@ test("publication binds loaded content to the tested artifact and platform", () 
 });
 
 test("unchanged releases reuse validated children without pushing", () => {
-  const publishJob = workflow.slice(workflow.indexOf("  publish:"));
+
   assert.match(publishJob, /if \[\[ "\$RELEASE_STATUS" == "existing" \]\]/);
   assert.match(publishJob, /child_digest="\$AMD64_DIGEST"/);
   assert.match(publishJob, /child_digest="\$ARM64_DIGEST"/);
   assert.match(publishJob, /source=existing/);
 });
 
-test("registry credentials appear only in the release publication job", () => {
-  const publishJob = workflow.slice(workflow.indexOf("  publish:"));
+test("registry credentials appear only in release publication jobs", () => {
   const beforePublish = workflow.slice(0, workflow.indexOf("  publish:"));
   assert.doesNotMatch(beforePublish, /DOCKERHUB_/);
   assert.doesNotMatch(beforePublish, /docker login/);
   assert.match(publishJob, /docker login/);
-  assert.match(publishJob, /DOCKERHUB_USERNAME/);
-  assert.match(publishJob, /DOCKERHUB_TOKEN/);
+  assert.match(tagJob, /docker login/);
+  assert.match(tagJob, /DOCKERHUB_USERNAME/);
+  assert.match(tagJob, /DOCKERHUB_TOKEN/);
+});
+
+test("release index publication is release-only and gated on child publication", () => {
+  assert.match(tagJob, /needs: \[preflight, publish\]/);
+  assert.match(tagJob, /if: github\.event_name == 'release'/);
+  assert.match(tagJob, /worldforge-published-/);
+  assert.match(tagJob, /scripts\/release-publish\.mjs verify/);
+  assert.match(tagJob, /scripts\/release-publish\.mjs child/);
+  assert.match(tagJob, /AMD64_CHILD=\$amd64_child/);
+  assert.match(tagJob, /docker buildx imagetools inspect "\$IMAGE@\$digest"/);
+  assert.match(tagJob, /staging-index-\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}/);
+  assert.match(tagJob, /scripts\/release-index\.mjs plan/);
+  assert.match(tagJob, /scripts\/release-index\.mjs verify/);
+  assert.match(tagJob, /scripts\/release-index\.mjs write/);
+  assert.match(tagJob, /docker buildx imagetools create -t "\$IMAGE:\$tag" "\$IMAGE@\$INDEX_DIGEST"/);
+  assert.doesNotMatch(tagJob, /"\$IMAGE:latest"/);
+  assert.doesNotMatch(tagJob, /gh release edit/);
+});
+
+test("immutable tag publication is idempotent and conflict-safe", () => {
+  assert.match(tagJob, /--target "\$VERSION=\$version_existing"/);
+  assert.match(tagJob, /--target "sha-\$REVISION=\$sha_existing"/);
+  assert.match(tagJob, /--target "\$VERSION=\$version_after"/);
+  assert.match(tagJob, /--target "sha-\$REVISION=\$sha_after"/);
+  assert.match(tagJob, /check-release-index\.mjs/);
+  assert.match(tagJob, /--platforms "linux\/amd64,linux\/arm64" > \/dev\/null/);
+  assert.doesNotMatch(tagJob, /docker push/);
 });

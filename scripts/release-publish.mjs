@@ -107,8 +107,25 @@ async function main() {
       childDigest: args["child-digest"],
     });
     console.log(`Verified ${verified.platform} publication at ${verified.revision}.`);
+  } else if (command === "child") {
+    for (const required of ["metadata", "platform", "architecture", "revision"]) {
+      if (!args[required]) throw new Error(`--${required} is required.`);
+    }
+    let metadata;
+    try {
+      metadata = JSON.parse(readFileSync(args.metadata, "utf8"));
+    } catch (error) {
+      fail(`could not read metadata: ${error instanceof Error ? error.message : error}`);
+    }
+    const verified = verifyPublicationMetadata(metadata, {
+      platform: args.platform,
+      architecture: args.architecture,
+      revision: args.revision,
+      childDigest: args["child-digest"],
+    });
+    console.log(verified.childDigest);
   } else {
-    throw new Error("Choose write or verify.");
+    throw new Error("Choose write, verify or child.");
   }
 }
 
