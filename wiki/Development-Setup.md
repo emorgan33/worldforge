@@ -24,7 +24,7 @@ Important current-version details:
 - After schema changes, commit a migration, regenerate with `pnpm db:generate`,
   and restart development. Do not reseed to apply a migration.
 - Read the installed Next.js guides in `node_modules/next/dist/docs/` before
-  changing framework code. This project uses Next.js 16.4.1 and Cache Components.
+  changing framework code. This project uses Next.js 16.4.5 and Cache Components.
 
 Use [Testing and Isolated Databases](Testing-and-Isolated-Databases) for tests,
 not your everyday development database. Keep `.env`, SQLite files, uploaded
