@@ -14,6 +14,8 @@ registry push, and blocks **HIGH or CRITICAL findings with a scanner-reported
 fixed version**. Invalid reports and scanner failures also block. There is no
 CVE ignore list, and unfixed findings are not removed from the report. A
 retry/promotion reusing a version must pass the scan again before registry updates.
+AMD64 and ARM64 are built, scanned, and smoke-tested separately on native
+runners; evidence and reports are architecture-scoped.
 
 The gate does **not** certify a vulnerability-free image:
 

@@ -16,8 +16,11 @@ do not imply that matching Docker Hub images were published. Check the
 | `emorgan33/worldforge@sha256:...` | Exact registry digest recorded after publication |
 
 `X.Y.Z`, `<full-commit>`, and `sha256:...` are placeholders, not published
-versions. Initial architecture support is **linux/amd64**. Version tags must
-never be moved or reused for a different commit; use a new patch release.
+versions. New releases from the multi-platform workflow publish `linux/amd64`
+and `linux/arm64` under the same version and SHA tags; historical releases may
+be AMD64-only. Docker selects the host platform, and the multi-platform index
+digest is the portable pin across architectures. Version tags must never be
+moved or reused for a different commit; use a new patch release.
 
 ## Maintainer release checklist
 

@@ -36,6 +36,18 @@ Production stock-art approval and real-export Foundry compatibility remain
 pending and are labelled accordingly. The published image still has documented
 unresolved package advisories; this wiki does not certify it vulnerability-free.
 
+## Multi-platform documentation update
+
+The multi-platform image, Oracle Ampere, proxy, firewall, and backup guidance was
+source-reviewed against the release workflow, Compose file, runtime entrypoint,
+and current wiki contracts. The pull-only Compose flow was rehearsed with
+disposable storage on AMD64 and ARM64 images (ARM64 under emulation), including
+the HTTPS origin and trusted-proxy environment settings. No real TLS reverse
+proxy, Oracle Ampere VM, or published multi-platform release was available, so
+those claims remain source-reviewed rather than end-to-end verified. Existing
+verified-commit labels were not advanced. `0.4.3` remains AMD64-only; ARM64
+support applies only to releases whose notes list `linux/arm64`.
+
 ## Maintenance and publication
 
 Follow [Wiki Maintenance](Wiki-Maintenance). After merging a reviewed update,

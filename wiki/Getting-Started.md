@@ -9,8 +9,10 @@ local build; the source-build alternative below requires Git.
 For a published image, follow [Installation → Install a published image](Installation#install-a-published-image-no-git-checkout).
 Choose a version whose Docker publishing workflow succeeded, download its
 Compose file, configure `WORLDFORGE_IMAGE` and the origin in `.env`, and run
-`docker compose pull` then `docker compose up -d --wait`. Initial image support
-is linux/amd64; old releases may not have published images.
+`docker compose pull` then `docker compose up -d --wait`. New releases include
+linux/amd64 and linux/arm64 under the same tag; releases published before
+multi-platform support are linux/amd64 only. ARM64 hosts need a release whose
+notes list `linux/arm64`; see [Installation](Installation#oracle-cloud-ampere-arm64).
 
 Alternatively, build from source:
 

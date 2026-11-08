@@ -11,11 +11,15 @@ persistent storage for its SQLite database and uploaded assets.
 
 ## Install a published image (no Git checkout)
 
-The image repository is `emorgan33/worldforge` (initially **linux/amd64**).
-Choose a version and digest from a GitHub release whose **Release Docker image**
-workflow succeeded; older releases may not have published images. Version
-**0.4.3** is published and verified; use it in the example below, or check the
-release notes for a newer version and its matching Compose file.
+The image repository is `emorgan33/worldforge`. New releases from the
+multi-platform workflow include **linux/amd64** and **linux/arm64** under the
+same version/SHA tags; releases published before that support, including
+**0.4.3**, are **linux/amd64 only**. Choose a version and digest from a GitHub
+release whose **Release Docker image** workflow succeeded; older releases may
+not have published images. Version **0.4.3** is published and verified for
+AMD64; use it in the example below, or check the release notes for a newer
+version and its matching Compose file. ARM64 hosts need a release whose notes
+list `linux/arm64`.
 
 Download the release's Compose file into a new directory:
 
@@ -105,6 +109,48 @@ If another proxy sits in front of nginx, configure nginx's trusted real-IP
 allowlist before using `$remote_addr`. Never expose port 3033 directly while
 trusted-proxy mode is enabled.
 
+## Oracle Cloud Ampere (ARM64)
+
+WorldForge runs on native ARM64 Docker. Use a release whose notes list
+`linux/arm64`; releases before multi-platform support, including `0.4.3`, are
+AMD64-only. Do not use an emulated AMD64 image.
+
+On an Oracle Ampere A1 instance running Ubuntu:
+
+1. Install Docker Engine and the Compose plugin for ARM64 from Docker's
+   supported packages, then confirm `uname -m` reports `aarch64`.
+2. Allow inbound TCP 80/443 and SSH in the VCN security list. Do not expose
+   port 3033 publicly; Compose binds it to loopback.
+3. In `.env`, use the normal shared image reference and public HTTPS settings:
+   ```dotenv
+   WORLDFORGE_IMAGE=emorgan33/worldforge:X.Y.Z
+   WORLDFORGE_ORIGIN=https://world.example
+   WORLDFORGE_TRUSTED_PROXY=1
+   WORLDFORGE_HOST_BIND=127.0.0.1
+   ```
+   `docker compose pull` selects ARM64 automatically; do not add a `platform:`
+   override. The origin must be canonical (`https://world.example`, no trailing
+   slash).
+4. Start and verify the native platform, then create the first account:
+   ```bash
+   docker compose pull
+   docker compose up -d --wait
+   docker compose exec worldforge node -p process.arch   # arm64
+   docker compose exec worldforge pnpm auth:setup
+   ```
+   Do not paste the setup URL or token into logs or screenshots.
+5. Put the reverse proxy on the same host or a private network. Replace `Host`
+   and overwrite `X-WorldForge-Client-IP`; see the nginx example above. If
+   another proxy is in front, configure its trusted real-IP allowlist first.
+6. Keep backups off the instance: stop WorldForge, back up the database and
+   assets together, verify integrity, and copy the archive elsewhere. Oracle
+   free-tier capacity is not guaranteed and idle instances may be reclaimed;
+   the boot volume is not a backup.
+
+The named volume holds `/data/worldforge.db` and `/data/assets`; preserve UID/GID
+`10001` when reusing storage. See [Persistent storage](#persistent-storage) and
+[Backup and Restore](Backup-and-Restore).
+
 ## Persistent storage
 
 Compose mounts one named volume at `/data`:
@@ -155,4 +201,5 @@ See [Configuration](Configuration) for the complete setting reference and
 `docs/deployment-configuration.md`.
 **Verified against:** `v0.4.3` (`94c694c`), source/configuration audit and
 published-image isolated Compose rehearsal; see [Wiki Verification](Wiki-Verification).
-Proxy guidance is source-reviewed, not a newly provisioned TLS deployment.
+Proxy, multi-platform, and Oracle Ampere guidance are source-reviewed; no
+multi-platform release or Oracle Ampere VM was available for this update.

@@ -2,10 +2,13 @@
 
 ## Published Docker images
 
-Release publishing targets **`emorgan33/worldforge`** on Docker Hub. Images are
-available only after a GitHub release's **Release Docker image** workflow
-succeeds; merging to `main` does not publish. Do not assume an older release
-already has an image. Supported architecture initially: **linux/amd64**.
+Release publishing targets **`emorgan33/worldforge`** on Docker Hub. New releases
+from the multi-platform publishing workflow include **`linux/amd64` and
+`linux/arm64`** under the same version and SHA tags; historical releases remain
+**`linux/amd64` only**. Docker selects the host platform automatically. Use the
+multi-platform index digest for a portable pin. Images are available only after
+a GitHub release's **Release Docker image** workflow succeeds; merging to `main`
+does not publish, and an older release may have no image.
 
 For an image version listed in its GitHub release notes, install without a
 repository checkout (replace `VERSION` in both the URL and `.env` below with
@@ -165,3 +168,53 @@ operations, not `npm`/`npx`. The `/data` layout and UID/GID are unchanged.
 It also keeps the installed package tree intact: Prisma CLI is needed for runtime
 migrations, and the setup/admin scripts and their runtime dependencies are
 retained for operations.
+
+## Oracle Cloud Ampere deployment (ARM64)
+
+WorldForge runs on native ARM64 Docker; do not use an emulated AMD64 image. Use
+a release whose notes list `linux/arm64`; releases published before multi-platform
+support (for example `0.4.3`) are AMD64-only.
+
+On an Oracle Ampere A1 instance running Ubuntu:
+
+1. Install Docker Engine and the Compose plugin from Docker's supported ARM64
+   packages, then confirm `uname -m` reports `aarch64`.
+2. Allow inbound TCP 80 and 443 in the VCN security list, plus SSH for
+   administration. Do not open port 3033 publicly; Compose binds it to loopback
+   by default.
+3. Install with the pull-only Compose flow and set:
+   ```dotenv
+   WORLDFORGE_IMAGE=emorgan33/worldforge:X.Y.Z
+   WORLDFORGE_ORIGIN=https://world.example
+   WORLDFORGE_TRUSTED_PROXY=1
+   WORLDFORGE_HOST_BIND=127.0.0.1
+   ```
+   The origin must be canonical. Pin the release's multi-platform version or
+   index digest. `docker compose pull` selects the ARM64 child automatically;
+   do not add a `platform:` override.
+4. Start and verify the native platform before creating an account:
+   ```bash
+   docker compose pull
+   docker compose up -d --wait
+   docker compose exec worldforge node -p process.arch   # arm64
+   docker compose exec worldforge pnpm auth:setup
+   ```
+   The setup URL is a credential; do not paste it into logs or screenshots.
+5. Terminate TLS on the same host or a private network. The proxy must replace
+   `Host` and overwrite `X-WorldForge-Client-IP` with the accepted client
+   address, removing any client-supplied copy. nginx:
+   ```nginx
+   proxy_set_header Host $host;
+   proxy_set_header X-WorldForge-Client-IP $remote_addr;
+   proxy_pass http://127.0.0.1:3033;
+   ```
+   If another proxy is in front of nginx, configure its trusted real-IP
+   allowlist before relying on `$remote_addr`.
+6. Back up `/data/worldforge.db` and `/data/assets` together with WorldForge
+   stopped, verify the database integrity, and copy the archive off the
+   instance. Oracle free-tier capacity is not guaranteed and idle instances may
+   be reclaimed; the boot volume is not a backup.
+
+The named `worldforge-data` volume survives container replacement. Reuse it with
+UID/GID `10001`, keep the Compose project name stable, and follow
+[Backup and Restore](backup-restore.md) for upgrades and rollback.

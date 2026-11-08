@@ -6,10 +6,13 @@ stable checkpoints. There are currently no long-term-support branches.
 ## Choose an image or source release
 
 The Docker Hub repository is
-[`emorgan33/worldforge`](https://hub.docker.com/r/emorgan33/worldforge), initially
-for **linux/amd64**. Check the [GitHub release notes](https://github.com/emorgan33/worldforge/releases)
-for an image tag and digest after the **Release Docker image** workflow succeeds.
-Older releases may have source tags only; do not assume an image exists.
+[`emorgan33/worldforge`](https://hub.docker.com/r/emorgan33/worldforge). New
+multi-platform releases include **linux/amd64** and **linux/arm64** under the
+same version/SHA tags; releases published before that support are AMD64-only.
+Check the [GitHub release notes](https://github.com/emorgan33/worldforge/releases)
+for the platforms, image tag, and digest after the **Release Docker image**
+workflow succeeds. Older releases may have source tags only; do not assume an
+image exists.
 
 - Git tag `vX.Y.Z` maps to image `emorgan33/worldforge:X.Y.Z`.
 - `sha-<full-commit>` identifies the source commit.
@@ -97,6 +100,9 @@ path and builds the patched driver automatically.
 ## Verify after upgrading
 
 - Confirm the health check and startup logs are clean.
+- Confirm the running architecture matches the host
+  (`docker compose exec worldforge node -p process.arch`); an ARM64 host must
+  report `arm64`, not `x64` under emulation.
 - Sign in and open `/admin` if installation administration is used.
 - Open representative worlds, articles, readers, and uploaded images.
 - Test one write and, when applicable, player access or public publication.
@@ -134,3 +140,5 @@ before announcing it. Never include access tokens in release notes.
 source audit. The release includes verified OS backports and embedded SQLite
 3.54.1; 38 HIGH OS package matches remain unresolved, not suppressed. See
 [Wiki Verification](Wiki-Verification) for executed rehearsals and limits.
+Multi-platform selection and Oracle Ampere steps are source-reviewed; no
+multi-platform release or Ampere VM was available for this update.

@@ -92,10 +92,16 @@ release image** (no checkout or local build) or **build from source**.
 ### Published release image
 
 Images target [`emorgan33/worldforge`](https://hub.docker.com/r/emorgan33/worldforge)
-on Docker Hub, initially for **linux/amd64**. Use a version listed in the
+on Docker Hub. New releases from the multi-platform publishing workflow include
+**linux/amd64** and **linux/arm64** under the same version/SHA tags; releases
+published before that support are **linux/amd64 only**. Check the release notes
+for the platforms and digest before choosing a host. Use a version listed in the
 [GitHub release notes](https://github.com/emorgan33/worldforge/releases) after
 its **Release Docker image** workflow succeeds. Older releases may not have
 images; packaging support alone does not mean the first image is published.
+
+See the [deployment guide](docs/deployment-configuration.md#oracle-cloud-ampere-deployment-arm64)
+for multi-platform image selection and an Oracle Ampere example.
 
 Replace both occurrences of `VERSION` below with that published version
 (without the leading `v`):
