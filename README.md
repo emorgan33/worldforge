@@ -256,7 +256,7 @@ task-oriented guide for users and operators. Its reviewable source lives in
 implementation contracts, design decisions, release notes, validation reports,
 and historical records:
 
-- [WorldForge v0.4.4 release notes](docs/releases/v0.4.4.md) (check GitHub releases for publication)
+- [WorldForge v0.4.5 release notes](docs/releases/v0.4.5.md) (check GitHub releases for publication)
 - [Release publishing and image versions](docs/releases/README.md)
 - [Deployment configuration](docs/deployment-configuration.md)
 - [Feature status and roadmap](docs/feature-improvements.md)
