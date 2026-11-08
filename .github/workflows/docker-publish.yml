@@ -17,10 +17,12 @@ on:
       - scripts/docker-release-registry.mjs
       - scripts/check-release-index.mjs
       - scripts/release-artifact.mjs
+      - scripts/release-publish.mjs
       - tests/docker-release.test.ts
       - tests/docker-release-policy.test.ts
       - tests/docker-release-registry.test.ts
       - tests/release-artifact.test.ts
+      - tests/release-publish.test.ts
       - tests/image-security.test.ts
       - package.json
       - pnpm-lock.yaml
@@ -188,5 +190,103 @@ jobs:
           path: |
             ${{ runner.temp }}/worldforge-${{ matrix.architecture }}.tar.gz
             ${{ runner.temp }}/worldforge-${{ matrix.architecture }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: [preflight, verify]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      IMAGE: emorgan33/worldforge
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: false
+      - name: Download verified platform artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: worldforge-image-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/images
+          merge-multiple: true
+      - name: Require both platform artifacts
+        run: |
+          set -euo pipefail
+          for architecture in amd64 arm64; do
+            test -f "$RUNNER_TEMP/images/worldforge-$architecture.tar.gz"
+            test -f "$RUNNER_TEMP/images/worldforge-$architecture.json"
+          done
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+      - name: Publish verified platform children
+        env:
+          REVISION: ${{ needs.preflight.outputs.revision }}
+          RELEASE_STATUS: ${{ needs.preflight.outputs.status }}
+          AMD64_DIGEST: ${{ needs.preflight.outputs.linux_amd64_digest }}
+          ARM64_DIGEST: ${{ needs.preflight.outputs.linux_arm64_digest }}
+        run: |
+          set -euo pipefail
+          for entry in "linux/amd64 amd64" "linux/arm64 arm64"; do
+            read -r platform architecture <<< "$entry"
+            archive="$RUNNER_TEMP/images/worldforge-$architecture.tar.gz"
+            metadata="$RUNNER_TEMP/images/worldforge-$architecture.json"
+            node scripts/release-artifact.mjs verify \
+              --metadata "$metadata" \
+              --archive "$archive" \
+              --platform "$platform" \
+              --architecture "$architecture" \
+              --revision "$REVISION"
+
+            docker load -i "$archive"
+            image_id=$(docker image inspect worldforge-release:test --format '{{.Id}}')
+            expected_id=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).imageId)' "$metadata")
+            [[ "$image_id" == "$expected_id" ]] || { echo "Loaded image does not match the tested artifact."; exit 1; }
+            image_arch=$(docker image inspect worldforge-release:test --format '{{.Architecture}}')
+            [[ "$image_arch" == "$architecture" ]] || { echo "Loaded image architecture $image_arch does not match $architecture."; exit 1; }
+            image_revision=$(docker image inspect worldforge-release:test --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+            [[ "$image_revision" == "$REVISION" ]] || { echo "Loaded image revision $image_revision does not match $REVISION."; exit 1; }
+            source_digest=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).sourceDigest)' "$metadata")
+
+            source=existing
+            staging_tag=""
+            child_digest=""
+            if [[ "$RELEASE_STATUS" == "existing" ]]; then
+              if [[ "$architecture" == "amd64" ]]; then
+                child_digest="$AMD64_DIGEST"
+              else
+                child_digest="$ARM64_DIGEST"
+              fi
+              [[ "$child_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Missing validated $architecture child digest."; exit 1; }
+              [[ "$source_digest" == "$child_digest" ]] || { echo "Artifact source digest does not match the validated $architecture child."; exit 1; }
+            else
+              [[ "$source_digest" == "$image_id" ]] || { echo "Built artifact source digest does not match the loaded image."; exit 1; }
+              staging_tag="staging-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${architecture}"
+              docker tag worldforge-release:test "$IMAGE:$staging_tag"
+              docker push "$IMAGE:$staging_tag"
+              child_digest=$(docker image inspect "$IMAGE:$staging_tag" --format '{{index .RepoDigests 0}}' | cut -d@ -f2)
+              [[ "$child_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Pushed $architecture image did not report a digest."; exit 1; }
+              source=pushed
+            fi
+
+            node scripts/release-publish.mjs write \
+              --output "$RUNNER_TEMP/images/published-$architecture.json" \
+              --platform "$platform" \
+              --architecture "$architecture" \
+              --revision "$REVISION" \
+              --child-digest "$child_digest" \
+              --source "$source" \
+              --staging-tag "$staging_tag"
+          done
+      - name: Upload publication metadata
+        uses: actions/upload-artifact@v7
+        with:
+          name: worldforge-published-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/images/published-*.json
           if-no-files-found: error
           retention-days: 30

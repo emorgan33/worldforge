@@ -53,11 +53,12 @@ test("existing child images are reused by validated digest", () => {
 });
 
 test("matrix verification never publishes or uses registry credentials", () => {
-  assert.doesNotMatch(workflow, /docker push/);
-  assert.doesNotMatch(workflow, /docker login/);
-  assert.doesNotMatch(workflow, /DOCKERHUB_/);
-  assert.doesNotMatch(workflow, /gh release edit/);
-  assert.doesNotMatch(workflow, /imagetools create/);
+  const verifyJob = workflow.slice(workflow.indexOf("  verify:"), workflow.indexOf("  publish:"));
+  assert.doesNotMatch(verifyJob, /docker push/);
+  assert.doesNotMatch(verifyJob, /docker login/);
+  assert.doesNotMatch(verifyJob, /DOCKERHUB_/);
+  assert.doesNotMatch(verifyJob, /gh release edit/);
+  assert.doesNotMatch(verifyJob, /imagetools create/);
 });
 
 test("both platform results and reports are retained for publication", () => {
@@ -66,4 +67,55 @@ test("both platform results and reports are retained for publication", () => {
   assert.match(workflow, /name: image-security-\$\{\{ matrix\.architecture \}\}-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
   assert.match(workflow, /scripts\/release-artifact\.mjs write/);
   assert.match(workflow, /scripts\/release-artifact\.mjs verify/);
+});
+
+test("publication is release-only and gated on both platform jobs", () => {
+  const publishJob = workflow.slice(workflow.indexOf("  publish:"));
+  assert.match(publishJob, /needs: \[preflight, verify\]/);
+  assert.match(publishJob, /if: github\.event_name == 'release'/);
+  assert.match(publishJob, /actions\/download-artifact@v7/);
+  assert.match(publishJob, /worldforge-image-\*-/);
+  assert.match(publishJob, /worldforge-published-/);
+});
+
+test("publication revalidates archives and pushes only run-scoped staging tags", () => {
+  const publishJob = workflow.slice(workflow.indexOf("  publish:"));
+  assert.doesNotMatch(publishJob, /docker build/);
+  assert.match(publishJob, /scripts\/release-artifact\.mjs verify/);
+  assert.match(publishJob, /docker load -i "\$archive"/);
+  assert.match(publishJob, /staging-\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}-\$\{architecture\}/);
+  assert.match(publishJob, /docker push "\$IMAGE:\$staging_tag"/);
+  assert.match(publishJob, /scripts\/release-publish\.mjs write/);
+  assert.doesNotMatch(publishJob, /"\$IMAGE:\$VERSION"/);
+  assert.doesNotMatch(publishJob, /"\$IMAGE:sha-/);
+  assert.doesNotMatch(publishJob, /"\$IMAGE:latest"/);
+});
+
+test("publication binds loaded content to the tested artifact and platform", () => {
+  const publishJob = workflow.slice(workflow.indexOf("  publish:"));
+  assert.match(publishJob, /docker load -i "\$archive"/);
+  assert.match(publishJob, /image_id=\$\(docker image inspect worldforge-release:test --format '\{\{\.Id\}\}'\)/);
+  assert.match(publishJob, /source_digest=[\s\S]*sourceDigest/);
+  assert.match(publishJob, /\[\[ "\$source_digest" == "\$child_digest" \]\]/);
+  assert.match(publishJob, /\[\[ "\$source_digest" == "\$image_id" \]\]/);
+  assert.match(publishJob, /\[\[ "\$image_arch" == "\$architecture" \]\]/);
+  assert.match(publishJob, /\[\[ "\$image_revision" == "\$REVISION" \]\]/);
+});
+
+test("unchanged releases reuse validated children without pushing", () => {
+  const publishJob = workflow.slice(workflow.indexOf("  publish:"));
+  assert.match(publishJob, /if \[\[ "\$RELEASE_STATUS" == "existing" \]\]/);
+  assert.match(publishJob, /child_digest="\$AMD64_DIGEST"/);
+  assert.match(publishJob, /child_digest="\$ARM64_DIGEST"/);
+  assert.match(publishJob, /source=existing/);
+});
+
+test("registry credentials appear only in the release publication job", () => {
+  const publishJob = workflow.slice(workflow.indexOf("  publish:"));
+  const beforePublish = workflow.slice(0, workflow.indexOf("  publish:"));
+  assert.doesNotMatch(beforePublish, /DOCKERHUB_/);
+  assert.doesNotMatch(beforePublish, /docker login/);
+  assert.match(publishJob, /docker login/);
+  assert.match(publishJob, /DOCKERHUB_USERNAME/);
+  assert.match(publishJob, /DOCKERHUB_TOKEN/);
 });
