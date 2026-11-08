@@ -44,8 +44,14 @@ UID/GID `10001`, the same `/data` layout and origin/proxy requirements. No
 application data migration is added by hardening.
 
 `scripts/smoke-release-image.sh` uses a unique disposable project/volume and an
-ephemeral loopback port. It verifies health, login, SQLite integrity, account
-creation and admin bootstrap without printing setup tokens. Never run
+ephemeral loopback port. It verifies the image platform and runtime architecture,
+health, login, SQLite integrity, applied migrations, Prisma access, the `sharp`
+image pipeline, account creation and admin bootstrap without printing setup
+tokens. It then recreates the container while retaining the named volume to
+confirm database rows and asset bytes persist, and builds an older-schema
+fixture from all but the newest migration to apply the pending migration and
+verify preserved data. Set
+`WORLDFORGE_EXPECTED_ARCH=amd64|arm64` to require a specific platform. Never run
 integration tests against configured campaign data.
 
 ## Reproduce locally
