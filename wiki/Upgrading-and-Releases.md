@@ -76,11 +76,11 @@ docker compose logs worldforge
 
 ## Build from a release source tag
 
-Replace `v0.4.3` with the intended release:
+Replace `v0.4.5` with the intended release:
 
 ```bash
 git fetch --tags
-git checkout v0.4.3
+git checkout v0.4.5
 docker compose up -d --build
 docker compose ps
 docker compose logs worldforge
@@ -136,9 +136,10 @@ before announcing it. Never include access tokens in release notes.
 **Source owner:** `wiki/Upgrading-and-Releases.md`; adapted from
 `docs/releases/`, `docs/deployment-configuration.md`, and
 `docs/backup-restore.md`.
-**Verified against:** `v0.4.3` (`94c694c`), published image/release metadata and
-source audit. The release includes verified OS backports and embedded SQLite
-3.54.1; 38 HIGH OS package matches remain unresolved, not suppressed. See
+**Verified against:** `v0.4.5` (`ab8b6be`), published multi-platform release
+metadata and source audit. The release includes verified OS backports and
+embedded SQLite 3.54.1; local scans report 37 unresolved HIGH package matches
+and 12 architecture-scoped vendor-resolved matches, not suppressed. See
 [Wiki Verification](Wiki-Verification) for executed rehearsals and limits.
-Multi-platform selection and Oracle Ampere steps are source-reviewed; no
-multi-platform release or Ampere VM was available for this update.
+Multi-platform selection and Oracle Ampere steps are source-reviewed; native
+Ampere and real TLS deployment remain unverified.

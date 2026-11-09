@@ -6,6 +6,7 @@ articles, maps, character sheets, timelines, images, and campaign tools, then
 share only the material their readers should see.
 
 Your content stays in a SQLite database and an image directory you control.
+Docker images support native **linux/amd64** and **linux/arm64** hosts.
 
 ## Choose your path
 

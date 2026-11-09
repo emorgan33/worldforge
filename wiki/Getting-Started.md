@@ -87,5 +87,5 @@ WorldForge to a network.
 
 **Source owner:** `wiki/Getting-Started.md`; adapted from `README.md`,
 `docs/deployment-configuration.md`, and current author UI.
-**Verified against:** `v0.4.3` (`94c694c`), published-image isolated rehearsal
+**Verified against:** `v0.4.5` (`ab8b6be`), published-image isolated rehearsal
 and source/UI contract audit; see [Wiki Verification](Wiki-Verification).
