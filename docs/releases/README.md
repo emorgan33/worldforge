@@ -80,5 +80,12 @@ different commit to repair a failed release.
 
 Verify each real registry publication/pull; local builds and packaging CI are
 not substitutes for that release evidence. The `0.4.4` publication was verified
-as **AMD64-only**. The `0.4.5` notes are prepared for the first multi-platform
-release; check the GitHub release and its workflow before relying on an image.
+as **AMD64-only**. The `0.4.5` multi-platform publication was verified by its
+**Release Docker image** workflow: index
+`sha256:4c0aa39b000626d87d77c8e35ac95fe79a3e34259a8c5f10907b98eceabf0f74`,
+`linux/amd64` child
+`sha256:a589fbfeeeaad33a87f88bf4e075fe84d2c165166162270c460049bf0b463a0e`,
+and `linux/arm64` child
+`sha256:d40a154145e28d3035bb3d93c8f03d3230a8483656863f750d945727998f7efe`.
+GitHub's current stable/`latest` release points to `v0.4.5`, and a clean
+pull-only install of the published image passed login and account setup.

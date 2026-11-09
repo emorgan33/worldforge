@@ -36,17 +36,36 @@ Production stock-art approval and real-export Foundry compatibility remain
 pending and are labelled accordingly. The published image still has documented
 unresolved package advisories; this wiki does not certify it vulnerability-free.
 
-## Multi-platform documentation update
+## Multi-platform release verification
 
 The multi-platform image, Oracle Ampere, proxy, firewall, and backup guidance was
 source-reviewed against the release workflow, Compose file, runtime entrypoint,
-and current wiki contracts. The pull-only Compose flow was rehearsed with
-disposable storage on AMD64 and ARM64 images (ARM64 under emulation), including
-the HTTPS origin and trusted-proxy environment settings. No real TLS reverse
-proxy, Oracle Ampere VM, or published multi-platform release was available, so
-those claims remain source-reviewed rather than end-to-end verified. Existing
-verified-commit labels were not advanced. `0.4.3` remains AMD64-only; ARM64
-support applies only to releases whose notes list `linux/arm64`.
+and current wiki contracts.
+
+Release `v0.4.5` was published on November 9, 2026. The **Release Docker image**
+workflow completed successfully through preflight, both native platform
+verification jobs, child publication, immutable tag publication, both
+published-child verification jobs, and finalization. The verified multi-platform
+index is
+`sha256:4c0aa39b000626d87d77c8e35ac95fe79a3e34259a8c5f10907b98eceabf0f74`;
+the children are
+`sha256:a589fbfeeeaad33a87f88bf4e075fe84d2c165166162270c460049bf0b463a0e`
+(`linux/amd64`) and
+`sha256:d40a154145e28d3035bb3d93c8f03d3230a8483656863f750d945727998f7efe`
+(`linux/arm64`). The version, SHA, and `latest` references resolve to that same
+index, and the release notes contain one image section with those digests.
+
+A clean pull-only Compose install of the published AMD64 image passed `/login`
+and account setup with disposable storage. The published ARM64 child was pulled
+and ran under emulation, reporting `node process.arch` = `arm64`; native ARM64
+execution and both platform builds/scans/smokes also passed in the workflow.
+Releases through `v0.4.4` remain AMD64-only.
+
+No real TLS reverse proxy, Oracle Ampere VM, or full destructive restore was
+available, so those deployment claims remain source-reviewed rather than
+end-to-end verified. The installation page's verified baseline was advanced to
+`v0.4.5` only for the published-image rehearsal; Oracle/TLS steps remain
+explicitly limited.
 
 ## Maintenance and publication
 
@@ -58,6 +77,6 @@ the source and wiki publication commits in the issue/PR handoff rather than
 editing this page recursively to reference its own future commit.
 
 **Source owner:** `wiki/Wiki-Verification.md`; evidence: issue #15 completion
-checks, tracked guides, source contracts, isolated published-image rehearsal.
-**Verified against:** `v0.4.3` (`94c694c`); this audit distinguishes runtime
+checks, tracked guides, source contracts, isolated published-image rehearsals.
+**Verified against:** `v0.4.5` (`ab8b6be`); this audit distinguishes runtime
 rehearsals from source-only review and inherited evidence.

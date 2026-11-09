@@ -14,24 +14,23 @@ persistent storage for its SQLite database and uploaded assets.
 The image repository is `emorgan33/worldforge`. New releases from the
 multi-platform workflow include **linux/amd64** and **linux/arm64** under the
 same version/SHA tags; releases published before that support, including
-**0.4.3**, are **linux/amd64 only**. Choose a version and digest from a GitHub
-release whose **Release Docker image** workflow succeeded; older releases may
-not have published images. Version **0.4.3** is published and verified for
-AMD64; use it in the example below, or check the release notes for a newer
-version and its matching Compose file. ARM64 hosts need a release whose notes
-list `linux/arm64`.
+**0.4.3** and **0.4.4**, are **linux/amd64 only**. Choose a version and digest
+from a GitHub release whose **Release Docker image** workflow succeeded; older
+releases may not have published images. Version **0.4.5** is published and
+verified for both architectures; use it in the example below, or check the
+release notes for a newer version and its matching Compose file.
 
 Download the release's Compose file into a new directory:
 
 ```bash
 mkdir worldforge && cd worldforge
-curl -fsSLo compose.yml https://raw.githubusercontent.com/emorgan33/worldforge/v0.4.3/docker-compose.release.yml
+curl -fsSLo compose.yml https://raw.githubusercontent.com/emorgan33/worldforge/v0.4.5/docker-compose.release.yml
 ```
 
 Create `.env` alongside it with:
 
 ```dotenv
-WORLDFORGE_IMAGE=emorgan33/worldforge:0.4.3
+WORLDFORGE_IMAGE=emorgan33/worldforge:0.4.5
 WORLDFORGE_ORIGIN=http://localhost:3033
 WORLDFORGE_TRUSTED_PROXY=0
 ```
@@ -199,7 +198,7 @@ See [Configuration](Configuration) for the complete setting reference and
 
 **Source owner:** `wiki/Installation.md`; adapted from `README.md` and
 `docs/deployment-configuration.md`.
-**Verified against:** `v0.4.3` (`94c694c`), source/configuration audit and
-published-image isolated Compose rehearsal; see [Wiki Verification](Wiki-Verification).
-Proxy, multi-platform, and Oracle Ampere guidance are source-reviewed; no
-multi-platform release or Oracle Ampere VM was available for this update.
+**Verified against:** `v0.4.5` (`ab8b6be`), published-image Compose rehearsal on
+AMD64; the published ARM64 child was pulled and executed under emulation; see
+[Wiki Verification](Wiki-Verification). Proxy and Oracle Ampere guidance are
+source-reviewed; no real TLS proxy or Oracle Ampere VM was available.
