@@ -30,7 +30,7 @@ function SheetValue({ field, value, onChange, label, modifier }: { field: SheetF
   </div>;
 }
 
-function RepeatingSection({ section, rows, onChange }: { section: SheetRowSection; rows: CharacterRow[]; onChange?: (rows: CharacterRow[]) => void }) {
+function RepeatingSection({ section, rows, onChange, className = "" }: { section: SheetRowSection; rows: CharacterRow[]; onChange?: (rows: CharacterRow[]) => void; className?: string }) {
   const root = useRef<HTMLElement>(null);
   const [removed, setRemoved] = useState<{ row: CharacterRow; index: number } | null>(null);
   const add = () => {
@@ -40,7 +40,7 @@ function RepeatingSection({ section, rows, onChange }: { section: SheetRowSectio
       entries?.[entries.length - 1]?.querySelector<HTMLInputElement>("input")?.focus();
     });
   };
-  return <section ref={root} className={`${styles.section} ${styles.wide}`} aria-label={section.name}>
+  return <section ref={root} className={`${styles.section} ${styles.wide} ${className}`} aria-label={section.name}>
     <h3>{section.name}</h3>
     <div className={styles.sectionBody}>
       {rows.length ? rows.map((row, index) => <div key={row.id} className={styles.row} data-sheet-row>
@@ -68,9 +68,10 @@ export function CharacterSheet({ system, metadata, title, onChange, onTitleChang
   const rowKey = characterRowsKey(system);
   const { data, error } = readCharacterRows(metadata[rowKey]);
   const pf = system === "PF_2E";
+  const dndClass = (name: string) => ({ "Identity": styles.dndIdentity, "Ability scores": styles.dndAbilities, "Attribute modifiers": styles.dndAbilities, "Saving throws": styles.dndSideSections, "Skills": styles.dndSideSections, "Defenses & movement": styles.dndMainSections, "Hit points & resources": styles.dndMainSections, "Equipment notes": styles.dndDetails, "Spellcasting": styles.dndMagic, "Spell slots": styles.dndSlots, "Personality & appearance": styles.dndPersonality } as Record<string, string>)[name] || "";
   const section = (name: string, className = "") => {
     const group = definition.sections.find(item => item.name === name)!;
-    return <section className={`${styles.section} ${className}`} aria-label={name}>
+    return <section className={`${styles.section} ${!pf ? dndClass(name) : ""} ${className}`} aria-label={name}>
       <h3>{name}</h3>
       <div className={`${styles.sectionBody} ${styles.fields} ${name === "Skills" || name === "Saving throws" || name === "Spell slots" ? styles.paired : ""}`}>
         {group.fields.map(field => <SheetValue key={field.key} field={field} value={metadata[field.key]} modifier={name === "Ability scores" ? dndAbilityModifier(metadata[field.key]) : undefined} onChange={onChange ? value => onChange(field.key, value) : undefined} />)}
@@ -79,7 +80,8 @@ export function CharacterSheet({ system, metadata, title, onChange, onTitleChang
   };
   const rowSection = (key: string) => {
     const spec = definition.rows.find(item => item.key === key)!;
-    return <RepeatingSection key={`${system}-${key}`} section={spec} rows={data.sections[key] || []} onChange={onChange && !error ? rows => onChange(rowKey, updateCharacterRows(data, key, rows)) : undefined} />;
+    const areaClass = !pf ? ({ attacks: styles.dndAttacks, resources: styles.dndResources, equipment: styles.dndEquipment, features: styles.dndFeatures, spells: styles.dndSpells, lore: styles.dndLore } as Record<string, string>)[key] || "" : "";
+    return <RepeatingSection key={`${system}-${key}`} section={spec} rows={data.sections[key] || []} onChange={onChange && !error ? rows => onChange(rowKey, updateCharacterRows(data, key, rows)) : undefined} className={areaClass} />;
   };
   return <div className={styles.container}>
     <section className={`${styles.sheet} ${pf ? styles.pathfinder : ""}`} aria-label={`${pf ? "Pathfinder 2e Remaster" : "D&D 5e 2014"} character sheet`}>
@@ -88,15 +90,15 @@ export function CharacterSheet({ system, metadata, title, onChange, onTitleChang
         {onTitleChange ? <label className={styles.name}>Character name<input aria-label="Character name" required value={title} onChange={event => onTitleChange(event.target.value)} placeholder="Name your character" /></label> : <p className={styles.characterName}>{title || "Unnamed character"}</p>}
       </header>
       {onChange && <p className={styles.guidance}>Fill in the boxes as you would a paper sheet. Enter final totals; changes save with this article.</p>}
-      <div className={styles.layout}>
+      <div className={`${styles.layout} ${!pf ? styles.dndLayout : ""}`}>
         {section("Identity", styles.wide)}
         {section(pf ? "Attribute modifiers" : "Ability scores", `${styles.wide} ${styles.abilities}`)}
-        <div className={styles.column}>
+        <div className={`${styles.column} ${!pf ? styles.dndSide : ""}`}>
           {section("Saving throws")}
           {section("Skills")}
           {pf && rowSection("lore")}
         </div>
-        <div className={styles.mainColumn}>
+        <div className={`${styles.mainColumn} ${!pf ? styles.dndMain : ""}`}>
           {section("Defenses & movement")}
           {section("Hit points & resources")}
           {rowSection("attacks")}

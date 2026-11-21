@@ -65,3 +65,107 @@
   .section { break-inside: avoid; }
   .sheet button, .guidance { display: none; }
 }
+
+
+/* D&D 5e 2014: an original, paper-inspired record layout. Pathfinder keeps
+   its existing teal palette and shared sheet structure for the first review. */
+.dnd {
+  --ink: #6d3029;
+  --line: #b8a27d;
+  --paper: #fbf5e8;
+  background:
+    linear-gradient(90deg, #8f4b3010 1px, transparent 1px),
+    linear-gradient(#8f4b3010 1px, transparent 1px),
+    var(--paper);
+  background-size: 18px 18px;
+  border: 1px solid #a68c69;
+  border-top: 8px double var(--ink);
+  border-radius: 2px;
+  padding: 22px;
+  box-shadow: 0 5px 20px #382c1e20;
+}
+.dnd .header { border-bottom: 3px double var(--ink); align-items: end; }
+.dnd .edition { color: var(--ink); letter-spacing: .14em; }
+.container section.sheet.dnd .header h2 { text-transform: uppercase; letter-spacing: .08em; }
+.dnd .name input { border-bottom: 2px solid var(--ink); background: #fffaf0; }
+.dnd .characterName { font-weight: 700; color: var(--ink); }
+.dnd .guidance { border-left: 3px solid var(--ink); padding-left: 10px; }
+.dndLayout {
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.55fr);
+  grid-template-areas:
+    "identity identity"
+    "abilities abilities"
+    "side main"
+    "attacks attacks"
+    "resources resources"
+    "equipment equipment"
+    "details details"
+    "features features"
+    "magic magic"
+    "slots slots"
+    "spells spells"
+    "personality personality";
+  align-items: start;
+}
+.dndIdentity { grid-area: identity; }
+.dndAbilities { grid-area: abilities; }
+.dndSide { grid-area: side; display: flex; flex-direction: column; min-width: 0; gap: 14px; }
+.dndMain { grid-area: main; display: flex; flex-direction: column; min-width: 0; gap: 14px; }
+ .dndSideSections, .dndLore { grid-area: side; }
+.dndMainSections { grid-area: main; }
+.dndAttacks { grid-area: attacks; }
+.dndResources { grid-area: resources; }
+.dndEquipment { grid-area: equipment; }
+.dndDetails { grid-area: details; }
+.dndFeatures { grid-area: features; }
+.dndMagic { grid-area: magic; }
+.dndSlots { grid-area: slots; }
+.dndSpells { grid-area: spells; }
+.dndPersonality { grid-area: personality; }
+.container section.sheet.dnd .section { border: 2px solid var(--line); border-radius: 2px; background: #fffaf0; }
+.container section.sheet.dnd .section h3 { background: #efe3ce; color: var(--ink); border-bottom: 2px solid var(--ink); padding: 8px 10px; text-transform: uppercase; letter-spacing: .09em; font-size: 11px; }
+.dnd .sectionBody { padding: 10px; }
+.dnd .fields { gap: 10px 12px; }
+.dnd .label, .dnd .field label { color: #60483b; text-transform: uppercase; letter-spacing: .04em; font-size: 9px; }
+.dnd .field input:not([type=checkbox]), .dnd .field textarea, .dnd .field select { background: #fffdf7; border: 1px solid #d1bea0; border-bottom: 2px solid #ad9670; min-height: 40px; padding: 6px 8px; }
+.dnd .readValue { background: #fffdf7; border: 1px solid #d1bea0; border-bottom: 2px solid #ad9670; min-height: 40px; padding: 6px 8px; }
+.dnd .abilities .field { border: 2px solid var(--ink); border-radius: 2px; padding: 7px 5px 10px; background: #f4ead7; box-shadow: inset 0 0 0 2px #fffaf0; }
+.dnd .abilities input:not([type=checkbox]), .dnd .abilities .readValue { border: 0; background: transparent; font: 700 25px Georgia, serif; color: var(--ink); min-height: 34px; }
+.dnd .modifier output { color: #6d3029; font-size: 15px; border-top: 1px dotted var(--line); padding-top: 3px; }
+.dnd .row { border-bottom: 1px solid #b8a27d; }
+.dnd .emptyRows { background: repeating-linear-gradient(transparent, transparent 27px, #b8a27d55 28px); }
+.container section.sheet.dnd button { background: #f2e5d1; border: 1px solid #8d7355; border-radius: 2px; }
+.dnd .footer { border-top: 2px double var(--ink); color: var(--ink); }
+@container (min-width: 600px) {
+  .dndAbilities .fields { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .dndIdentity .fields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .dndIdentity .fields > :nth-child(-n+2) { grid-column: span 2; }
+}
+@container (max-width: 720px) {
+  .dndLayout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "identity"
+      "abilities"
+      "side"
+      "main"
+      "attacks"
+      "resources"
+      "equipment"
+      "details"
+      "features"
+      "magic"
+      "slots"
+      "spells"
+      "personality";
+  }
+  .dndAbilities .fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dndIdentity .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dndIdentity .fields > :nth-child(-n+2) { grid-column: span 1; }
+}
+@media print {
+  .dnd { background: #fff; border: 1px solid #777; border-top: 5px double #333; padding: 10px; box-shadow: none; }
+  .container section.sheet.dnd .section { border-color: #777; }
+  .container section.sheet.dnd .section h3 { background: #eee; color: #222; border-bottom-color: #333; }
+  .dnd .field input:not([type=checkbox]), .dnd .field textarea, .dnd .field select, .dnd .readValue { background: #fff; }
+}
