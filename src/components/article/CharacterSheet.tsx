@@ -84,7 +84,7 @@ export function CharacterSheet({ system, metadata, title, onChange, onTitleChang
     return <RepeatingSection key={`${system}-${key}`} section={spec} rows={data.sections[key] || []} onChange={onChange && !error ? rows => onChange(rowKey, updateCharacterRows(data, key, rows)) : undefined} className={areaClass} />;
   };
   return <div className={styles.container}>
-    <section className={`${styles.sheet} ${pf ? styles.pathfinder : ""}`} aria-label={`${pf ? "Pathfinder 2e Remaster" : "D&D 5e 2014"} character sheet`}>
+    <section className={`${styles.sheet} ${pf ? styles.pathfinder : styles.dnd}`} aria-label={`${pf ? "Pathfinder 2e Remaster" : "D&D 5e 2014"} character sheet`}>
       <header className={styles.header}>
         <div><p className={styles.edition}>{pf ? "Pathfinder · Second Edition Remaster" : "Dungeons & Dragons · Fifth Edition 2014"}</p><h2>Character sheet</h2></div>
         {onTitleChange ? <label className={styles.name}>Character name<input aria-label="Character name" required value={title} onChange={event => onTitleChange(event.target.value)} placeholder="Name your character" /></label> : <p className={styles.characterName}>{title || "Unnamed character"}</p>}
