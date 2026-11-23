@@ -128,18 +128,26 @@ Components must stop naming zinc, amber, or indigo directly.
 
 ### 3. Account preference is authoritative; the cookie is its projection
 
-- **Signed in:** the server reads `User.theme`, renders it, and refreshes the
-  theme cookie in the same response. A device that already holds an older cookie
-  therefore adopts the account value on its next request.
+- **Signed in:** the server reads `User.theme` and renders it. The account value
+  always wins over the cookie, so a device holding an older cookie still shows
+  the account theme.
 - **Anonymous** (public reader, sign-in, invite, setup): the cookie is
   authoritative, then `night-watch`.
 - **Changing the theme while signed in** updates `User.theme` and the cookie in
   one response, so both agree immediately.
-- **Signing in on a second device, or switching accounts:** the account value
-  wins on the first response and overwrites that device's cookie. The cookie can
-  never outvote the account.
-- **Signing out:** the cookie stays as the device's signed-out choice; the next
-  sign-in restores the account value.
+- **Signing in on a second device, or switching accounts:** the sign-in response
+  writes the account value into that device's cookie. The cookie can never
+  outvote the account.
+- **Ordinary page requests are read-only.** They do not rewrite cookies; a
+  device cookie that fell behind because another device changed the account
+  theme catches up at the next explicit boundary: a theme change, sign-in, an
+  account switch, or sign-out. Rendering is unaffected in the meantime because
+  the account value is authoritative.
+- **Signing out:** the logout response writes the account theme into the cookie
+  before clearing the session, so the signed-out device keeps the theme the user
+  last saw rather than a stale earlier choice.
+- **Session expiry without an explicit sign-out** leaves the device cookie
+  unchanged; the next sign-in overwrites it.
 - **Validation:** unknown identifiers are rejected when written and fall back to
   `night-watch` when read.
 
@@ -150,9 +158,9 @@ so there is only one client-side source of truth per state.
 
 Two implementation constraints:
 
-- The cookie is written by the theme-changing Route Handler or Server Action,
-  never while rendering the root layout; Server Components cannot set cookies.
-  The layout only reads the cookie and the account value.
+- Cookies are written only at response-writing boundaries: the theme-change Route
+  Handler or Server Action, the sign-in route, and the logout route. The root
+  layout never writes a cookie; it only reads the cookie and the account value.
 - `next.config.ts` enables `cacheComponents: true`. A cookie read makes the
   theme-bearing segment request-time, so the design must confirm that the
   resolution works with the existing partial-prerender shell and does not
@@ -241,7 +249,7 @@ pass and the evidence is reported.
 | Package | Work | Evidence required |
 | --- | --- | --- |
 | P1 | Token layer with Night watch values; migrate every `zinc`/`amber`/`indigo` utility to semantic tokens; update the `.world-presentation` selectors that currently match utility class names (`globals.css:99–105`) so reader overrides survive; no theme switcher yet | Screenshot diff of key routes shows no visual change; grep proves no raw palette utilities remain outside the token definitions; reader presentation overrides still apply under all world themes |
-| P2 | `User.theme` migration, cookie projection, root-layout resolution, switcher in workspace and public chrome, "Match system" CSS mapping, invalid-value fallback | Unit tests for precedence, validation, and account-over-cookie behavior; Playwright tests for switch + reload with no flash, OS preference change under Match system, and a two-device sync case |
+| P2 | `User.theme` migration, cookie projection, root-layout resolution, switcher in workspace and public chrome, "Match system" CSS mapping, invalid-value fallback | Unit tests for precedence, validation, and account-over-cookie behavior; Playwright tests for switch + reload with no flash, OS preference change under Match system, and the remote-change → page request → sign-out sequence |
 | P3 | True black palette and elevation rules | Contrast assertions; screenshots of workspace, editor, admin, player, reader chrome |
 | P4 | Daylight palette | Same as P3 |
 | P5 | Pathfinder palette derived from the shared source | Same as P3, plus a check that chrome and reader values match |
@@ -265,7 +273,7 @@ pass and the evidence is reported.
   a wrong-theme first paint.
 - `pnpm lint`, `pnpm build`, unit tests, HTTP tests, and browser tests pass; new
   tests cover theme resolution, account-over-cookie precedence, invalid input,
-  no-flash, and the two-device case.
+  no-flash, and the remote-change → page-request → sign-out sequence.
 - Documentation and screenshots cover selecting a theme and the two game themes'
   non-affiliation note.
 
@@ -283,8 +291,9 @@ pass and the evidence is reported.
 - **Editor and canvas surfaces.** TipTap content, `block-editor` styles, and map
   canvases have their own color assumptions that utilities do not reach.
 - **Preference conflicts.** A signed-in user's cookie and account value can
-  disagree after a second device changes one; the account is authoritative and
-  the cookie is refreshed from it, with a two-device test.
+  disagree after another device changes the theme. The account stays
+  authoritative for rendering, and the cookie catches up at sign-in, theme
+  change, or sign-out; the remote-change sequence is covered by a test.
 - **Print and export.** Printed articles and any future PDF path must not inherit
   a dark chrome.
 - **Screenshots and docs drift.** README and wiki images show the current theme;
