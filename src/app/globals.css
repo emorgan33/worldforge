@@ -21,11 +21,10 @@
  * named by purpose; the accent families keep their scale so a palette can be
  * swapped without re-deciding every shade.
  */
-@theme inline {
+@theme {
   --color-app-canvas: var(--color-zinc-950);
   --color-app-surface: var(--color-zinc-900);
   --color-app-raised: var(--color-zinc-800);
-  --color-app-control: var(--color-zinc-800);
   --color-app-control-strong: var(--color-zinc-700);
   --color-app-tint: var(--color-zinc-500);
 
@@ -97,6 +96,10 @@
   --color-success-800: var(--color-emerald-800);
   --color-success-900: var(--color-emerald-900);
   --color-success-950: var(--color-emerald-950);
+
+  --color-success-deep: var(--color-green-950);
+  --color-success-edge: var(--color-green-800);
+  --color-success-pale: var(--color-green-200);
 
   --color-info-300: var(--color-sky-300);
   --color-info-400: var(--color-sky-400);
@@ -203,8 +206,8 @@ body {
 }
 .world-presentation .statblock-card { background: var(--world-surface); color: var(--world-text); }
 .world-presentation .statblock-card :is([class*="text-primary-50"], .text-primary-100) { color: var(--world-text); }
-.world-presentation .statblock-card [class*="bg-amber-"] { background: var(--world-surface); }
-.world-presentation .statblock-card [class*="border-amber-"] { border-color: var(--world-border); }
+.world-presentation .statblock-card [class*="bg-primary-"] { background: var(--world-surface); }
+.world-presentation .statblock-card [class*="border-primary-"] { border-color: var(--world-border); }
 
 /* Edition-specific book presentation. Decorative textures are CSS, with no remote dependencies. */
 .world-presentation:is([data-world-theme="dnd2014"], [data-world-theme="pf2remaster"]) { font-family: Georgia, "Times New Roman", serif; line-height: 1.65; }
@@ -213,11 +216,11 @@ body {
 
 /* Statblocks follow their own rules edition, including in the compendium and GM screen. */
 .statblock-card[data-rules-style] { --game-ink: #302820; --game-accent: #822b25; --game-line: #9a4335; background: #faf1dc; color: var(--game-ink); border: 1px solid #b59a68; border-top: 5px solid #b59a68; border-bottom: 5px solid #b59a68; border-radius: 0; font-family: Georgia, "Times New Roman", serif; line-height: 1.5; box-shadow: 0 3px 8px #0003; }
-.statblock-card[data-rules-style] :is(h3,h4,strong,dt,dd,[class*="text-amber-"]) { color: var(--game-ink); }
+.statblock-card[data-rules-style] :is(h3,h4,strong,dt,dd,[class*="text-primary-"]) { color: var(--game-ink); }
 .statblock-card[data-rules-style] :is(h3,h4,dt,.text-primary-300,.text-primary-400,.text-primary-500) { color: var(--game-accent); }
 .statblock-card[data-rules-style] :is(h3,h4) { font-family: Georgia, "Times New Roman", serif; font-variant: small-caps; letter-spacing: .02em; }
-.statblock-card[data-rules-style] [class*="border-amber-"] { border-color: var(--game-line); }
-.statblock-card[data-rules-style] [class*="bg-amber-"] { background: #e7d9b9; color: var(--game-accent); }
+.statblock-card[data-rules-style] [class*="border-primary-"] { border-color: var(--game-line); }
+.statblock-card[data-rules-style] [class*="bg-primary-"] { background: #e7d9b9; color: var(--game-accent); }
 .statblock-card[data-rules-style] .statblock-heading { border-bottom: 3px solid var(--game-line); }
 @media (max-width: 480px) {
   .statblock-card[data-rules-style] { padding: 16px; }

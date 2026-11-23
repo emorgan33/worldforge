@@ -945,7 +945,7 @@ export default function WorldForgeApp() {
       {/* Loading boundary above the still-mounted subtree (milestone 4). */}
       {isTransitioning && (
         <div role="status" aria-live="polite" className="fixed inset-0 z-[60] flex flex-col items-center justify-center space-y-4 bg-app-canvas/85 text-app-text-dim backdrop-blur-sm">
-          <div className="h-10 w-10 animate-spin rounded-xl border-2 border-secondary-500/40 border-t-indigo-400" />
+          <div className="h-10 w-10 animate-spin rounded-xl border-2 border-secondary-500/40 border-t-secondary-400" />
           <p className="text-sm font-semibold tracking-wide">Switching worlds…</p>
         </div>
       )}

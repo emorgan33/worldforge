@@ -94,7 +94,7 @@ must come from borders and shadows rather than surface contrast.
 | Root styling | `src/app/globals.css` `:root` background/foreground, `@theme inline` | Only two tokens exist; there is no theme selector and no `color-scheme` declaration. |
 | Workspace tokens | `--aw-*` variables and `.author-workspace` in `globals.css`, applied in `src/components/AuthorWorkspace.tsx` | Proves the token approach works; should become the default theme's values. |
 | Reader presentation | `.world-presentation` CSS variables, `src/lib/world-appearance.ts` `WORLD_THEMES`, `parseAppearance`; `globals.css` also overrides utility class names such as `[class*="bg-app-"]` | Separate axis. Chrome must not repaint presentation surfaces; presentation must not leak into chrome. Renaming utilities must update these selectors in the same change. |
-| Hardcoded colors | P1 replaced 2,175 palette-utility occurrences across 62 files with tokens: neutral roles in `globals.css` (`--color-app-canvas`, `-surface`, `-raised`, `-border*`, `-text*`, `-muted`, `-subtle`, `-on-accent`) and accent scales (`primary` amber, `secondary` indigo, `highlight` violet, `danger` red, `success` emerald, `info` sky). `text-white`, `bg-black/40`, and dark gradients remain for P7. | The default theme renders identically because each token aliases the Tailwind palette entry it replaced. A second theme can now redefine the variables without touching components. |
+| Hardcoded colors | P1 replaced 2,179 palette-utility occurrences across 62 files with tokens: neutral roles in `globals.css` (`--color-app-canvas`, `-surface`, `-raised`, `-border*`, `-text*`, `-muted`, `-subtle`, `-on-accent`) and accent scales (`primary` amber, `secondary` indigo, `highlight` violet, `danger` red, `success` emerald, `info` sky). `text-white`, `bg-black/40`, and dark gradients remain for P7. | The default theme renders identically because each token aliases the Tailwind palette entry it replaced. A second theme can now redefine the variables without touching components. |
 | Character sheets | `src/components/article/CharacterSheet.module.css` (paper palette, `color-scheme: light`) | Already light and self-contained; verify it inside each chrome theme and leave its paper metaphor intact. |
 | Maps | `src/components/map/InteractiveMap.tsx`, `paintStroke` fallback color, toolbar and layer panels | Stored annotation colors are author data and must not change with the viewer's theme. Chrome (toolbar, layer panel, surround) needs theme-aware values; the map backdrop and the `#eab308` fallback for stored elements stay fixed. A default for newly created drawings is persisted into the element at creation, not read from the theme at paint time. |
 | Editors | TipTap chrome, `block-editor` styles in `globals.css` | Editor affordances (hover outlines, placeholders, code blocks, blockquotes) are hardcoded for dark surfaces. |
@@ -118,14 +118,31 @@ keeps resolving from the world's stored appearance. Precedence:
 
 ### 2. Semantic tokens, not palette names
 
-Define tokens by role, not by color: `--app-canvas`, `--app-surface`,
-`--app-raised`, `--app-control`, `--app-border`, `--app-border-strong`,
-`--app-text`, `--app-muted`, `--app-accent`, `--app-accent-contrast`,
-`--app-secondary`, `--app-danger`, `--app-success`, `--app-warning`,
-`--app-focus`, `--app-overlay`, `--app-shadow`, `--app-code-bg`.
-Map them through Tailwind's `@theme inline` (`--color-app-surface`, …) so
-components use `bg-app-surface`, `text-app-muted`, `border-app-border`.
-Components must stop naming zinc, amber, or indigo directly.
+Tokens are defined in `src/app/globals.css` and components use them through
+Tailwind utilities (`bg-app-surface`, `text-app-muted`, `border-app-border`,
+`bg-primary-500`). No component names zinc, amber, indigo, violet, red,
+emerald, or sky directly.
+
+Neutral roles: `--color-app-canvas`, `-surface`, `-raised`, `-control-strong`,
+`-tint`, `-border`, `-border-strong`, `-border-emphasis`,
+`-border-emphasis-strong`, `-border-contrast`, `-text-bright`, `-text-strong`,
+`-text`, `-text-dim`, `-muted`, `-subtle`, `-subtle-dim`, `-faint`,
+`-on-accent`.
+
+Accent scales keep their numbers so a palette can be swapped without
+re-deciding shades: `--color-primary-*` (amber), `--color-secondary-*`
+(indigo), `--color-highlight-*` (violet), `--color-danger-*` (red),
+`--color-success-*` (emerald), `--color-info-*` (sky). Three
+`success-deep/edge/pale` aliases preserve the few pre-existing green values that
+would otherwise shift when folded into the emerald scale.
+
+The block must use `@theme` (not `@theme inline`). Inline resolves the value at
+build time, so a later `[data-theme]` override of `--color-app-canvas` would do
+nothing. Non-inline emits `--color-app-canvas: var(--color-zinc-950)` and
+utilities that reference `var(--color-app-canvas)`, which is what makes a theme
+switch possible. Verified with computed styles in Chromium: overriding
+`--color-app-canvas` on an element changes its background while
+`--color-app-on-accent` and unrelated roles keep their values.
 
 ### 3. Account preference is authoritative; the cookie is its projection
 
@@ -280,7 +297,7 @@ pass and the evidence is reported.
 
 ## Risks
 
-- **Mechanical breadth.** The P1 migration covered 2,175 palette utilities across
+- **Mechanical breadth.** The P1 migration covered 2,179 palette utilities across
   62 files. Any surface that keeps a literal color (`text-white`, `bg-black/40`,
   gradients) must be found in P7; partial coverage produces unreadable patches of
   the UI in light themes.
