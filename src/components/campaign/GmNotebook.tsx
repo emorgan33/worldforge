@@ -41,26 +41,26 @@ export function GmNotebook({
   return (
     <div className="space-y-6">
       {/* GM Header */}
-      <div className="bg-gradient-to-r from-zinc-900 via-zinc-900 to-red-950/30 border border-red-500/30 rounded-xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-gradient-to-r from-app-surface via-app-surface to-danger-950/30 border border-danger-500/30 rounded-xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-red-400 mb-1">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-danger-400 mb-1">
             <ShieldAlert className="w-4 h-4" />
             <span>{systemProfile(system).gm} campaign workspace</span>
           </div>
-          <h2 className="text-2xl font-extrabold text-zinc-100">{systemProfile(system).gm} Screen & Secrets</h2>
-          <p className="text-sm text-zinc-400 mt-1 max-w-2xl leading-relaxed">
+          <h2 className="text-2xl font-extrabold text-app-text-strong">{systemProfile(system).gm} Screen & Secrets</h2>
+          <p className="text-sm text-app-muted mt-1 max-w-2xl leading-relaxed">
             Prepare campaign revelations and keep your creatures, spells and treasure close at hand.
           </p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center p-1 bg-zinc-950 border border-zinc-800 rounded-lg">
+        <div className="flex items-center p-1 bg-app-canvas border border-app-border rounded-lg">
           <button
             onClick={() => setActiveTab("secrets")}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
               activeTab === "secrets"
-                ? "bg-red-900/40 text-red-300 border border-red-500/30"
-                : "text-zinc-400 hover:text-zinc-200"
+                ? "bg-danger-900/40 text-danger-300 border border-danger-500/30"
+                : "text-app-muted hover:text-app-text"
             }`}
           >
             <Lock className="w-3.5 h-3.5" />
@@ -70,8 +70,8 @@ export function GmNotebook({
             onClick={() => setActiveTab("statblocks")}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
               activeTab === "statblocks"
-                ? "bg-indigo-900/40 text-indigo-300 border border-indigo-500/30"
-                : "text-zinc-400 hover:text-zinc-200"
+                ? "bg-secondary-900/40 text-secondary-300 border border-secondary-500/30"
+                : "text-app-muted hover:text-app-text"
             }`}
           >
             <Sword className="w-3.5 h-3.5" />
@@ -89,53 +89,53 @@ export function GmNotebook({
                 key={secret.id}
                 className={`p-5 rounded-xl border shadow-xl flex flex-col justify-between transition-all ${
                   secret.isRevealed
-                    ? "bg-zinc-900 border-amber-500/40"
-                    : "bg-zinc-900/90 border-red-500/30"
+                    ? "bg-app-surface border-primary-500/40"
+                    : "bg-app-surface/90 border-danger-500/30"
                 }`}
               >
                 <div>
-                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-zinc-800">
+                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-app-border">
                     <div className="flex items-center gap-2">
                       {secret.isRevealed ? (
-                        <Unlock className="w-4 h-4 text-amber-400" />
+                        <Unlock className="w-4 h-4 text-primary-400" />
                       ) : (
-                        <Lock className="w-4 h-4 text-red-400" />
+                        <Lock className="w-4 h-4 text-danger-400" />
                       )}
-                      <h3 className="font-bold text-sm text-zinc-100">{secret.title}</h3>
+                      <h3 className="font-bold text-sm text-app-text-strong">{secret.title}</h3>
                     </div>
 
                     <span
                       className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
                         secret.isRevealed
-                          ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                          : "bg-red-500/10 text-red-400 border border-red-500/20"
+                          ? "bg-primary-500/10 text-primary-400 border border-primary-500/20"
+                          : "bg-danger-500/10 text-danger-400 border border-danger-500/20"
                       }`}
                     >
                       {secret.isRevealed ? "Marked revealed (GM only)" : "GM Eyes Only"}
                     </span>
                   </div>
 
-                  <p className="text-xs text-zinc-300 leading-relaxed">{secret.content}</p>
+                  <p className="text-xs text-app-text-dim leading-relaxed">{secret.content}</p>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between">
+                <div className="mt-4 pt-3 border-t border-app-border/80 flex items-center justify-between">
                   {secret.article ? (
                     <button
                       onClick={() => onNavigateArticle && onNavigateArticle(secret.article!.id)}
-                      className="text-xs text-indigo-400 hover:text-indigo-300 font-medium truncate max-w-[180px]"
+                      className="text-xs text-secondary-400 hover:text-secondary-300 font-medium truncate max-w-[180px]"
                     >
                       Attached to: {secret.article.title}
                     </button>
                   ) : (
-                    <span className="text-xs text-zinc-500">Unattached World Secret</span>
+                    <span className="text-xs text-app-subtle">Unattached World Secret</span>
                   )}
 
                   <button
                     onClick={() => onToggleSecretReveal(secret.id, secret.isRevealed)}
                     className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg font-medium transition-colors ${
                       secret.isRevealed
-                        ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
-                        : "bg-amber-500 hover:bg-amber-400 text-black font-semibold shadow-md"
+                        ? "bg-app-raised hover:bg-app-control-strong text-app-text-dim border border-app-border-strong"
+                        : "bg-primary-500 hover:bg-primary-400 text-black font-semibold shadow-md"
                     }`}
                   >
                     {secret.isRevealed ? (
@@ -159,10 +159,10 @@ export function GmNotebook({
 
       {activeTab === "statblocks" && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-zinc-400">Your campaign compendium</p><button onClick={onOpenCompendium} className="rounded-lg border border-amber-800 px-3 py-2 text-xs text-amber-300">Manage creatures, spells & items</button></div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-app-muted">Your campaign compendium</p><button onClick={onOpenCompendium} className="rounded-lg border border-primary-800 px-3 py-2 text-xs text-primary-300">Manage creatures, spells & items</button></div>
           <div className="grid items-start gap-5 lg:grid-cols-[1fr_2fr]">
-            <div className="space-y-2">{rpgBlocks.map(block => <button key={block.id} onClick={() => setSelectedBlockId(block.id)} className={`w-full rounded-lg border p-3 text-left ${selectedBlock?.id === block.id ? "border-amber-700 bg-amber-950/20" : "border-zinc-800 bg-zinc-900"}`}><span className="block text-sm font-semibold">{block.name}</span><span className="mt-1 block text-xs text-zinc-400">{systemProfile(block.system).short} · {blockRating(block)}</span></button>)}</div>
-            {selectedBlock ? <StatblockCard block={selectedBlock} /> : <p className="rounded-lg border border-zinc-800 p-8 text-sm text-zinc-400">Create a creature, NPC, spell or magic item in the compendium.</p>}
+            <div className="space-y-2">{rpgBlocks.map(block => <button key={block.id} onClick={() => setSelectedBlockId(block.id)} className={`w-full rounded-lg border p-3 text-left ${selectedBlock?.id === block.id ? "border-primary-700 bg-primary-950/20" : "border-app-border bg-app-surface"}`}><span className="block text-sm font-semibold">{block.name}</span><span className="mt-1 block text-xs text-app-muted">{systemProfile(block.system).short} · {blockRating(block)}</span></button>)}</div>
+            {selectedBlock ? <StatblockCard block={selectedBlock} /> : <p className="rounded-lg border border-app-border p-8 text-sm text-app-muted">Create a creature, NPC, spell or magic item in the compendium.</p>}
           </div>
         </div>
       )}

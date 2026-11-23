@@ -16,9 +16,9 @@ async function WorldReader({ params }: { params: Promise<{ worldSlug: string }> 
   return <WorldPresentation appearance={world.appearance}><main className="space-y-8">
     {world.coverImage && <figure><img src={world.coverImage} alt={resolvePlacementAlt(world.coverImageAlt, world.title)} className="h-72 w-full rounded-2xl object-cover" /><ReaderAdjacentCredit credits={world.credits} assetId={imageAssetId(world.coverImage)} /></figure>}
     <header>
-      <p className="text-xs uppercase tracking-widest text-amber-400">{systemProfile(world.system).short}{world.system === "PF_2E" ? " · Remaster" : ""}</p>
+      <p className="text-xs uppercase tracking-widest text-primary-400">{systemProfile(world.system).short}{world.system === "PF_2E" ? " · Remaster" : ""}</p>
       <h1 className="mt-3 font-serif text-5xl">{world.title}</h1>
-      {world.description && <p className="mt-4 whitespace-pre-wrap text-zinc-400">{world.description}</p>}
+      {world.description && <p className="mt-4 whitespace-pre-wrap text-app-muted">{world.description}</p>}
     </header>
 
     <section aria-labelledby="public-search-heading" className="pt-2">
@@ -27,10 +27,10 @@ async function WorldReader({ params }: { params: Promise<{ worldSlug: string }> 
     </section>
     <ReaderMobileBrowse categories={world.categories} articles={world.articles} worldSlug={world.slug} readerType="public" currentPage="home" />
 
-    <div className="grid gap-10 lg:grid-cols-[280px_1fr] pt-4 border-t border-zinc-800">
+    <div className="grid gap-10 lg:grid-cols-[280px_1fr] pt-4 border-t border-app-border">
       <aside aria-label="Campaign lore categories" className="hidden space-y-4 lg:block">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-amber-400/90">Categories & Lore</h2>
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-primary-400/90">Categories & Lore</h2>
+        <div className="rounded-xl border border-app-border/80 bg-app-canvas/40 p-3">
           <ReaderCategoryTree categories={world.categories} articles={world.articles} worldSlug={world.slug} readerType="public" currentPage="home" />
         </div>
       </aside>
@@ -40,14 +40,14 @@ async function WorldReader({ params }: { params: Promise<{ worldSlug: string }> 
         {world.articles.length > 0 ? (
           <div className="grid gap-4 sm:grid-cols-2">
             {world.articles.map(article => (
-              <a key={article.id} href={`/w/${world.slug}/a/${article.slug}`} className="rounded-xl border border-zinc-800 p-5 hover:border-indigo-500 transition-colors">
-                <h3 className="font-semibold text-indigo-300">{article.title}</h3>
-                {article.excerpt && <p className="mt-2 text-sm text-zinc-400">{article.excerpt}</p>}
+              <a key={article.id} href={`/w/${world.slug}/a/${article.slug}`} className="rounded-xl border border-app-border p-5 hover:border-secondary-500 transition-colors">
+                <h3 className="font-semibold text-secondary-300">{article.title}</h3>
+                {article.excerpt && <p className="mt-2 text-sm text-app-muted">{article.excerpt}</p>}
               </a>
             ))}
           </div>
         ) : (
-          <div className="rounded-xl border border-zinc-800 p-8 text-center text-zinc-500">
+          <div className="rounded-xl border border-app-border p-8 text-center text-app-subtle">
             <p>No public articles have been published in this world yet.</p>
           </div>
         )}
@@ -56,5 +56,5 @@ async function WorldReader({ params }: { params: Promise<{ worldSlug: string }> 
     <ReaderImageCredits credits={world.credits} />
   </main></WorldPresentation>;
 }
-export default function PublicWorldPage(props: { params: Promise<{ worldSlug: string }> }) { return <Suspense fallback={<p className="p-8 text-zinc-400">Opening world…</p>}><WorldReader {...props} /></Suspense>; }
+export default function PublicWorldPage(props: { params: Promise<{ worldSlug: string }> }) { return <Suspense fallback={<p className="p-8 text-app-muted">Opening world…</p>}><WorldReader {...props} /></Suspense>; }
 

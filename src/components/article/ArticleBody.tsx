@@ -22,5 +22,5 @@ export function ArticleBody({ html, blocks, articles, onNavigateArticle }: { htm
     if (id && articles.some(article => article.id === id)) { onNavigateArticle(id); return true; }
     return false;
   };
-  return editor ? <div onClick={event => { if (followLink(event.target)) event.preventDefault(); }} onKeyDown={event => { if (event.key === "Enter" && followLink(event.target)) event.preventDefault(); }}><EditorContent editor={editor} /></div> : <p className="text-sm text-zinc-500">Opening article…</p>;
+  return editor ? <div onClick={event => { if (followLink(event.target)) event.preventDefault(); }} onKeyDown={event => { if (event.key === "Enter" && followLink(event.target)) event.preventDefault(); }}><EditorContent editor={editor} /></div> : <p className="text-sm text-app-subtle">Opening article…</p>;
 }
