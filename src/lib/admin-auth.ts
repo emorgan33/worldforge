@@ -4,6 +4,7 @@ import { SESSION_COOKIE } from "./auth-constants";
 import { tokenHash } from "./passwords";
 import { activeAdmin, type AdminErrorCode } from "./admin-policy";
 import type { AdminActor } from "./admin-accounts";
+import { requireRequestTime } from "./request-time";
 
 export type AdminAuthFailure = { error: string; code: AdminErrorCode; status: number };
 
@@ -47,6 +48,18 @@ export async function requireAdmin(): Promise<
   if (!activeAdmin(session.user)) return { ok: false, failure: FORBIDDEN };
 
   return { ok: true, actor: { type: "WEB_ADMIN", userId: session.user.id, sessionId: session.id } };
+}
+
+/**
+ * Page-only administrator gate. Server Components that resolve an admin must
+ * render at request time: the session lookup runs a synchronous SQLite query
+ * and Prisma reads the clock, which aborts the route inside the
+ * partial-prerender shell (#39). A layout boundary does not cover child pages,
+ * so each admin page uses this. Route Handlers keep using requireAdmin().
+ */
+export async function requirePageAdmin() {
+  await requireRequestTime();
+  return requireAdmin();
 }
 
 export function adminAuthFailureResponse(failure: AdminAuthFailure): Response {
