@@ -148,8 +148,8 @@ export function EntityRelationshipPicker({ worldId, onSelect }: EntityRelationsh
             onClick={() => setTypeFilter(t)}
             className={`rounded px-2 py-0.5 text-[10px] font-semibold border transition-colors ${
               typeFilter === t
-                ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                : "bg-zinc-800/50 text-zinc-400 border-zinc-700 hover:border-zinc-600"
+                ? "bg-primary-500/15 text-primary-300 border-primary-500/30"
+                : "bg-app-raised/50 text-app-muted border-app-border-strong hover:border-app-border-emphasis"
             }`}
           >
             {t === "ALL" ? "All" : t === "article" ? "Articles" : "Statblocks"}
@@ -164,28 +164,28 @@ export function EntityRelationshipPicker({ worldId, onSelect }: EntityRelationsh
           onChange={e => handleQueryChange(e.target.value)}
           onFocus={() => setOpen(true)}
           placeholder="Search entities..."
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-colors"
+          className="w-full rounded-lg border border-app-border-strong bg-app-surface/80 px-3 py-1.5 text-xs text-app-text placeholder-app-subtle focus:outline-none focus:border-primary-500 transition-colors"
         />
         {loading && (
-          <span className="absolute right-2.5 top-2 h-3 w-3 animate-spin rounded-full border-2 border-zinc-500 border-t-transparent" />
+          <span className="absolute right-2.5 top-2 h-3 w-3 animate-spin rounded-full border-2 border-app-border-emphasis-strong border-t-transparent" />
         )}
       </div>
 
       {open && query.trim() && (
-        <div className="absolute left-0 right-0 top-full mt-1 z-10 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl max-h-48 overflow-y-auto">
+        <div className="absolute left-0 right-0 top-full mt-1 z-10 rounded-lg border border-app-border-strong bg-app-surface shadow-xl max-h-48 overflow-y-auto">
           {filtered.length === 0 ? (
-            <p className="p-3 text-xs text-zinc-500 text-center">No results found.</p>
+            <p className="p-3 text-xs text-app-subtle text-center">No results found.</p>
           ) : (
             filtered.map(item => (
               <button
                 key={`${item.kind}-${item.id}`}
                 onClick={() => handleSelect(item)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-zinc-300 hover:bg-amber-900/20 hover:text-amber-200 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-app-text-dim hover:bg-primary-900/20 hover:text-primary-200 transition-colors"
               >
                 <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
                   item.kind === "article"
-                    ? "bg-indigo-500/15 text-indigo-300"
-                    : "bg-amber-500/15 text-amber-300"
+                    ? "bg-secondary-500/15 text-secondary-300"
+                    : "bg-primary-500/15 text-primary-300"
                 }`}>
                   {item.kind}
                 </span>
@@ -194,7 +194,7 @@ export function EntityRelationshipPicker({ worldId, onSelect }: EntityRelationsh
             ))
           )}
           {scopedCursor && (
-            <button onClick={() => void loadMore()} disabled={loading} className="w-full border-t border-zinc-800 px-3 py-2 text-xs text-amber-300 hover:bg-amber-900/20 disabled:opacity-50">
+            <button onClick={() => void loadMore()} disabled={loading} className="w-full border-t border-app-border px-3 py-2 text-xs text-primary-300 hover:bg-primary-900/20 disabled:opacity-50">
               {loading ? "Loading…" : "Load more articles"}
             </button>
           )}

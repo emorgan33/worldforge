@@ -291,14 +291,14 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
 
   if (!detail && !error) return (
     <div className="flex items-center gap-2 py-4">
-      <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-500 border-t-transparent" />
-      <p className="text-sm text-zinc-400" id="loading-account">Loading account…</p>
+      <div className="h-4 w-4 animate-spin rounded-full border-2 border-app-border-emphasis-strong border-t-transparent" />
+      <p className="text-sm text-app-muted" id="loading-account">Loading account…</p>
     </div>
   );
   if (error && !detail) return (
     <div className="space-y-3">
-      <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm text-red-300 focus:outline-none">{error}</p>
-      <button type="button" onClick={() => void loadDetail().then(ok => { if (ok) void loadSessions(); })} className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-white">Retry loading account</button>
+      <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm text-danger-300 focus:outline-none">{error}</p>
+      <button type="button" onClick={() => void loadDetail().then(ok => { if (ok) void loadSessions(); })} className="rounded-lg border border-app-border-strong px-3 py-2 text-sm text-white">Retry loading account</button>
     </div>
   );
   if (!detail) return null;
@@ -308,66 +308,66 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
   return (
     <section className="space-y-6">
       <div className="min-w-0">
-        <Link href="/admin/users" className="text-sm text-indigo-300 hover:text-indigo-200">← Accounts</Link>
-        <h2 className="mt-2 break-all text-2xl font-bold text-amber-100">{account.email}</h2>
-        <p className="break-all text-sm text-zinc-400">{account.name} · {account.role} · {account.disabledAt ? "Disabled" : "Active"}</p>
+        <Link href="/admin/users" className="text-sm text-secondary-300 hover:text-secondary-200">← Accounts</Link>
+        <h2 className="mt-2 break-all text-2xl font-bold text-primary-100">{account.email}</h2>
+        <p className="break-all text-sm text-app-muted">{account.name} · {account.role} · {account.disabledAt ? "Disabled" : "Active"}</p>
       </div>
 
       {error && (
         <div className="space-y-2">
-          <p ref={errorRef} tabIndex={-1} role="alert" className="rounded-lg border border-red-800 bg-red-950/30 px-4 py-3 text-sm text-red-300 focus:outline-none">{error}</p>
-          {detailLoadFailed && <button type="button" onClick={() => void loadDetail().then(ok => { if (ok) void loadSessions(); })} className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-white">Retry loading account</button>}
+          <p ref={errorRef} tabIndex={-1} role="alert" className="rounded-lg border border-danger-800 bg-danger-950/30 px-4 py-3 text-sm text-danger-300 focus:outline-none">{error}</p>
+          {detailLoadFailed && <button type="button" onClick={() => void loadDetail().then(ok => { if (ok) void loadSessions(); })} className="rounded-lg border border-app-border-strong px-3 py-2 text-sm text-white">Retry loading account</button>}
         </div>
       )}
 
       {setupLink && (
-        <section role="status" aria-live="polite" className="rounded-xl border border-emerald-800 bg-emerald-950/30 p-4">
-          <h3 className="font-semibold text-emerald-200">One-time setup link</h3>
-          <p className="mt-1 text-sm text-emerald-100/80">Copy this link now. It is shown only once.</p>
+        <section role="status" aria-live="polite" className="rounded-xl border border-success-800 bg-success-950/30 p-4">
+          <h3 className="font-semibold text-success-200">One-time setup link</h3>
+          <p className="mt-1 text-sm text-success-100/80">Copy this link now. It is shown only once.</p>
           <div className="mt-3 flex flex-col gap-2 md:flex-row">
             <input
               readOnly
               aria-label="One-time setup link"
               value={setupLink.url}
               onFocus={(event) => event.currentTarget.select()}
-              className="min-w-0 flex-1 rounded-lg border border-emerald-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100"
+              className="min-w-0 flex-1 rounded-lg border border-success-700 bg-app-canvas px-3 py-2 font-mono text-sm text-app-text-strong"
             />
-            <button type="button" onClick={() => void navigator.clipboard?.writeText(setupLink.url)} className="rounded-lg border border-emerald-700 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">
+            <button type="button" onClick={() => void navigator.clipboard?.writeText(setupLink.url)} className="rounded-lg border border-success-700 px-4 py-2 text-sm font-semibold text-success-100 hover:bg-success-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300">
               Copy
             </button>
-            <button type="button" onClick={() => setSetupLink(null)} className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">
+            <button type="button" onClick={() => setSetupLink(null)} className="rounded-lg border border-app-border-strong px-4 py-2 text-sm font-medium text-app-text hover:border-app-border-emphasis-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300">
               I have saved it
             </button>
           </div>
-          <p className="mt-2 text-xs text-emerald-100/70">Expires {new Date(setupLink.expiresAt).toLocaleString()}.</p>
+          <p className="mt-2 text-xs text-success-100/70">Expires {new Date(setupLink.expiresAt).toLocaleString()}.</p>
         </section>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="min-w-0 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-          <h3 className="font-semibold text-zinc-100">Identity</h3>
+        <section className="min-w-0 rounded-xl border border-app-border bg-app-surface/60 p-4">
+          <h3 className="font-semibold text-app-text-strong">Identity</h3>
           <dl className="mt-3 grid gap-2 text-sm">
-            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-zinc-400">ID</dt><dd className="min-w-0 break-all text-left sm:text-right">{account.id}</dd></div>
-            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-zinc-400">Email</dt><dd className="min-w-0 break-all text-left sm:text-right">{account.email}</dd></div>
-            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-zinc-400">Name</dt><dd className="min-w-0 break-all text-left sm:text-right">{account.name}</dd></div>
-            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-zinc-400">Created</dt><dd className="min-w-0 break-all text-left sm:text-right">{new Date(account.createdAt).toLocaleString()}</dd></div>
-            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-zinc-400">Last sign-in</dt><dd className="min-w-0 break-all text-left sm:text-right">{account.lastSignInAt ? new Date(account.lastSignInAt).toLocaleString() : "Unknown"}</dd></div>
-            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-zinc-400">Setup pending</dt><dd>{account.setupPending ? "Yes" : "No"}</dd></div>
-            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-zinc-400">Account version</dt><dd>{account.accountVersion}</dd></div>
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-app-muted">ID</dt><dd className="min-w-0 break-all text-left sm:text-right">{account.id}</dd></div>
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-app-muted">Email</dt><dd className="min-w-0 break-all text-left sm:text-right">{account.email}</dd></div>
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-app-muted">Name</dt><dd className="min-w-0 break-all text-left sm:text-right">{account.name}</dd></div>
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-app-muted">Created</dt><dd className="min-w-0 break-all text-left sm:text-right">{new Date(account.createdAt).toLocaleString()}</dd></div>
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-app-muted">Last sign-in</dt><dd className="min-w-0 break-all text-left sm:text-right">{account.lastSignInAt ? new Date(account.lastSignInAt).toLocaleString() : "Unknown"}</dd></div>
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-app-muted">Setup pending</dt><dd>{account.setupPending ? "Yes" : "No"}</dd></div>
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4"><dt className="text-app-muted">Account version</dt><dd>{account.accountVersion}</dd></div>
           </dl>
         </section>
 
-        <section className="min-w-0 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-          <h3 className="font-semibold text-zinc-100">Role and status</h3>
+        <section className="min-w-0 rounded-xl border border-app-border bg-app-surface/60 p-4">
+          <h3 className="font-semibold text-app-text-strong">Role and status</h3>
           <div className="mt-3 space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <label className="text-sm font-medium text-zinc-200">
+              <label className="text-sm font-medium text-app-text">
                 Role
                 <select
                   aria-label="Account role"
                   value={roleDraft}
                   onChange={(event) => setRoleDraft(event.target.value)}
-                  className="ml-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                  className="ml-2 rounded-lg border border-app-border-strong bg-app-canvas px-3 py-2 text-sm text-app-text-strong"
                 >
                   <option value="ADMIN">ADMIN</option>
                   <option value="AUTHOR">AUTHOR</option>
@@ -382,7 +382,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                   if (!window.confirm(`Change role to ${roleDraft}?`)) return;
                   void mutate(`/api/admin/users/${id}/role`, "PATCH", { role: roleDraft, expectedVersion: account.accountVersion });
                 }}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                className="rounded-lg bg-secondary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-secondary-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
               >
                 Change role
               </button>
@@ -397,7 +397,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                 void mutate(`/api/admin/users/${id}/status`, "PATCH", { disabled: nextDisabled, expectedVersion: account.accountVersion })
                   .finally(() => requestAnimationFrame(() => trigger.focus()));
               }}
-              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+              className="rounded-lg border border-app-border-strong px-4 py-2 text-sm font-medium text-app-text hover:border-app-border-emphasis-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
             >
               {account.disabledAt ? "Enable account" : "Disable account"}
             </button>
@@ -408,7 +408,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                 if (!window.confirm("Issue a new one-time setup link and invalidate previous unused links?")) return;
                 void mutate(`/api/admin/users/${id}/recovery`, "POST", { expectedVersion: account.accountVersion });
               }}
-              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+              className="rounded-lg border border-app-border-strong px-4 py-2 text-sm font-medium text-app-text hover:border-app-border-emphasis-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
             >
               Issue recovery link
             </button>
@@ -416,31 +416,31 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
         </section>
       </div>
 
-      <section className="min-w-0 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-        <h3 className="font-semibold text-zinc-100">Owned worlds</h3>
+      <section className="min-w-0 rounded-xl border border-app-border bg-app-surface/60 p-4">
+        <h3 className="font-semibold text-app-text-strong">Owned worlds</h3>
         {detail.worlds.length === 0 ? (
-          <p className="mt-2 text-sm text-zinc-400">No owned worlds.</p>
+          <p className="mt-2 text-sm text-app-muted">No owned worlds.</p>
         ) : (
           <ul className="mt-3 space-y-2 text-sm">
             {detail.worlds.map((world) => (
-              <li key={world.id} className="min-w-0 break-all rounded-lg border border-zinc-800 px-3 py-2">
+              <li key={world.id} className="min-w-0 break-all rounded-lg border border-app-border px-3 py-2">
                 <span className="font-medium">{world.title}</span>
-                <span className="ml-2 text-zinc-400">{world.deletedAt ? "Archived" : "Active"} · {world.id}</span>
+                <span className="ml-2 text-app-muted">{world.deletedAt ? "Archived" : "Active"} · {world.id}</span>
               </li>
             ))}
           </ul>
         )}
         <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
-          <div><dt className="text-zinc-400">Memberships</dt><dd>{detail.membershipCount}</dd></div>
-          <div><dt className="text-zinc-400">Grants</dt><dd>{detail.grantCount}</dd></div>
-          <div><dt className="text-zinc-400">Setup links</dt><dd>{detail.setupCount}</dd></div>
-          <div><dt className="text-zinc-400">Preview capabilities</dt><dd>{detail.previewCount}</dd></div>
+          <div><dt className="text-app-muted">Memberships</dt><dd>{detail.membershipCount}</dd></div>
+          <div><dt className="text-app-muted">Grants</dt><dd>{detail.grantCount}</dd></div>
+          <div><dt className="text-app-muted">Setup links</dt><dd>{detail.setupCount}</dd></div>
+          <div><dt className="text-app-muted">Preview capabilities</dt><dd>{detail.previewCount}</dd></div>
         </dl>
       </section>
 
-      <section className="min-w-0 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+      <section className="min-w-0 rounded-xl border border-app-border bg-app-surface/60 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="font-semibold text-zinc-100">Sessions</h3>
+          <h3 className="font-semibold text-app-text-strong">Sessions</h3>
           <button
             type="button"
             disabled={busy}
@@ -501,20 +501,20 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                 }
               })();
             }}
-            className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+            className="rounded-lg border border-app-border-strong px-4 py-2 text-sm font-medium text-app-text hover:border-app-border-emphasis-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
           >
             Revoke all access
           </button>
         </div>
-        <p className="mt-1 text-xs text-zinc-400">
+        <p className="mt-1 text-xs text-app-muted">
           Preview capabilities: {sessions?.previewSubjectCount ?? 0} as subject, {sessions?.previewIssuerCount ?? 0} as issuer.
         </p>
         <div className="mt-3 space-y-2">
           {(sessions?.sessions || []).map((session) => (
-            <div key={session.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800 px-3 py-2 text-sm">
+            <div key={session.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-app-border px-3 py-2 text-sm">
               <div className="min-w-0">
-                <p className="break-all font-mono text-xs text-zinc-300">{session.id}</p>
-                <p className="text-xs text-zinc-400">
+                <p className="break-all font-mono text-xs text-app-text-dim">{session.id}</p>
+                <p className="text-xs text-app-muted">
                   Created {new Date(session.createdAt).toLocaleString()} · Expires {new Date(session.expiresAt).toLocaleString()}
                   {session.current ? " · Current session" : ""}
                 </p>
@@ -526,25 +526,25 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                   if (!window.confirm("Revoke this session?")) return;
                   void mutate(`/api/admin/users/${id}/sessions/${session.id}`, "DELETE", { expectedVersion: account.accountVersion });
                 }}
-                className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                className="rounded-lg border border-app-border-strong px-3 py-1.5 text-xs font-medium text-app-text hover:border-app-border-emphasis-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
               >
                 Revoke
               </button>
             </div>
           ))}
-          {sessions && sessions.sessions.length === 0 && <p className="text-sm text-zinc-400">No active sessions.</p>}
+          {sessions && sessions.sessions.length === 0 && <p className="text-sm text-app-muted">No active sessions.</p>}
         </div>
       </section>
 
-      <section className="min-w-0 rounded-xl border border-red-900/60 bg-red-950/10 p-4">
-        <h3 className="font-semibold text-red-200">Delete account</h3>
-        <p className="mt-1 text-sm text-zinc-400">
+      <section className="min-w-0 rounded-xl border border-danger-900/60 bg-danger-950/10 p-4">
+        <h3 className="font-semibold text-danger-200">Delete account</h3>
+        <p className="mt-1 text-sm text-app-muted">
           The account must be disabled and must not own worlds or durable records. Recomputes blockers at deletion time.
         </p>
         <button
           type="button"
           onClick={() => void loadPreview()}
-          className="mt-3 rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+          className="mt-3 rounded-lg border border-app-border-strong px-4 py-2 text-sm font-medium text-app-text hover:border-app-border-emphasis-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
         >
           Preview deletion blockers
         </button>
@@ -552,11 +552,11 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
           <div className="mt-3 space-y-3 text-sm">
             <p>Allowed: {preview.allowed ? "Yes" : "No"}</p>
             {!preview.allowed && (
-              <div role="status" className="space-y-3 rounded-lg border border-red-800 bg-red-950/30 px-4 py-3">
-                <h4 className="font-semibold text-red-200">Deletion blocked</h4>
+              <div role="status" className="space-y-3 rounded-lg border border-danger-800 bg-danger-950/30 px-4 py-3">
+                <h4 className="font-semibold text-danger-200">Deletion blocked</h4>
                 {preview.worlds.length > 0 ? (
                   <div className="space-y-2">
-                    <p className="text-red-100/90">
+                    <p className="text-danger-100/90">
                       This account cannot currently be deleted because it owns{" "}
                       {preview.worlds.length === 1 ? "1 world" : `${preview.worlds.length} worlds`}. Ownership — not the
                       account role — is blocking deletion.
@@ -566,20 +566,20 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                         const selectedRecipient = transferSelection[world.id] ?? "";
                         const recipient = transferTargets?.find((target) => target.id === selectedRecipient);
                         return (
-                          <li key={world.id} className="min-w-0 space-y-3 rounded-lg border border-red-900/60 bg-zinc-950/40 px-3 py-3 text-zinc-200">
+                          <li key={world.id} className="min-w-0 space-y-3 rounded-lg border border-danger-900/60 bg-app-canvas/40 px-3 py-3 text-app-text">
                             <div className="break-all">
                               <span className="font-medium">{world.title}</span>{" "}
-                              <span className="text-zinc-400">· {world.deletedAt ? "Archived" : "Active"} · {world.id}</span>
+                              <span className="text-app-muted">· {world.deletedAt ? "Archived" : "Active"} · {world.id}</span>
                             </div>
                             <div className="flex flex-col gap-2 lg:flex-row lg:items-end">
-                              <label className="min-w-0 flex-1 text-sm font-medium text-zinc-200">
+                              <label className="min-w-0 flex-1 text-sm font-medium text-app-text">
                                 Transfer to
                                 <select
                                   aria-label={`Transfer ${world.title} (${world.id}) to`}
                                   value={selectedRecipient}
                                   onChange={(event) => setTransferSelection((current) => ({ ...current, [world.id]: event.target.value }))}
                                   disabled={busy || !transferTargets?.length}
-                                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 disabled:opacity-50"
+                                  className="mt-1 w-full rounded-lg border border-app-border-strong bg-app-canvas px-3 py-2 text-sm text-app-text-strong disabled:opacity-50"
                                 >
                                   <option value="">Select an active account</option>
                                   {(transferTargets ?? []).map((target) => (
@@ -605,33 +605,33 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                                     },
                                   );
                                 }}
-                                className="rounded-lg border border-indigo-700 px-4 py-2 text-sm font-semibold text-indigo-100 hover:bg-indigo-900/40 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                                className="rounded-lg border border-secondary-700 px-4 py-2 text-sm font-semibold text-secondary-100 hover:bg-secondary-900/40 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
                               >
                                 Transfer ownership
                               </button>
                             </div>
-                            {transferTargetsError && <p role="alert" className="text-xs text-red-300">{transferTargetsError}</p>}
+                            {transferTargetsError && <p role="alert" className="text-xs text-danger-300">{transferTargetsError}</p>}
                             {transferTargets && transferTargets.length === 0 && !transferTargetsError && (
-                              <p className="text-xs text-zinc-400">No other active account can own worlds. Create or enable an AUTHOR, GM, or ADMIN account first.</p>
+                              <p className="text-xs text-app-muted">No other active account can own worlds. Create or enable an AUTHOR, GM, or ADMIN account first.</p>
                             )}
                             {world.deletedAt ? (
-                              <details className="rounded-lg border border-red-900/60 px-3 py-2">
-                                <summary className="cursor-pointer text-sm font-medium text-red-200">Permanently purge world</summary>
-                                <p className="mt-2 text-xs text-red-100/80">
+                              <details className="rounded-lg border border-danger-900/60 px-3 py-2">
+                                <summary className="cursor-pointer text-sm font-medium text-danger-200">Permanently purge world</summary>
+                                <p className="mt-2 text-xs text-danger-100/80">
                                   Purging permanently destroys this world and its content. Confirm that a current backup
                                   exists before continuing.
                                 </p>
                                 <div className="mt-3 space-y-3">
-                                  <label className="block text-sm font-medium text-zinc-200">
+                                  <label className="block text-sm font-medium text-app-text">
                                     Type the world title to confirm
                                     <input
                                       aria-label={`Confirm purge title for ${world.title} (${world.id})`}
                                       value={purgeTitles[world.id] ?? ""}
                                       onChange={(event) => setPurgeTitles((current) => ({ ...current, [world.id]: event.target.value }))}
-                                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+                                      className="mt-1 w-full rounded-lg border border-app-border-strong bg-app-canvas px-3 py-2 text-app-text-strong"
                                     />
                                   </label>
-                                  <label className="flex items-center gap-2 text-sm text-zinc-200">
+                                  <label className="flex items-center gap-2 text-sm text-app-text">
                                     <input
                                       type="checkbox"
                                       aria-label={`Acknowledge backup of ${world.title} (${world.id})`}
@@ -655,14 +655,14 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                                         },
                                       );
                                     }}
-                                    className="w-fit rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+                                    className="w-fit rounded-lg bg-danger-700 px-4 py-2 text-sm font-semibold text-white hover:bg-danger-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-300"
                                   >
                                     Permanently purge world
                                   </button>
                                 </div>
                               </details>
                             ) : (
-                              <p className="text-xs text-zinc-400">
+                              <p className="text-xs text-app-muted">
                                 Archive this world in its workspace before permanently purging it, or transfer it instead.
                               </p>
                             )}
@@ -670,28 +670,28 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                         );
                       })}
                     </ul>
-                    <p className="text-zinc-300">
+                    <p className="text-app-text-dim">
                       Account deletion itself never transfers or removes world content. Resolve ownership above —
                       transfer each world you want to retain, or archive and then permanently purge a world you no
                       longer need — then re-run this preview. Purging cannot be undone.
                     </p>
                   </div>
                 ) : (
-                  <p className="text-red-100/90">
+                  <p className="text-danger-100/90">
                     {isSelf && preview.disabled
                       ? "You cannot delete your own account."
                       : "This account cannot currently be deleted."}
                   </p>
                 )}
                 {!preview.disabled && (
-                  <p className="text-zinc-300">The account must also be disabled before it can be deleted.</p>
+                  <p className="text-app-text-dim">The account must also be disabled before it can be deleted.</p>
                 )}
                 {(preview.revisionIds.length > 0 || preview.foundryImportIds.length > 0 || preview.pendingImportIds.length > 0) && (
                   <div className="space-y-1">
-                    <p className="font-medium text-red-100/90">Other records blocking deletion:</p>
-                    {preview.revisionIds.length > 0 && <p className="break-all text-red-300">Revisions: {preview.revisionIds.join(", ")}</p>}
-                    {preview.foundryImportIds.length > 0 && <p className="break-all text-red-300">Foundry imports: {preview.foundryImportIds.join(", ")}</p>}
-                    {preview.pendingImportIds.length > 0 && <p className="break-all text-red-300">Pending imports: {preview.pendingImportIds.join(", ")}</p>}
+                    <p className="font-medium text-danger-100/90">Other records blocking deletion:</p>
+                    {preview.revisionIds.length > 0 && <p className="break-all text-danger-300">Revisions: {preview.revisionIds.join(", ")}</p>}
+                    {preview.foundryImportIds.length > 0 && <p className="break-all text-danger-300">Foundry imports: {preview.foundryImportIds.join(", ")}</p>}
+                    {preview.pendingImportIds.length > 0 && <p className="break-all text-danger-300">Pending imports: {preview.pendingImportIds.join(", ")}</p>}
                   </div>
                 )}
               </div>
@@ -712,15 +712,15 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
             });
           }}
         >
-          <label className="text-sm font-medium text-zinc-200">
+          <label className="text-sm font-medium text-app-text">
             Confirm current email
             <input
               value={confirmEmail}
               onChange={(event) => setConfirmEmail(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+              className="mt-1 w-full rounded-lg border border-app-border-strong bg-app-canvas px-3 py-2 text-app-text-strong"
             />
           </label>
-          <label className="flex items-center gap-2 text-sm text-zinc-200">
+          <label className="flex items-center gap-2 text-sm text-app-text">
             <input
               type="checkbox"
               checked={backupAcknowledged}
@@ -731,7 +731,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
           <button
             type="submit"
             disabled={busy || !backupAcknowledged}
-            className="w-fit rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+            className="w-fit rounded-lg bg-danger-700 px-4 py-2 text-sm font-semibold text-white hover:bg-danger-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-300"
           >
             Delete account
           </button>

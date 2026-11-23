@@ -11,18 +11,18 @@ export function ReaderBreadcrumbs({ items }: { items: BreadcrumbItem[] }) {
 
   return (
     <nav aria-label="Breadcrumb" className="text-sm">
-      <ol className="flex flex-wrap items-center gap-1.5 text-zinc-400">
+      <ol className="flex flex-wrap items-center gap-1.5 text-app-muted">
         {items.map((item, index) => {
           const isLast = index === items.length - 1;
           return (
             <li key={index} className="flex items-center gap-1.5">
-              {index > 0 && <ChevronRight className="h-3.5 w-3.5 text-zinc-600 shrink-0" aria-hidden="true" />}
+              {index > 0 && <ChevronRight className="h-3.5 w-3.5 text-app-subtle-dim shrink-0" aria-hidden="true" />}
               {isLast || !item.href ? (
-                <span className={isLast ? "font-medium text-zinc-200" : "text-zinc-400"} aria-current={isLast ? "page" : undefined}>
+                <span className={isLast ? "font-medium text-app-text" : "text-app-muted"} aria-current={isLast ? "page" : undefined}>
                   {item.label}
                 </span>
               ) : (
-                <a href={item.href} className="text-indigo-300 hover:underline">
+                <a href={item.href} className="text-secondary-300 hover:underline">
                   {item.label}
                 </a>
               )}

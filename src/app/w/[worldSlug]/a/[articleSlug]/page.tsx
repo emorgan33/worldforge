@@ -35,7 +35,7 @@ async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; 
   ];
 
   return <WorldPresentation appearance={world.appearance}><main className="space-y-7">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800 pb-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-app-border pb-4">
       <ReaderBreadcrumbs items={breadcrumbs} />
       <div className="sm:w-64">
         <ReaderSearch worldSlug={world.slug} articles={world.articles} />
@@ -47,19 +47,19 @@ async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; 
       <img src={data.coverImage} alt={resolvePlacementAlt(data.coverImageAlt, summary.title)} className="h-72 w-full rounded-2xl object-cover" />
       <ReaderAdjacentCredit credits={data.credits} assetId={coverAssetId} className="px-1" />
     </figure>}
-    <header><p className="text-xs uppercase tracking-wider text-amber-400">{summary.template}</p><h1 className="mt-2 font-serif text-4xl">{summary.title}</h1>{summary.excerpt && <p className="mt-3 text-zinc-400">{summary.excerpt}</p>}</header>
+    <header><p className="text-xs uppercase tracking-wider text-primary-400">{summary.template}</p><h1 className="mt-2 font-serif text-4xl">{summary.title}</h1>{summary.excerpt && <p className="mt-3 text-app-muted">{summary.excerpt}</p>}</header>
 
     {summary.template === "CHARACTER" && isCharacterSystem(data.system) && <CharacterSheet system={data.system} metadata={data.metadata} title={summary.title} />}
     <div className="world-article-layout grid gap-8">
       <article className="min-w-0">
         <PublicRichText doc={data.doc} links={links} blocks={data.blocks} credits={data.credits} />
-        <div className="mt-10 grid gap-5 border-t border-zinc-800 pt-6 sm:grid-cols-2">
+        <div className="mt-10 grid gap-5 border-t border-app-border pt-6 sm:grid-cols-2">
           {[{ title: "References", ids: references }, { title: "Backlinks", ids: backlinkIds }].map(group => (
             <section key={group.title}>
-              <h2 className="text-sm font-bold text-amber-300">{group.title}</h2>
+              <h2 className="text-sm font-bold text-primary-300">{group.title}</h2>
               <ul className="mt-3 space-y-2">
                 {links.filter(link => group.ids.has(link.id)).map(link => (
-                  <li key={link.id}><a href={link.href} className="text-sm text-indigo-300 hover:underline">{link.title}</a></li>
+                  <li key={link.id}><a href={link.href} className="text-sm text-secondary-300 hover:underline">{link.title}</a></li>
                 ))}
               </ul>
             </section>
@@ -69,18 +69,18 @@ async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; 
 
       <aside className="space-y-6">
         {data.portraitImage && <figure className="space-y-1.5">
-          <img src={data.portraitImage} alt={resolvePlacementAlt(data.portraitImageAlt, summary.title)} className="w-full rounded-xl border border-zinc-800 object-cover" />
+          <img src={data.portraitImage} alt={resolvePlacementAlt(data.portraitImageAlt, summary.title)} className="w-full rounded-xl border border-app-border object-cover" />
           <ReaderAdjacentCredit credits={data.credits} assetId={portraitAssetId} />
         </figure>}
         <ArticleQuickFacts template={summary.template as ArticleTemplateType} system={data.system} metadata={data.metadata} blocks={data.blocks} />
-        <div className="hidden rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3 lg:block">
-          <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-400/90">World Contents</h2>
+        <div className="hidden rounded-xl border border-app-border/80 bg-app-canvas/40 p-3 lg:block">
+          <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-primary-400/90">World Contents</h2>
           <ReaderCategoryTree categories={world.categories} articles={world.articles} worldSlug={world.slug} currentArticleId={summary.id} readerType="public" />
         </div>
-        <ReaderImageCredits credits={data.credits} className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-4" />
+        <ReaderImageCredits credits={data.credits} className="rounded-xl border border-app-border/80 bg-app-canvas/40 p-4" />
       </aside>
     </div>
   </main></WorldPresentation>;
 }
-export default function PublicArticlePage(props: { params: Promise<{ worldSlug: string; articleSlug: string }> }) { return <Suspense fallback={<p className="p-8 text-zinc-400">Opening article…</p>}><ArticleReader {...props} /></Suspense>; }
+export default function PublicArticlePage(props: { params: Promise<{ worldSlug: string; articleSlug: string }> }) { return <Suspense fallback={<p className="p-8 text-app-muted">Opening article…</p>}><ArticleReader {...props} /></Suspense>; }
 

@@ -142,12 +142,12 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
     <WorldPresentation appearance={appearance}>
       {/* Preview Banner */}
       {isPreview && (
-        <div className="mb-6 rounded-xl border border-amber-600/50 bg-amber-950/30 px-5 py-3 text-sm text-amber-200 flex items-center gap-3">
+        <div className="mb-6 rounded-xl border border-primary-600/50 bg-primary-950/30 px-5 py-3 text-sm text-primary-200 flex items-center gap-3">
           <BookOpen className="h-4 w-4 shrink-0" />
           <span>
             Previewing as <strong>{actorName || "Player"}</strong>
             {actor.realUserId && (
-              <Link href="/" className="ml-3 text-indigo-300 hover:underline inline-flex items-center gap-1">
+              <Link href="/" className="ml-3 text-secondary-300 hover:underline inline-flex items-center gap-1">
                 <ArrowLeft className="h-3 w-3" /> Back to GM workspace
               </Link>
             )}
@@ -155,9 +155,9 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
         </div>
       )}
       <main className="space-y-7">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800 pb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-app-border pb-4">
           <ReaderBreadcrumbs items={breadcrumbs} />
-          {!isPreview && <Link href="/player" className="text-sm text-indigo-300 hover:underline">Your worlds</Link>}
+          {!isPreview && <Link href="/player" className="text-sm text-secondary-300 hover:underline">Your worlds</Link>}
         </div>
         <ReaderMobileBrowse categories={projectedCategories} articles={worldArticles} worldSlug={world.slug} currentArticleId={article.id} readerType="campaign" />
 
@@ -166,9 +166,9 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
           <ReaderAdjacentCredit credits={credits} assetId={coverAssetId} className="px-1" />
         </figure>}
         <header>
-          <p className="text-xs uppercase tracking-wider text-amber-400">{article.template}</p>
+          <p className="text-xs uppercase tracking-wider text-primary-400">{article.template}</p>
           <h1 className="mt-2 font-serif text-4xl">{article.title}</h1>
-          {article.excerpt && <p className="mt-3 text-zinc-400">{article.excerpt}</p>}
+          {article.excerpt && <p className="mt-3 text-app-muted">{article.excerpt}</p>}
         </header>
 
         {article.template === "CHARACTER" && isCharacterSystem(system) && <CharacterSheet system={system} metadata={metadata} title={article.title} />}
@@ -176,12 +176,12 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
           <article className="min-w-0">
             <PublicRichText doc={doc} links={links} blocks={blocks} credits={credits} />
             {references.size > 0 && (
-              <div className="mt-10 border-t border-zinc-800 pt-6">
+              <div className="mt-10 border-t border-app-border pt-6">
                 <section>
-                  <h2 className="text-sm font-bold text-amber-300">References</h2>
+                  <h2 className="text-sm font-bold text-primary-300">References</h2>
                   <ul className="mt-3 space-y-2">
                     {links.map(link => (
-                      <li key={link.id}><a href={link.href} className="text-sm text-indigo-300 hover:underline">{link.title}</a></li>
+                      <li key={link.id}><a href={link.href} className="text-sm text-secondary-300 hover:underline">{link.title}</a></li>
                     ))}
                   </ul>
                 </section>
@@ -191,15 +191,15 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
 
           <aside className="space-y-6">
             {portraitImage && <figure className="space-y-1.5">
-              <img src={portraitImage} alt={resolvePlacementAlt(article.portraitImageAlt, article.title)} className="w-full rounded-xl border border-zinc-800 object-cover" />
+              <img src={portraitImage} alt={resolvePlacementAlt(article.portraitImageAlt, article.title)} className="w-full rounded-xl border border-app-border object-cover" />
               <ReaderAdjacentCredit credits={credits} assetId={portraitAssetId} />
             </figure>}
             <ArticleQuickFacts template={article.template as ArticleTemplateType} system={system} metadata={metadata} blocks={blocks} />
-            <div className="hidden rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3 lg:block">
-              <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-400/90">World Contents</h2>
+            <div className="hidden rounded-xl border border-app-border/80 bg-app-canvas/40 p-3 lg:block">
+              <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-primary-400/90">World Contents</h2>
               <ReaderCategoryTree categories={projectedCategories} articles={worldArticles} worldSlug={world.slug} currentArticleId={article.id} readerType="campaign" />
             </div>
-            <ReaderImageCredits credits={credits} className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-4" />
+            <ReaderImageCredits credits={credits} className="rounded-xl border border-app-border/80 bg-app-canvas/40 p-4" />
           </aside>
         </div>
       </main>

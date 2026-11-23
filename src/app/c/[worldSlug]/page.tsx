@@ -88,12 +88,12 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
     <WorldPresentation appearance={appearance}>
       {/* Preview Banner */}
       {isPreview && (
-        <div className="mb-6 rounded-xl border border-amber-600/50 bg-amber-950/30 px-5 py-3 text-sm text-amber-200 flex items-center gap-3">
+        <div className="mb-6 rounded-xl border border-primary-600/50 bg-primary-950/30 px-5 py-3 text-sm text-primary-200 flex items-center gap-3">
           <BookOpen className="h-4 w-4 shrink-0" />
           <span>
             Previewing as <strong>{actorName || "Player"}</strong>
             {actor.realUserId && (
-              <Link href="/" className="ml-3 text-indigo-300 hover:underline inline-flex items-center gap-1">
+              <Link href="/" className="ml-3 text-secondary-300 hover:underline inline-flex items-center gap-1">
                 <ArrowLeft className="h-3 w-3" /> Back to GM workspace
               </Link>
             )}
@@ -101,22 +101,22 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
         </div>
       )}
       <main className="space-y-8">
-        {!isPreview && <nav aria-label="Player navigation"><Link href="/player" className="text-sm text-indigo-300 hover:underline">← Your worlds</Link></nav>}
+        {!isPreview && <nav aria-label="Player navigation"><Link href="/player" className="text-sm text-secondary-300 hover:underline">← Your worlds</Link></nav>}
         {coverImage && <figure><img src={coverImage} alt={resolvePlacementAlt(world.coverImageAlt, world.title)} className="h-72 w-full rounded-2xl object-cover" /><ReaderAdjacentCredit credits={credits} assetId={imageAssetId(coverImage)} /></figure>}
         <header>
-          <p className="text-xs uppercase tracking-widest text-amber-400">{systemProfile(world.system).short}{world.system === "PF_2E" ? " · Remaster" : ""}</p>
+          <p className="text-xs uppercase tracking-widest text-primary-400">{systemProfile(world.system).short}{world.system === "PF_2E" ? " · Remaster" : ""}</p>
           <h1 className="mt-3 font-serif text-5xl">{world.title}</h1>
-          {world.description && <p className="mt-4 whitespace-pre-wrap text-zinc-400">{world.description}</p>}
+          {world.description && <p className="mt-4 whitespace-pre-wrap text-app-muted">{world.description}</p>}
         </header>
         <section aria-labelledby="player-search-heading" className="pt-2">
           <h2 id="player-search-heading" className="sr-only">Search articles</h2>
           <ReaderSearch worldSlug={world.slug} articles={linkableArticles} readerType="campaign" />
         </section>
         <ReaderMobileBrowse categories={projectedCategories} articles={linkableArticles} worldSlug={world.slug} readerType="campaign" currentPage="home" />
-        <div className="grid gap-10 lg:grid-cols-[280px_1fr] pt-4 border-t border-zinc-800">
+        <div className="grid gap-10 lg:grid-cols-[280px_1fr] pt-4 border-t border-app-border">
           <aside aria-label="World contents" className="hidden space-y-4 lg:block">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-amber-400/90">Contents</h2>
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-primary-400/90">Contents</h2>
+            <div className="rounded-xl border border-app-border/80 bg-app-canvas/40 p-3">
               <ReaderCategoryTree categories={projectedCategories} articles={linkableArticles} worldSlug={world.slug} readerType="campaign" currentPage="home" />
             </div>
           </aside>
@@ -125,14 +125,14 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
             {linkableArticles.length > 0 ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 {linkableArticles.map(article => (
-                  <a key={article.id} href={`/c/${world.slug}/a/${article.slug}`} className="rounded-xl border border-zinc-800 p-5 hover:border-indigo-500 transition-colors">
-                    <h3 className="font-semibold text-indigo-300">{article.title}</h3>
-                    {article.excerpt && <p className="mt-2 text-sm text-zinc-400">{article.excerpt}</p>}
+                  <a key={article.id} href={`/c/${world.slug}/a/${article.slug}`} className="rounded-xl border border-app-border p-5 hover:border-secondary-500 transition-colors">
+                    <h3 className="font-semibold text-secondary-300">{article.title}</h3>
+                    {article.excerpt && <p className="mt-2 text-sm text-app-muted">{article.excerpt}</p>}
                   </a>
                 ))}
               </div>
             ) : (
-              <div className="rounded-xl border border-zinc-800 p-8 text-center text-zinc-500">
+              <div className="rounded-xl border border-app-border p-8 text-center text-app-subtle">
                 <p>No articles are currently available for you.</p>
               </div>
             )}

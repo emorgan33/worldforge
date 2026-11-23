@@ -64,40 +64,40 @@ export function VariableManager({
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl">
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400 mb-1">
+      <div className="bg-app-surface border border-app-border rounded-xl p-6 shadow-xl">
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary-400 mb-1">
           <VariableIcon className="w-4 h-4" />
           <span>Dynamic Macro System</span>
         </div>
-        <h2 className="text-2xl font-extrabold text-zinc-100">Global Variable Collections</h2>
-        <p className="text-sm text-zinc-400 mt-1 max-w-3xl leading-relaxed">
+        <h2 className="text-2xl font-extrabold text-app-text-strong">Global Variable Collections</h2>
+        <p className="text-sm text-app-muted mt-1 max-w-3xl leading-relaxed">
           Define global terms, currency names, calendar years, and recurring lore snippets. Use the shortcode{" "}
-          <code className="text-amber-300 font-mono text-xs bg-zinc-800 px-1.5 py-0.5 rounded">[prefix:key]</code>{" "}
+          <code className="text-primary-300 font-mono text-xs bg-app-raised px-1.5 py-0.5 rounded">[prefix:key]</code>{" "}
           in article text to display canonical values in author views. Saved changes appear in the preview and author article views.
         </p>
       </div>
 
       {/* Live Interpolation Simulator */}
-      <div className="bg-gradient-to-r from-zinc-900 via-zinc-900 to-indigo-950/30 border border-indigo-500/30 rounded-xl p-5 shadow-xl space-y-3">
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-400">
+      <div className="bg-gradient-to-r from-app-surface via-app-surface to-secondary-950/30 border border-secondary-500/30 rounded-xl p-5 shadow-xl space-y-3">
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-secondary-400">
           <Sparkles className="w-4 h-4" />
           <span>Live Macro Testbench</span>
         </div>
 
         <div>
-          <label className="block text-xs text-zinc-400 mb-1">Source Text with Shortcodes:</label>
+          <label className="block text-xs text-app-muted mb-1">Source Text with Shortcodes:</label>
           <input
             type="text"
             value={testText}
             onChange={(e) => setTestText(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 font-mono focus:outline-none focus:border-indigo-500"
+            className="w-full bg-app-canvas border border-app-border rounded-lg px-3 py-2 text-xs text-app-text font-mono focus:outline-none focus:border-secondary-500"
           />
         </div>
 
         <div>
-          <label className="block text-xs text-zinc-400 mb-1">Real-Time Interpolated Output:</label>
+          <label className="block text-xs text-app-muted mb-1">Real-Time Interpolated Output:</label>
           <div
-            className="w-full min-h-[42px] bg-zinc-950/80 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 flex items-center"
+            className="w-full min-h-[42px] bg-app-canvas/80 border border-app-border rounded-lg px-3 py-2 text-sm text-app-text flex items-center"
             dangerouslySetInnerHTML={{ __html: simulatedHtml }}
           />
         </div>
@@ -108,25 +108,25 @@ export function VariableManager({
         {collections.map((col) => (
           <div
             key={col.id}
-            className="bg-zinc-900/90 border border-zinc-800 rounded-xl overflow-hidden shadow-xl"
+            className="bg-app-surface/90 border border-app-border rounded-xl overflow-hidden shadow-xl"
           >
             {/* Collection Title Bar */}
-            <div className="p-4 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
+            <div className="p-4 bg-app-surface border-b border-app-border flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="px-2.5 py-1 rounded text-xs font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <span className="px-2.5 py-1 rounded text-xs font-mono font-bold bg-primary-500/10 text-primary-400 border border-primary-500/20">
                   prefix: [{col.prefix}]
                 </span>
                 <div>
-                  <h3 className="font-bold text-zinc-100 text-sm">{col.name}</h3>
+                  <h3 className="font-bold text-app-text-strong text-sm">{col.name}</h3>
                   {col.description && (
-                    <p className="text-xs text-zinc-400 mt-0.5">{col.description}</p>
+                    <p className="text-xs text-app-muted mt-0.5">{col.description}</p>
                   )}
                 </div>
               </div>
             </div>
 
             {/* Variables Table */}
-            <div className="divide-y divide-zinc-800/80">
+            <div className="divide-y divide-app-border/80">
               {col.variables.map((v) => {
                 const macro = `[${col.prefix}:${v.key}]`;
                 const isCopied = copiedKey === macro;
@@ -135,35 +135,35 @@ export function VariableManager({
                 return (
                   <div
                     key={v.id}
-                    className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-zinc-800/30 transition-colors"
+                    className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-app-raised/30 transition-colors"
                   >
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => copyMacro(macro)}
-                          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-bold bg-zinc-800 hover:bg-zinc-700 text-amber-300 rounded border border-zinc-700 transition-colors group"
+                          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-bold bg-app-raised hover:bg-app-control-strong text-primary-300 rounded border border-app-border-strong transition-colors group"
                           title="Click to copy macro"
                         >
                           <span>{macro}</span>
                           {isCopied ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <Check className="w-3.5 h-3.5 text-success-400" />
                           ) : (
-                            <Copy className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300" />
+                            <Copy className="w-3.5 h-3.5 text-app-subtle group-hover:text-app-text-dim" />
                           )}
                         </button>
 
-                        <span className="text-xs font-semibold text-zinc-300">
+                        <span className="text-xs font-semibold text-app-text-dim">
                           {v.title || v.key}
                         </span>
 
-                        <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                        <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-app-raised text-app-muted">
                           {v.type}
                         </span>
                       </div>
 
                       {v.description && (
-                        <p className="text-xs text-zinc-500 italic">{v.description}</p>
+                        <p className="text-xs text-app-subtle italic">{v.description}</p>
                       )}
                     </div>
 
@@ -177,20 +177,20 @@ export function VariableManager({
                         onChange={(e) =>
                           setEditingValues((prev) => ({ ...prev, [v.id]: e.target.value }))
                         }
-                        className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-zinc-100 font-medium focus:outline-none focus:border-amber-500 w-full md:w-64"
+                        className="bg-app-canvas border border-app-border-strong rounded-lg px-3 py-1.5 text-xs text-app-text-strong font-medium focus:outline-none focus:border-primary-500 w-full md:w-64"
                       />
 
                       <button
                         type="button"
                         onClick={() => handleSave(v.id)}
                         disabled={savingIds.has(v.id) || editingValues[v.id] === undefined}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 disabled:opacity-40 disabled:pointer-events-none transition-colors border border-zinc-700"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-app-raised hover:bg-app-control-strong text-app-text disabled:opacity-40 disabled:pointer-events-none transition-colors border border-app-border-strong"
                       >
                         <Save className="w-3.5 h-3.5" />
                         <span>{savingIds.has(v.id) ? "Saving..." : "Save"}</span>
                       </button>
                     </div>
-                    {saveErrors[v.id] && <p id={`variable-error-${v.id}`} role="alert" className="text-xs text-red-400">{saveErrors[v.id]}</p>}
+                    {saveErrors[v.id] && <p id={`variable-error-${v.id}`} role="alert" className="text-xs text-danger-400">{saveErrors[v.id]}</p>}
                   </div>
                 );
               })}

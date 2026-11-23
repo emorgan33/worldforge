@@ -10,7 +10,7 @@ export function WorldPresentation({ appearance, children, preview = false }: { a
         data-world-theme={appearance.theme} 
         data-world-preview={preview || undefined} 
         style={appearanceStyles(appearance)} 
-        className={`world-presentation ${preview ? "rounded-xl border border-zinc-700" : "min-h-screen"} ${!preview ? "wf-reader" : ""}`}
+        className={`world-presentation ${preview ? "rounded-xl border border-app-border-strong" : "min-h-screen"} ${!preview ? "wf-reader" : ""}`}
       >
         <div className="world-reading-surface">{children}</div>
       </div>

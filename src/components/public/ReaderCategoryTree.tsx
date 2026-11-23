@@ -34,8 +34,8 @@ function CategoryBranchIcon({ category, collapsed }: { category: CategoryMeta; c
     );
   }
   return collapsed
-    ? <Folder className="h-4 w-4 text-amber-400/80 shrink-0" />
-    : <FolderOpen className="h-4 w-4 text-amber-400 shrink-0" />;
+    ? <Folder className="h-4 w-4 text-primary-400/80 shrink-0" />
+    : <FolderOpen className="h-4 w-4 text-primary-400 shrink-0" />;
 }
 
 export function ReaderCategoryTree({
@@ -72,27 +72,27 @@ export function ReaderCategoryTree({
     if (!childCats.length && !childArts.length) return null;
 
     return (
-      <ul className={`space-y-1 ${depth > 0 ? "ml-4 border-l border-zinc-800/80 pl-2 mt-1" : ""}`}>
+      <ul className={`space-y-1 ${depth > 0 ? "ml-4 border-l border-app-border/80 pl-2 mt-1" : ""}`}>
         {childCats.map(category => {
           const isCollapsed = collapsed.has(category.id);
           const hasChildren = categories.some(c => c.parentId === category.id) || articles.some(a => a.categoryId === category.id);
 
           return (
             <li key={category.id} className="text-sm">
-              <div className="flex items-center gap-1.5 py-1 text-zinc-300">
+              <div className="flex items-center gap-1.5 py-1 text-app-text-dim">
                 {hasChildren ? (
                   <button
                     type="button"
                     onClick={() => toggle(category.id)}
                     aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${category.name}`}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-app-muted hover:bg-app-raised hover:text-app-text-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
                   >
                     {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                   </button>
                 ) : (
                   <span className="h-9 w-9 shrink-0" aria-hidden="true" />
                 )}
-                <span className="flex items-center gap-2 font-medium text-zinc-200">
+                <span className="flex items-center gap-2 font-medium text-app-text">
                   <CategoryBranchIcon category={category} collapsed={isCollapsed} />
                   <span>{category.name}</span>
                 </span>
@@ -108,14 +108,14 @@ export function ReaderCategoryTree({
             <li key={article.id} className="text-sm">
               <a
                 href={readerArticleHref(worldSlug, article.slug, readerType)}
-                className={`flex min-h-10 items-center gap-2 rounded-lg px-2 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+                className={`flex min-h-10 items-center gap-2 rounded-lg px-2 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
                   isCurrent
-                    ? "bg-violet-500/15 font-medium text-violet-100 ring-1 ring-inset ring-violet-300/40"
-                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                    ? "bg-highlight-500/15 font-medium text-highlight-100 ring-1 ring-inset ring-highlight-300/40"
+                    : "text-app-muted hover:bg-app-surface hover:text-app-text"
                 }`}
                 aria-current={isCurrent ? "page" : undefined}
               >
-                <TemplateIcon template={article.template} className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+                <TemplateIcon template={article.template} className="h-3.5 w-3.5 text-app-subtle shrink-0" />
                 <span className="truncate">{article.title}</span>
               </a>
             </li>
@@ -132,22 +132,22 @@ export function ReaderCategoryTree({
       <a
         href={worldHref}
         aria-current={currentPage === "home" ? "page" : undefined}
-        className={`flex min-h-11 items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 ${
+        className={`flex min-h-11 items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 focus-visible:ring-offset-2 focus-visible:ring-offset-app-canvas ${
           currentPage === "home"
-            ? "border-violet-300/40 bg-violet-500/15 text-violet-100 shadow-sm shadow-violet-950/40"
-            : "border-transparent text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900/80 hover:text-zinc-100"
+            ? "border-highlight-300/40 bg-highlight-500/15 text-highlight-100 shadow-sm shadow-highlight-950/40"
+            : "border-transparent text-app-text-dim hover:border-app-border-strong hover:bg-app-surface/80 hover:text-app-text-strong"
         }`}
       >
-        <House className="h-4 w-4 shrink-0 text-violet-300" aria-hidden="true" />
+        <House className="h-4 w-4 shrink-0 text-highlight-300" aria-hidden="true" />
         <span className="truncate">World home</span>
       </a>
-      <section aria-labelledby={articlesHeadingId} className="overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-950/30">
-        <h2 id={articlesHeadingId} className="flex items-center gap-2 border-b border-zinc-800/80 px-3 py-2.5 text-xs font-bold uppercase tracking-wider text-amber-300">
-          <FolderTree className="h-4 w-4 text-amber-400" aria-hidden="true" />
+      <section aria-labelledby={articlesHeadingId} className="overflow-hidden rounded-xl border border-app-border/80 bg-app-canvas/30">
+        <h2 id={articlesHeadingId} className="flex items-center gap-2 border-b border-app-border/80 px-3 py-2.5 text-xs font-bold uppercase tracking-wider text-primary-300">
+          <FolderTree className="h-4 w-4 text-primary-400" aria-hidden="true" />
           <span>Articles</span>
         </h2>
         <div className="p-2">
-          {hasAnyContent ? renderCategoryBranch(null, 0) : <p className="px-2 py-3 text-sm text-zinc-500">No articles or categories yet.</p>}
+          {hasAnyContent ? renderCategoryBranch(null, 0) : <p className="px-2 py-3 text-sm text-app-subtle">No articles or categories yet.</p>}
         </div>
       </section>
     </nav>

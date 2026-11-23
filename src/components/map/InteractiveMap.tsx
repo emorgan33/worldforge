@@ -111,8 +111,8 @@ const COLOR_SWATCHES = ["#eab308", "#ef4444", "#f97316", "#22c55e", "#3b82f6", "
 const ERASER_CURSOR = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f4f4f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg>')}") 2 21, crosshair`;
 type StrokeStyle = { color?: string; strokeWidth?: number; fontSize?: number; erase?: boolean };
 const MARKER_ICONS = ["map-pin", "castle", "skull", "zap", "eye", "flag", "star", "gem", "tree-pine", "home", "crown", "footprints"] as const;
-const inputClass = "w-full rounded border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-100 focus:border-amber-500 focus:outline-none";
-const btnClass = "inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/90 px-3 py-2 text-xs font-medium text-zinc-300 shadow-xl backdrop-blur-md hover:bg-zinc-800";
+const inputClass = "w-full rounded border border-app-border bg-app-canvas px-2.5 py-1.5 text-xs text-app-text-strong focus:border-primary-500 focus:outline-none";
+const btnClass = "inline-flex items-center gap-1.5 rounded-lg border border-app-border bg-app-surface/90 px-3 py-2 text-xs font-medium text-app-text-dim shadow-xl backdrop-blur-md hover:bg-app-raised";
 
 function clampPercent(n: number) {
   return Math.max(0, Math.min(100, Math.round(n * 10) / 10));
@@ -226,24 +226,24 @@ function ColorControl({ value, onChange }: { value: string; onChange: (value: st
         aria-expanded={open}
         aria-label="Color"
         onClick={() => setOpen((current) => !current)}
-        className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${open ? "border-amber-400 bg-zinc-800 text-zinc-100" : "border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-800"}`}
+        className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${open ? "border-primary-400 bg-app-raised text-app-text-strong" : "border-app-border bg-app-canvas text-app-text-dim hover:bg-app-raised"}`}
       >
-        <span className="h-4 w-4 rounded-full border border-zinc-500" style={{ backgroundColor: value }} />
+        <span className="h-4 w-4 rounded-full border border-app-border-emphasis-strong" style={{ backgroundColor: value }} />
         Color
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-40 mt-1 flex w-44 flex-wrap items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-2xl">
+        <div className="absolute left-0 top-full z-40 mt-1 flex w-44 flex-wrap items-center gap-1.5 rounded-lg border border-app-border-strong bg-app-surface p-2 shadow-2xl">
           {COLOR_SWATCHES.map((color) => (
             <button
               key={color}
               type="button"
               aria-label={`Color ${color}`}
               onClick={() => { onChange(color); setOpen(false); }}
-              className={`h-5 w-5 rounded-full border ${value === color ? "border-white ring-2 ring-amber-400" : "border-zinc-600"}`}
+              className={`h-5 w-5 rounded-full border ${value === color ? "border-white ring-2 ring-primary-400" : "border-app-border-emphasis"}`}
               style={{ backgroundColor: color }}
             />
           ))}
-          <input aria-label="Custom color" type="color" value={value} onChange={(e) => onChange(e.target.value)} className="h-6 w-8 cursor-pointer rounded border border-zinc-700 bg-zinc-900" />
+          <input aria-label="Custom color" type="color" value={value} onChange={(e) => onChange(e.target.value)} className="h-6 w-8 cursor-pointer rounded border border-app-border-strong bg-app-surface" />
         </div>
       )}
     </div>
@@ -320,25 +320,25 @@ function NewMapModal({
 
   return (
     <div className="absolute inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-4">
-      <div className="w-full max-w-3xl rounded-xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl">
+      <div className="w-full max-w-3xl rounded-xl border border-app-border-strong bg-app-surface p-5 shadow-2xl">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-zinc-100">New map</h3>
-          <button type="button" disabled={!!libraryGuard?.busy} onClick={requestClose} className="text-zinc-500 hover:text-zinc-200 disabled:opacity-40" aria-label="Close"><X className="h-4 w-4" /></button>
+          <h3 className="text-sm font-semibold text-app-text-strong">New map</h3>
+          <button type="button" disabled={!!libraryGuard?.busy} onClick={requestClose} className="text-app-subtle hover:text-app-text disabled:opacity-40" aria-label="Close"><X className="h-4 w-4" /></button>
         </div>
-        {error && <p role="alert" className="mb-3 rounded border border-red-800 bg-red-950/50 px-3 py-2 text-xs text-red-200">{error}</p>}
+        {error && <p role="alert" className="mb-3 rounded border border-danger-800 bg-danger-950/50 px-3 py-2 text-xs text-danger-200">{error}</p>}
         <form onSubmit={(e) => void submit(e)} className="grid gap-3 sm:grid-cols-2">
-          <label className="text-[11px] text-zinc-400">Map name<input required maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} className={`${inputClass} mt-1`} /></label>
-          <label className="text-[11px] text-zinc-400">Image URL<input required value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="/api/assets/…/file or https://…" className={`${inputClass} mt-1`} /></label>
-          <label className="sm:col-span-2 text-[11px] text-zinc-400">Description<textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} className={`${inputClass} mt-1`} /></label>
-          <label className="text-[11px] text-zinc-400">Width<input type="number" min={1} value={width} onChange={(e) => setWidth(e.target.value)} placeholder="From image" className={`${inputClass} mt-1`} /></label>
-          <label className="text-[11px] text-zinc-400">Height<input type="number" min={1} value={height} onChange={(e) => setHeight(e.target.value)} placeholder="From image" className={`${inputClass} mt-1`} /></label>
+          <label className="text-[11px] text-app-muted">Map name<input required maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} className={`${inputClass} mt-1`} /></label>
+          <label className="text-[11px] text-app-muted">Image URL<input required value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="/api/assets/…/file or https://…" className={`${inputClass} mt-1`} /></label>
+          <label className="sm:col-span-2 text-[11px] text-app-muted">Description<textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} className={`${inputClass} mt-1`} /></label>
+          <label className="text-[11px] text-app-muted">Width<input type="number" min={1} value={width} onChange={(e) => setWidth(e.target.value)} placeholder="From image" className={`${inputClass} mt-1`} /></label>
+          <label className="text-[11px] text-app-muted">Height<input type="number" min={1} value={height} onChange={(e) => setHeight(e.target.value)} placeholder="From image" className={`${inputClass} mt-1`} /></label>
           <div className="flex items-end gap-2 sm:col-span-2">
-            <button type="submit" disabled={busy || !!libraryGuard?.busy} className="rounded-lg bg-amber-500 px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">Create map</button>
-            <button type="button" disabled={!!libraryGuard?.busy} onClick={requestClose} className="rounded-lg border border-zinc-700 px-4 py-2 text-xs text-zinc-300 disabled:opacity-40">Cancel</button>
-            <button type="button" disabled={showLibrary && !!libraryGuard?.busy} onClick={toggleLibrary} className="ml-auto text-xs text-indigo-300 disabled:opacity-40">{showLibrary ? "Hide library" : "Choose from library"}</button>
+            <button type="submit" disabled={busy || !!libraryGuard?.busy} className="rounded-lg bg-primary-500 px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">Create map</button>
+            <button type="button" disabled={!!libraryGuard?.busy} onClick={requestClose} className="rounded-lg border border-app-border-strong px-4 py-2 text-xs text-app-text-dim disabled:opacity-40">Cancel</button>
+            <button type="button" disabled={showLibrary && !!libraryGuard?.busy} onClick={toggleLibrary} className="ml-auto text-xs text-secondary-300 disabled:opacity-40">{showLibrary ? "Hide library" : "Choose from library"}</button>
           </div>
         </form>
-        {showLibrary && <div className="mt-4 border-t border-zinc-800 pt-4"><AssetLibrary worldId={worldId} onSelect={chooseAsset} onGuardChange={setLibraryGuard} /></div>}
+        {showLibrary && <div className="mt-4 border-t border-app-border pt-4"><AssetLibrary worldId={worldId} onSelect={chooseAsset} onGuardChange={setLibraryGuard} /></div>}
       </div>
     </div>
   );
@@ -364,12 +364,12 @@ function LayerPanel({
   const [editingName, setEditingName] = useState("");
 
   return (
-    <div className="absolute right-0 mt-2 w-72 space-y-1 rounded-lg border border-zinc-800 bg-zinc-900 p-2 shadow-2xl">
-      <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Layers</div>
-      {layers.length === 0 && <p className="px-2 py-1 text-xs text-zinc-500">No layers yet. Pins and drawings without a layer always show.</p>}
+    <div className="absolute right-0 mt-2 w-72 space-y-1 rounded-lg border border-app-border bg-app-surface p-2 shadow-2xl">
+      <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-app-muted">Layers</div>
+      {layers.length === 0 && <p className="px-2 py-1 text-xs text-app-subtle">No layers yet. Pins and drawings without a layer always show.</p>}
       {layers.map((layer, index) => (
-        <div key={layer.id} className="flex items-center gap-1 rounded px-1 py-1 hover:bg-zinc-800">
-          <button type="button" disabled={busy} onClick={() => void onUpdate(layer.id, { isVisible: !layer.isVisible })} className="p-1 text-zinc-400 hover:text-zinc-100" aria-label={layer.isVisible ? "Hide layer" : "Show layer"}>
+        <div key={layer.id} className="flex items-center gap-1 rounded px-1 py-1 hover:bg-app-raised">
+          <button type="button" disabled={busy} onClick={() => void onUpdate(layer.id, { isVisible: !layer.isVisible })} className="p-1 text-app-muted hover:text-app-text-strong" aria-label={layer.isVisible ? "Hide layer" : "Show layer"}>
             {layer.isVisible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
           </button>
           {editingId === layer.id ? (
@@ -382,19 +382,19 @@ function LayerPanel({
               className={`${inputClass} flex-1`}
             />
           ) : (
-            <button type="button" onClick={() => { setEditingId(layer.id); setEditingName(layer.name); }} className="min-w-0 flex-1 truncate text-left text-xs text-zinc-200">{layer.name}</button>
+            <button type="button" onClick={() => { setEditingId(layer.id); setEditingName(layer.name); }} className="min-w-0 flex-1 truncate text-left text-xs text-app-text">{layer.name}</button>
           )}
-          <button type="button" disabled={busy || index === 0} onClick={() => void onReorder(layer.id, "up")} className="p-1 text-zinc-500 disabled:opacity-30" aria-label="Move layer up"><ChevronUp className="h-3.5 w-3.5" /></button>
-          <button type="button" disabled={busy || index === layers.length - 1} onClick={() => void onReorder(layer.id, "down")} className="p-1 text-zinc-500 disabled:opacity-30" aria-label="Move layer down"><ChevronDown className="h-3.5 w-3.5" /></button>
-          <button type="button" disabled={busy} onClick={() => { if (window.confirm(`Delete layer “${layer.name}”? Pins and drawings stay on the map.`)) void onDelete(layer.id); }} className="p-1 text-zinc-500 hover:text-red-400" aria-label="Delete layer"><Trash2 className="h-3.5 w-3.5" /></button>
+          <button type="button" disabled={busy || index === 0} onClick={() => void onReorder(layer.id, "up")} className="p-1 text-app-subtle disabled:opacity-30" aria-label="Move layer up"><ChevronUp className="h-3.5 w-3.5" /></button>
+          <button type="button" disabled={busy || index === layers.length - 1} onClick={() => void onReorder(layer.id, "down")} className="p-1 text-app-subtle disabled:opacity-30" aria-label="Move layer down"><ChevronDown className="h-3.5 w-3.5" /></button>
+          <button type="button" disabled={busy} onClick={() => { if (window.confirm(`Delete layer “${layer.name}”? Pins and drawings stay on the map.`)) void onDelete(layer.id); }} className="p-1 text-app-subtle hover:text-danger-400" aria-label="Delete layer"><Trash2 className="h-3.5 w-3.5" /></button>
         </div>
       ))}
       <form
         onSubmit={(e) => { e.preventDefault(); if (!name.trim()) return; void onCreate(name.trim()).then(() => setName("")); }}
-        className="flex gap-1 border-t border-zinc-800 pt-2"
+        className="flex gap-1 border-t border-app-border pt-2"
       >
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New layer" className={inputClass} />
-        <button type="submit" disabled={busy || !name.trim()} className="rounded bg-zinc-800 px-2 text-xs text-zinc-200 disabled:opacity-40">Add</button>
+        <button type="submit" disabled={busy || !name.trim()} className="rounded bg-app-raised px-2 text-xs text-app-text disabled:opacity-40">Add</button>
       </form>
     </div>
   );
@@ -460,53 +460,53 @@ function SelectionPanel({
   }
 
   return (
-    <div className="absolute bottom-4 right-4 z-30 w-80 rounded-xl border border-zinc-700/80 bg-zinc-900/95 p-4 text-zinc-200 shadow-2xl backdrop-blur-md">
+    <div className="absolute bottom-4 right-4 z-30 w-80 rounded-xl border border-app-border-strong/80 bg-app-surface/95 p-4 text-app-text shadow-2xl backdrop-blur-md">
       <div className="mb-3 flex items-start justify-between gap-2">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">{marker ? "Pin" : element?.kind === "LABEL" ? "Label" : "Drawing"}</h4>
-        <button type="button" onClick={onClose} className="text-zinc-500 hover:text-zinc-200" aria-label="Close"><X className="h-4 w-4" /></button>
+        <h4 className="text-xs font-bold uppercase tracking-wider text-primary-400">{marker ? "Pin" : element?.kind === "LABEL" ? "Label" : "Drawing"}</h4>
+        <button type="button" onClick={onClose} className="text-app-subtle hover:text-app-text" aria-label="Close"><X className="h-4 w-4" /></button>
       </div>
       <div className="space-y-3">
         {marker && (
           <>
-            <label className="block text-[11px] text-zinc-400">Title<input value={title} onChange={(e) => setTitle(e.target.value)} className={`${inputClass} mt-1`} /></label>
-            <label className="block text-[11px] text-zinc-400">Description<textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} className={`${inputClass} mt-1`} /></label>
+            <label className="block text-[11px] text-app-muted">Title<input value={title} onChange={(e) => setTitle(e.target.value)} className={`${inputClass} mt-1`} /></label>
+            <label className="block text-[11px] text-app-muted">Description<textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} className={`${inputClass} mt-1`} /></label>
             <div>
-              <div className="mb-1 text-[11px] text-zinc-400">Icon</div>
+              <div className="mb-1 text-[11px] text-app-muted">Icon</div>
               <div className="flex flex-wrap gap-1">
                 {MARKER_ICONS.map((name) => (
-                  <button key={name} type="button" onClick={() => setIcon(name)} className={`rounded border p-1.5 ${icon === name ? "border-amber-400 bg-zinc-800" : "border-zinc-800 bg-zinc-950"}`} aria-label={name}>{markerIcon(name)}</button>
+                  <button key={name} type="button" onClick={() => setIcon(name)} className={`rounded border p-1.5 ${icon === name ? "border-primary-400 bg-app-raised" : "border-app-border bg-app-canvas"}`} aria-label={name}>{markerIcon(name)}</button>
                 ))}
               </div>
             </div>
-            <label className="block text-[11px] text-zinc-400">Linked article
+            <label className="block text-[11px] text-app-muted">Linked article
               <select value={articleId} onChange={(e) => setArticleId(e.target.value)} className={`${inputClass} mt-1`}>
                 <option value="">None</option>
                 {articles.map((article) => <option key={article.id} value={article.id}>{article.title}</option>)}
               </select>
             </label>
             {marker.article && onSelectArticle && (
-              <button type="button" onClick={() => onSelectArticle(marker.article!.id)} className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500">
+              <button type="button" onClick={() => onSelectArticle(marker.article!.id)} className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-secondary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary-500">
                 Open article <ExternalLink className="h-3.5 w-3.5" />
               </button>
             )}
           </>
         )}
-        {element?.kind === "LABEL" && <label className="block text-[11px] text-zinc-400">Text<textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} className={`${inputClass} mt-1`} /></label>}
-        {element?.kind === "LABEL" && <label className="block text-[11px] text-zinc-400">Font size<input type="number" min={10} max={72} value={fontSize} onChange={(e) => setFontSize(Number(e.target.value) || 18)} className={`${inputClass} mt-1`} /></label>}
-        {element && element.kind !== "LABEL" && <label className="block text-[11px] text-zinc-400">Stroke<input type="range" min={1} max={12} value={strokeWidth} onChange={(e) => setStrokeWidth(Number(e.target.value))} className="mt-1 w-full" /></label>}
+        {element?.kind === "LABEL" && <label className="block text-[11px] text-app-muted">Text<textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} className={`${inputClass} mt-1`} /></label>}
+        {element?.kind === "LABEL" && <label className="block text-[11px] text-app-muted">Font size<input type="number" min={10} max={72} value={fontSize} onChange={(e) => setFontSize(Number(e.target.value) || 18)} className={`${inputClass} mt-1`} /></label>}
+        {element && element.kind !== "LABEL" && <label className="block text-[11px] text-app-muted">Stroke<input type="range" min={1} max={12} value={strokeWidth} onChange={(e) => setStrokeWidth(Number(e.target.value))} className="mt-1 w-full" /></label>}
         <div>
-          <div className="mb-1 text-[11px] text-zinc-400">Color</div>
+          <div className="mb-1 text-[11px] text-app-muted">Color</div>
           <ColorControl value={color} onChange={setColor} />
         </div>
-        <label className="block text-[11px] text-zinc-400">Layer
+        <label className="block text-[11px] text-app-muted">Layer
           <select value={layerId} onChange={(e) => setLayerId(e.target.value)} className={`${inputClass} mt-1`}>
             <option value="">None</option>
             {map.layers.map((layer) => <option key={layer.id} value={layer.id}>{layer.name}</option>)}
           </select>
         </label>
         <div className="flex gap-2">
-          <button type="button" disabled={busy || !dirty} onClick={() => void save()} className="flex-1 rounded bg-amber-500 py-1.5 text-xs font-semibold text-black disabled:opacity-40">Save</button>
-          <button type="button" disabled={busy} onClick={() => void remove()} className="rounded border border-red-800 px-3 py-1.5 text-xs text-red-300 hover:bg-red-950">Delete</button>
+          <button type="button" disabled={busy || !dirty} onClick={() => void save()} className="flex-1 rounded bg-primary-500 py-1.5 text-xs font-semibold text-black disabled:opacity-40">Save</button>
+          <button type="button" disabled={busy} onClick={() => void remove()} className="rounded border border-danger-800 px-3 py-1.5 text-xs text-danger-300 hover:bg-danger-950">Delete</button>
         </div>
       </div>
     </div>
@@ -790,16 +790,16 @@ export function InteractiveMap({
   const cursor = tool === "select" ? "cursor-grab" : tool === "erase" ? "" : "cursor-crosshair";
 
   return (
-    <div className="relative flex h-[720px] w-full select-none flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl">
-      <div className="z-20 flex flex-wrap items-center gap-2 border-b border-zinc-800 bg-zinc-900/80 px-3 py-2">
-        <select aria-label="Choose map" value={map?.id ?? ""} disabled={drafts.length > 0} onChange={(e) => { if (drafts.length > 0) return; setSelectedMapId(e.target.value); setSelection(null); clearPending(); }} className="max-w-[220px] rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 disabled:opacity-50">
+    <div className="relative flex h-[720px] w-full select-none flex-col overflow-hidden rounded-xl border border-app-border bg-app-canvas shadow-2xl">
+      <div className="z-20 flex flex-wrap items-center gap-2 border-b border-app-border bg-app-surface/80 px-3 py-2">
+        <select aria-label="Choose map" value={map?.id ?? ""} disabled={drafts.length > 0} onChange={(e) => { if (drafts.length > 0) return; setSelectedMapId(e.target.value); setSelection(null); clearPending(); }} className="max-w-[220px] rounded-lg border border-app-border bg-app-canvas px-2 py-1.5 text-xs text-app-text-strong disabled:opacity-50">
           {maps.length === 0 && <option value="">No maps</option>}
           {maps.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
         </select>
         <button type="button" disabled={drafts.length > 0} title={drafts.length > 0 ? "Resolve unsaved drawings before switching maps" : undefined} onClick={() => setNewMapOpen(true)} className={`${btnClass} disabled:cursor-not-allowed disabled:opacity-50`}><Plus className="h-3.5 w-3.5" />New map</button>
         {map && <button type="button" onClick={() => { setRenameTitle(map.title); setRenameOpen(true); }} className={btnClass}>Rename</button>}
-        {map && <button type="button" disabled={drafts.length > 0} onClick={() => void deleteMap()} className={`${btnClass} text-red-300 disabled:cursor-not-allowed disabled:opacity-50`}><Trash2 className="h-3.5 w-3.5" />Delete</button>}
-        <div className="mx-1 h-6 w-px bg-zinc-800" />
+        {map && <button type="button" disabled={drafts.length > 0} onClick={() => void deleteMap()} className={`${btnClass} text-danger-300 disabled:cursor-not-allowed disabled:opacity-50`}><Trash2 className="h-3.5 w-3.5" />Delete</button>}
+        <div className="mx-1 h-6 w-px bg-app-raised" />
         {([
           ["select", MousePointer2, "Select"],
           ["pin", MapPin, "Pin"],
@@ -815,28 +815,28 @@ export function InteractiveMap({
             type="button"
             onClick={() => { setTool(id); clearPending(); if (id !== "select") setSelection(null); }}
             title={id === "circle" ? "Circle (hold Shift for a perfect circle)" : id === "rect" ? "Rectangle (hold Shift for a square)" : label}
-            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs ${tool === id ? "border-amber-400 bg-amber-500 text-black" : "border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-800"}`}
+            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs ${tool === id ? "border-primary-400 bg-primary-500 text-black" : "border-app-border bg-app-canvas text-app-text-dim hover:bg-app-raised"}`}
           >
             <Icon className="h-3.5 w-3.5" />{label}
           </button>
         ))}
         {tool !== "select" && tool !== "erase" && (
           <>
-            <div className="mx-1 h-6 w-px bg-zinc-800" />
+            <div className="mx-1 h-6 w-px bg-app-raised" />
             <ColorControl value={drawColor} onChange={setDrawColor} />
           </>
         )}
         {(tool === "line" || tool === "circle" || tool === "rect" || tool === "freehand") && (
-          <label className="flex items-center gap-1 text-[11px] text-zinc-400">Stroke<input type="range" min={1} max={12} value={strokeWidth} onChange={(e) => setStrokeWidth(Number(e.target.value))} className="w-20" /></label>
+          <label className="flex items-center gap-1 text-[11px] text-app-muted">Stroke<input type="range" min={1} max={12} value={strokeWidth} onChange={(e) => setStrokeWidth(Number(e.target.value))} className="w-20" /></label>
         )}
         {tool === "erase" && (
-          <label className="flex items-center gap-1 text-[11px] text-zinc-400">Size<input type="range" min={4} max={48} value={eraserSize} onChange={(e) => setEraserSize(Number(e.target.value))} className="w-20" /></label>
+          <label className="flex items-center gap-1 text-[11px] text-app-muted">Size<input type="range" min={4} max={48} value={eraserSize} onChange={(e) => setEraserSize(Number(e.target.value))} className="w-20" /></label>
         )}
         {tool === "label" && (
-          <label className="flex items-center gap-1 text-[11px] text-zinc-400">Size<input type="number" min={10} max={72} value={fontSize} onChange={(e) => setFontSize(Number(e.target.value) || 18)} className="w-14 rounded border border-zinc-800 bg-zinc-950 px-1 py-1 text-xs" /></label>
+          <label className="flex items-center gap-1 text-[11px] text-app-muted">Size<input type="number" min={10} max={72} value={fontSize} onChange={(e) => setFontSize(Number(e.target.value) || 18)} className="w-14 rounded border border-app-border bg-app-canvas px-1 py-1 text-xs" /></label>
         )}
         <div className="relative ml-auto">
-          <button type="button" onClick={() => setLayersOpen((open) => !open)} className={btnClass}><Layers className="h-4 w-4 text-indigo-400" />Layers</button>
+          <button type="button" onClick={() => setLayersOpen((open) => !open)} className={btnClass}><Layers className="h-4 w-4 text-secondary-400" />Layers</button>
           {layersOpen && map && (
             <LayerPanel
               layers={map.layers}
@@ -848,35 +848,35 @@ export function InteractiveMap({
             />
           )}
         </div>
-        <div className="flex overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
-          <button type="button" onClick={() => setZoom((z) => Math.min(2.5, z + 0.2))} className="p-2 text-zinc-300 hover:bg-zinc-800" title="Zoom in"><ZoomIn className="h-4 w-4" /></button>
-          <button type="button" onClick={() => setZoom((z) => Math.max(0.6, z - 0.2))} className="border-l border-zinc-800 p-2 text-zinc-300 hover:bg-zinc-800" title="Zoom out"><ZoomOut className="h-4 w-4" /></button>
-          <button type="button" onClick={() => setZoom(1)} className="border-l border-zinc-800 p-2 text-zinc-300 hover:bg-zinc-800" title="Reset view"><Maximize2 className="h-4 w-4" /></button>
+        <div className="flex overflow-hidden rounded-lg border border-app-border bg-app-canvas">
+          <button type="button" onClick={() => setZoom((z) => Math.min(2.5, z + 0.2))} className="p-2 text-app-text-dim hover:bg-app-raised" title="Zoom in"><ZoomIn className="h-4 w-4" /></button>
+          <button type="button" onClick={() => setZoom((z) => Math.max(0.6, z - 0.2))} className="border-l border-app-border p-2 text-app-text-dim hover:bg-app-raised" title="Zoom out"><ZoomOut className="h-4 w-4" /></button>
+          <button type="button" onClick={() => setZoom(1)} className="border-l border-app-border p-2 text-app-text-dim hover:bg-app-raised" title="Reset view"><Maximize2 className="h-4 w-4" /></button>
         </div>
       </div>
 
-      {error && <p role="alert" className="border-b border-red-900 bg-red-950/40 px-4 py-2 text-xs text-red-200">{error}</p>}
+      {error && <p role="alert" className="border-b border-danger-900 bg-danger-950/40 px-4 py-2 text-xs text-danger-200">{error}</p>}
 
-      {drafts.length > 0 && <div aria-label="Drawing saves" className="flex flex-wrap items-center gap-2 border-b border-zinc-800 bg-zinc-950 px-3 py-2">
-        {drafts.map((draft) => <div key={draft.id} className="flex items-center gap-2 rounded border border-zinc-800 px-2 py-1 text-xs">
+      {drafts.length > 0 && <div aria-label="Drawing saves" className="flex flex-wrap items-center gap-2 border-b border-app-border bg-app-canvas px-3 py-2">
+        {drafts.map((draft) => <div key={draft.id} className="flex items-center gap-2 rounded border border-app-border px-2 py-1 text-xs">
           <span>{draft.status === "failed" ? "Drawing save failed" : draft.status === "saving" ? "Saving drawing…" : "Drawing…"}</span>
           {draft.status === "failed" && <>
-            <button type="button" onClick={() => { setDrafts((current) => current.map((item) => item.id === draft.id ? { ...item, status: "saving" } : item)); void saveDraftStroke(draft); }} className="font-semibold text-amber-300 hover:text-amber-200">Retry</button>
-            <button type="button" onClick={() => discardDraft(draft.id)} className="text-zinc-400 hover:text-zinc-200">Discard</button>
+            <button type="button" onClick={() => { setDrafts((current) => current.map((item) => item.id === draft.id ? { ...item, status: "saving" } : item)); void saveDraftStroke(draft); }} className="font-semibold text-primary-300 hover:text-primary-200">Retry</button>
+            <button type="button" onClick={() => discardDraft(draft.id)} className="text-app-muted hover:text-app-text">Discard</button>
           </>}
         </div>)}
       </div>}
 
       {!map ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-          <MapPin className="h-8 w-8 text-zinc-600" />
-          <h3 className="text-sm font-semibold text-zinc-200">No maps yet</h3>
-          <p className="max-w-sm text-xs text-zinc-400">Upload a map image, name it, then add layers, pins, labels, and drawings.</p>
-          <button type="button" onClick={() => setNewMapOpen(true)} className="rounded-lg bg-amber-500 px-4 py-2 text-xs font-semibold text-black">Create your first map</button>
+          <MapPin className="h-8 w-8 text-app-subtle-dim" />
+          <h3 className="text-sm font-semibold text-app-text">No maps yet</h3>
+          <p className="max-w-sm text-xs text-app-muted">Upload a map image, name it, then add layers, pins, labels, and drawings.</p>
+          <button type="button" onClick={() => setNewMapOpen(true)} className="rounded-lg bg-primary-500 px-4 py-2 text-xs font-semibold text-black">Create your first map</button>
         </div>
       ) : (
         <div
-          className={`relative flex flex-1 items-center justify-center overflow-hidden bg-zinc-950 ${cursor}`}
+          className={`relative flex flex-1 items-center justify-center overflow-hidden bg-app-canvas ${cursor}`}
           style={tool === "erase" ? { cursor: ERASER_CURSOR } : undefined}
           onPointerDown={handleMouseDown}
           onPointerMove={handleMouseMove}
@@ -890,7 +890,7 @@ export function InteractiveMap({
               ref={imageRef}
               data-testid="map-surface"
               data-map-surface="true"
-              className="relative max-h-[92%] w-[min(92%,1100px)] overflow-hidden rounded-lg border border-zinc-700/60 shadow-2xl"
+              className="relative max-h-[92%] w-[min(92%,1100px)] overflow-hidden rounded-lg border border-app-border-strong/60 shadow-2xl"
               style={{ aspectRatio: `${map.width} / ${map.height}` }}
             >
               <img src={map.imageUrl} alt={map.title} draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-cover" />
@@ -918,7 +918,7 @@ export function InteractiveMap({
                     type="button"
                     onClick={(e) => { e.stopPropagation(); activate({ type: "element", id: element.id }); }}
                     style={{ left: `${geo.x ?? 0}%`, top: `${geo.y ?? 0}%`, color: st.color || "#f8fafc", fontSize: st.fontSize ?? 18 }}
-                    className={`absolute z-10 max-w-[40%] -translate-x-1/2 -translate-y-1/2 whitespace-pre-wrap text-left font-semibold drop-shadow ${tool === "erase" ? "pointer-events-none" : ""} ${selection?.type === "element" && selection.id === element.id ? "ring-1 ring-amber-400" : ""}`}
+                    className={`absolute z-10 max-w-[40%] -translate-x-1/2 -translate-y-1/2 whitespace-pre-wrap text-left font-semibold drop-shadow ${tool === "erase" ? "pointer-events-none" : ""} ${selection?.type === "element" && selection.id === element.id ? "ring-1 ring-primary-400" : ""}`}
                   >
                     {geo.text || "Label"}
                   </button>
@@ -944,7 +944,7 @@ export function InteractiveMap({
               )}
               {pending && (
                 <div style={{ left: `${pending.x}%`, top: `${pending.y}%` }} className="absolute z-30 -translate-x-1/2 -translate-y-1/2">
-                  <div className="flex h-8 w-8 animate-bounce items-center justify-center rounded-full border-2 border-white bg-amber-500 text-black shadow-2xl">
+                  <div className="flex h-8 w-8 animate-bounce items-center justify-center rounded-full border-2 border-white bg-primary-500 text-black shadow-2xl">
                     {pending.kind === "label" ? <Type className="h-4 w-4" /> : <MapPin className="h-4 w-4" />}
                   </div>
                 </div>
@@ -955,32 +955,32 @@ export function InteractiveMap({
       )}
 
       {pending && map && (
-        <div className="absolute bottom-4 left-4 z-30 w-80 rounded-xl border border-amber-500/50 bg-zinc-900 p-4 text-zinc-200 shadow-2xl">
-          <div className="mb-2 flex items-center justify-between border-b border-zinc-800 pb-2">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">{pending.kind === "pin" ? "New pin" : "New label"}</h4>
-            <button type="button" onClick={clearPending} className="text-zinc-500 hover:text-zinc-200"><X className="h-4 w-4" /></button>
+        <div className="absolute bottom-4 left-4 z-30 w-80 rounded-xl border border-primary-500/50 bg-app-surface p-4 text-app-text shadow-2xl">
+          <div className="mb-2 flex items-center justify-between border-b border-app-border pb-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-primary-400">{pending.kind === "pin" ? "New pin" : "New label"}</h4>
+            <button type="button" onClick={clearPending} className="text-app-subtle hover:text-app-text"><X className="h-4 w-4" /></button>
           </div>
           <form onSubmit={(e) => void savePending(e)} className="space-y-3">
             {pending.kind === "pin" ? (
               <>
-                <label className="block text-[11px] text-zinc-400">Title<input required value={pendingTitle} onChange={(e) => setPendingTitle(e.target.value)} className={`${inputClass} mt-1`} /></label>
-                <label className="block text-[11px] text-zinc-400">Description<textarea rows={2} value={pendingDesc} onChange={(e) => setPendingDesc(e.target.value)} className={`${inputClass} mt-1`} /></label>
+                <label className="block text-[11px] text-app-muted">Title<input required value={pendingTitle} onChange={(e) => setPendingTitle(e.target.value)} className={`${inputClass} mt-1`} /></label>
+                <label className="block text-[11px] text-app-muted">Description<textarea rows={2} value={pendingDesc} onChange={(e) => setPendingDesc(e.target.value)} className={`${inputClass} mt-1`} /></label>
                 <div className="flex flex-wrap gap-1">
                   {MARKER_ICONS.map((name) => (
-                    <button key={name} type="button" onClick={() => setPendingIcon(name)} className={`rounded border p-1.5 ${pendingIcon === name ? "border-amber-400 bg-zinc-800" : "border-zinc-800"}`}>{markerIcon(name)}</button>
+                    <button key={name} type="button" onClick={() => setPendingIcon(name)} className={`rounded border p-1.5 ${pendingIcon === name ? "border-primary-400 bg-app-raised" : "border-app-border"}`}>{markerIcon(name)}</button>
                   ))}
                 </div>
               </>
             ) : (
-              <label className="block text-[11px] text-zinc-400">Text<textarea required rows={2} value={pendingText} onChange={(e) => setPendingText(e.target.value)} className={`${inputClass} mt-1`} /></label>
+              <label className="block text-[11px] text-app-muted">Text<textarea required rows={2} value={pendingText} onChange={(e) => setPendingText(e.target.value)} className={`${inputClass} mt-1`} /></label>
             )}
-            <label className="block text-[11px] text-zinc-400">Layer
+            <label className="block text-[11px] text-app-muted">Layer
               <select value={pendingLayerId} onChange={(e) => setPendingLayerId(e.target.value)} className={`${inputClass} mt-1`}>
                 <option value="">None</option>
                 {map.layers.map((layer) => <option key={layer.id} value={layer.id}>{layer.name}</option>)}
               </select>
             </label>
-            <button type="submit" disabled={mutating} className="w-full rounded bg-amber-500 py-1.5 text-xs font-semibold text-black disabled:opacity-40">Save</button>
+            <button type="submit" disabled={mutating} className="w-full rounded bg-primary-500 py-1.5 text-xs font-semibold text-black disabled:opacity-40">Save</button>
           </form>
         </div>
       )}
@@ -1001,12 +1001,12 @@ export function InteractiveMap({
 
       {renameOpen && map && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
-          <form onSubmit={(e) => void renameMap(e)} className="w-80 space-y-3 rounded-xl border border-zinc-700 bg-zinc-900 p-4">
-            <h3 className="text-sm font-semibold text-zinc-100">Rename map</h3>
+          <form onSubmit={(e) => void renameMap(e)} className="w-80 space-y-3 rounded-xl border border-app-border-strong bg-app-surface p-4">
+            <h3 className="text-sm font-semibold text-app-text-strong">Rename map</h3>
             <input autoFocus required value={renameTitle} onChange={(e) => setRenameTitle(e.target.value)} className={inputClass} />
             <div className="flex gap-2">
-              <button type="submit" disabled={mutating} className="rounded bg-amber-500 px-3 py-1.5 text-xs font-semibold text-black">Save</button>
-              <button type="button" onClick={() => setRenameOpen(false)} className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300">Cancel</button>
+              <button type="submit" disabled={mutating} className="rounded bg-primary-500 px-3 py-1.5 text-xs font-semibold text-black">Save</button>
+              <button type="button" onClick={() => setRenameOpen(false)} className="rounded border border-app-border-strong px-3 py-1.5 text-xs text-app-text-dim">Cancel</button>
             </div>
           </form>
         </div>
@@ -1072,7 +1072,7 @@ function DraggablePin({
       <div style={{ backgroundColor: marker.color || "#3b82f6" }} className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white/80 text-white shadow-lg ring-2 ring-black/40">
         {markerIcon(marker.icon)}
       </div>
-      <div className="pointer-events-none absolute left-1/2 top-8 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-900/95 px-2 py-0.5 text-[11px] font-semibold text-zinc-200 opacity-0 shadow-xl group-hover:opacity-100">{marker.title}</div>
+      <div className="pointer-events-none absolute left-1/2 top-8 -translate-x-1/2 whitespace-nowrap rounded bg-app-surface/95 px-2 py-0.5 text-[11px] font-semibold text-app-text opacity-0 shadow-xl group-hover:opacity-100">{marker.title}</div>
     </button>
   );
 }

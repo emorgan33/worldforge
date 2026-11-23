@@ -12,6 +12,6 @@ export default function InvitationPage() {
     setToken(value);
   }, []);
 
-  if (token === undefined) return <main className="flex min-h-screen items-center justify-center bg-zinc-950 px-5 text-zinc-100"><p role="status" className="text-zinc-400">Opening invitation…</p></main>;
+  if (token === undefined) return <main className="flex min-h-screen items-center justify-center bg-app-canvas px-5 text-app-text-strong"><p role="status" className="text-app-muted">Opening invitation…</p></main>;
   return <InviteClaimForm token={token ?? ""} />;
 }

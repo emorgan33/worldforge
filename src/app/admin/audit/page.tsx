@@ -81,47 +81,47 @@ export default function AdminAuditPage() {
   return (
     <section className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-amber-100">Installation audit</h2>
-        <p className="mt-1 text-sm text-zinc-400">Sanitized, append-only records of account administration.</p>
+        <h2 className="text-2xl font-bold text-primary-100">Installation audit</h2>
+        <p className="mt-1 text-sm text-app-muted">Sanitized, append-only records of account administration.</p>
       </div>
 
       <form
-        className="grid gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 md:grid-cols-3"
+        className="grid gap-3 rounded-xl border border-app-border bg-app-surface/60 p-4 md:grid-cols-3"
         onSubmit={applyFilters}
       >
-        <label className="text-sm font-medium text-zinc-200">
+        <label className="text-sm font-medium text-app-text">
           Target account ID
           <input
             value={targetDraft}
             onChange={(event) => setTargetDraft(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+            className="mt-1 w-full rounded-lg border border-app-border-strong bg-app-canvas px-3 py-2 text-app-text-strong"
           />
         </label>
-        <label className="text-sm font-medium text-zinc-200">
+        <label className="text-sm font-medium text-app-text">
           Action
           <input
             value={actionDraft}
             onChange={(event) => setActionDraft(event.target.value)}
             placeholder="ACCOUNT_CREATE"
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+            className="mt-1 w-full rounded-lg border border-app-border-strong bg-app-canvas px-3 py-2 text-app-text-strong"
           />
         </label>
         <div className="flex items-end">
-          <button type="submit" disabled={loading || loadingMore} className="w-full rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">
+          <button type="submit" disabled={loading || loadingMore} className="w-full rounded-lg bg-secondary-600 px-4 py-2 font-semibold text-white hover:bg-secondary-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300">
             Apply filters
           </button>
         </div>
       </form>
 
       {error && (
-        <p ref={errorRef} tabIndex={-1} role="alert" className="rounded-lg border border-red-800 bg-red-950/30 px-4 py-3 text-sm text-red-300 focus:outline-none">
+        <p ref={errorRef} tabIndex={-1} role="alert" className="rounded-lg border border-danger-800 bg-danger-950/30 px-4 py-3 text-sm text-danger-300 focus:outline-none">
           {error}
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-zinc-800">
+      <div className="overflow-x-auto rounded-xl border border-app-border">
         <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="border-b border-zinc-800 bg-zinc-900/70 text-xs uppercase tracking-wider text-zinc-400">
+          <thead className="border-b border-app-border bg-app-surface/70 text-xs uppercase tracking-wider text-app-muted">
             <tr>
               <th className="px-3 py-2">Time</th>
               <th className="px-3 py-2">Actor</th>
@@ -133,7 +133,7 @@ export default function AdminAuditPage() {
           </thead>
           <tbody>
             {entries.map((entry) => (
-              <tr key={entry.id} className="border-b border-zinc-800/70">
+              <tr key={entry.id} className="border-b border-app-border/70">
                 <td className="px-3 py-2 whitespace-nowrap">{new Date(entry.createdAt).toLocaleString()}</td>
                 <td className="px-3 py-2">{entry.actorIdSnapshot || "local operator"}</td>
                 <td className="px-3 py-2">{entry.targetIdSnapshot || "—"}</td>
@@ -146,14 +146,14 @@ export default function AdminAuditPage() {
         </table>
       </div>
 
-      {loading && <p className="text-sm text-zinc-400">Loading audit events…</p>}
-      {!loading && entries.length === 0 && <p className="text-sm text-zinc-400">No audit events match these filters.</p>}
+      {loading && <p className="text-sm text-app-muted">Loading audit events…</p>}
+      {!loading && entries.length === 0 && <p className="text-sm text-app-muted">No audit events match these filters.</p>}
       {nextCursor && (
         <button
           type="button"
           disabled={loading || loadingMore}
           onClick={() => void load(nextCursor, false)}
-          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+          className="rounded-lg border border-app-border-strong px-4 py-2 text-sm font-medium text-app-text hover:border-app-border-emphasis-strong disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
         >
           {loadingMore ? "Loading…" : "Load more"}
         </button>

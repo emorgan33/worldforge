@@ -1,7 +1,8 @@
 # Implementation plan: selectable application themes
 
-Status: proposed; design only, no implementation started. Palette values,
-in-product names, and the migration order below are open for review.
+Status: P1 (token layer) implemented on `feat/theme-tokens`; P2–P8 not started.
+Palette values, in-product names, and the migration order below are open for
+review.
 
 Tracks [GitHub issue #38](https://github.com/emorgan33/worldforge/issues/38).
 
@@ -92,8 +93,8 @@ must come from borders and shadows rather than surface contrast.
 | --- | --- | --- |
 | Root styling | `src/app/globals.css` `:root` background/foreground, `@theme inline` | Only two tokens exist; there is no theme selector and no `color-scheme` declaration. |
 | Workspace tokens | `--aw-*` variables and `.author-workspace` in `globals.css`, applied in `src/components/AuthorWorkspace.tsx` | Proves the token approach works; should become the default theme's values. |
-| Reader presentation | `.world-presentation` CSS variables, `src/lib/world-appearance.ts` `WORLD_THEMES`, `parseAppearance`; `globals.css:99–105` also overrides utility class names such as `[class*="bg-zinc-"]` | Separate axis. Chrome must not repaint presentation surfaces; presentation must not leak into chrome. Renaming utilities must update these selectors in the same change. |
-| Hardcoded colors | 1,367 `zinc-*` utilities across 59 files, plus `amber-*`, `indigo-*`, `text-white`, `bg-black/40`, dark gradients | Bulk of the work. Every surface needs a semantic token before a second theme can exist. |
+| Reader presentation | `.world-presentation` CSS variables, `src/lib/world-appearance.ts` `WORLD_THEMES`, `parseAppearance`; `globals.css` also overrides utility class names such as `[class*="bg-app-"]` | Separate axis. Chrome must not repaint presentation surfaces; presentation must not leak into chrome. Renaming utilities must update these selectors in the same change. |
+| Hardcoded colors | P1 replaced 2,175 palette-utility occurrences across 62 files with tokens: neutral roles in `globals.css` (`--color-app-canvas`, `-surface`, `-raised`, `-border*`, `-text*`, `-muted`, `-subtle`, `-on-accent`) and accent scales (`primary` amber, `secondary` indigo, `highlight` violet, `danger` red, `success` emerald, `info` sky). `text-white`, `bg-black/40`, and dark gradients remain for P7. | The default theme renders identically because each token aliases the Tailwind palette entry it replaced. A second theme can now redefine the variables without touching components. |
 | Character sheets | `src/components/article/CharacterSheet.module.css` (paper palette, `color-scheme: light`) | Already light and self-contained; verify it inside each chrome theme and leave its paper metaphor intact. |
 | Maps | `src/components/map/InteractiveMap.tsx`, `paintStroke` fallback color, toolbar and layer panels | Stored annotation colors are author data and must not change with the viewer's theme. Chrome (toolbar, layer panel, surround) needs theme-aware values; the map backdrop and the `#eab308` fallback for stored elements stay fixed. A default for newly created drawings is persisted into the element at creation, not read from the theme at paint time. |
 | Editors | TipTap chrome, `block-editor` styles in `globals.css` | Editor affordances (hover outlines, placeholders, code blocks, blockquotes) are hardcoded for dark surfaces. |
@@ -248,7 +249,7 @@ pass and the evidence is reported.
 
 | Package | Work | Evidence required |
 | --- | --- | --- |
-| P1 | Token layer with Night watch values; migrate every `zinc`/`amber`/`indigo` utility to semantic tokens; update the `.world-presentation` selectors that currently match utility class names (`globals.css:99–105`) so reader overrides survive; no theme switcher yet | Screenshot diff of key routes shows no visual change; grep proves no raw palette utilities remain outside the token definitions; reader presentation overrides still apply under all world themes |
+| P1 | Token layer with Night watch values; migrate every `zinc`/`amber`/`indigo`/`violet`/`red`/`emerald`/`sky` utility to semantic tokens; update the `.world-presentation` selectors that currently match utility class names so reader overrides survive; no theme switcher yet. **Implemented on `feat/theme-tokens`.** | Screenshot diff of key routes shows no visual change; grep proves no raw palette utilities remain outside the token definitions; reader presentation overrides still apply under all world themes |
 | P2 | `User.theme` migration, cookie projection, root-layout resolution, switcher in workspace and public chrome, "Match system" CSS mapping, invalid-value fallback | Unit tests for precedence, validation, and account-over-cookie behavior; Playwright tests for switch + reload with no flash, OS preference change under Match system, and the remote-change → page request → sign-out sequence |
 | P3 | True black palette and elevation rules | Contrast assertions; screenshots of workspace, editor, admin, player, reader chrome |
 | P4 | Daylight palette | Same as P3 |
@@ -279,9 +280,10 @@ pass and the evidence is reported.
 
 ## Risks
 
-- **Mechanical breadth.** 1,367 raw color utilities across 59 files. Partial
-  migration produces unreadable patches of the UI in light themes; the P1 gate
-  must be exhaustive before P3–P6 ship.
+- **Mechanical breadth.** The P1 migration covered 2,175 palette utilities across
+  62 files. Any surface that keeps a literal color (`text-white`, `bg-black/40`,
+  gradients) must be found in P7; partial coverage produces unreadable patches of
+  the UI in light themes.
 - **Presentation selectors coupled to utility names.** `.world-presentation`
   matches `[class*="bg-zinc-"]`, `[class*="border-zinc-"]`, and specific
   `text-*` classes. Renaming utilities without updating those selectors silently
