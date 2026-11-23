@@ -91,7 +91,7 @@ must come from borders and shadows rather than surface contrast.
 
 | Area | Current code | Consequence for this feature |
 | --- | --- | --- |
-| Root styling | `src/app/globals.css` `:root` background/foreground, `@theme inline` | Only two tokens exist; there is no theme selector and no `color-scheme` declaration. |
+| Root styling | `src/app/globals.css` `:root` background/foreground, `@theme` blocks | P1 added the application token layer and made it runtime-overridable; there is still no theme selector and no `color-scheme` declaration. |
 | Workspace tokens | `--aw-*` variables and `.author-workspace` in `globals.css`, applied in `src/components/AuthorWorkspace.tsx` | Proves the token approach works; should become the default theme's values. |
 | Reader presentation | `.world-presentation` CSS variables, `src/lib/world-appearance.ts` `WORLD_THEMES`, `parseAppearance`; `globals.css` also overrides utility class names such as `[class*="bg-app-"]` | Separate axis. Chrome must not repaint presentation surfaces; presentation must not leak into chrome. Renaming utilities must update these selectors in the same change. |
 | Hardcoded colors | P1 replaced 2,179 palette-utility occurrences across 62 files with tokens: neutral roles in `globals.css` (`--color-app-canvas`, `-surface`, `-raised`, `-border*`, `-text*`, `-muted`, `-subtle`, `-on-accent`) and accent scales (`primary` amber, `secondary` indigo, `highlight` violet, `danger` red, `success` emerald, `info` sky). `text-white`, `bg-black/40`, and dark gradients remain for P7. | The default theme renders identically because each token aliases the Tailwind palette entry it replaced. A second theme can now redefine the variables without touching components. |
