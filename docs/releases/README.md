@@ -89,6 +89,7 @@ and `linux/arm64` child
 `sha256:d40a154145e28d3035bb3d93c8f03d3230a8483656863f750d945727998f7efe`.
 The `0.4.5` publication was verified by its workflow, including a clean
 pull-only install that passed login and account setup. The `0.4.6` image
-publication was blocked by a fixable HIGH dependency finding; no `0.4.6` image
-was published. The `0.4.7` notes are prepared for publication; check the GitHub
-release and its workflow before relying on an image.
+publication was blocked by a fixable HIGH dependency finding, and `0.4.7`
+failed its publish step on a non-native image-ID check; neither version
+published an image. The `0.4.8` notes are prepared for publication; check the
+GitHub release and its workflow before relying on an image.
