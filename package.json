@@ -43,7 +43,7 @@
     "@tiptap/react": "^3.32.0",
     "@tiptap/starter-kit": "^3.32.0",
     "@tiptap/suggestion": "^3.32.0",
-    "better-sqlite3": "11.10.0",
+    "better-sqlite3": "12.11.1",
     "clsx": "^2.1.1",
     "htmlparser2": "10.0.0",
     "lucide-react": "^1.57.0",
@@ -72,6 +72,7 @@
   },
   "pnpm": {
     "overrides": {
+      "@prisma/adapter-better-sqlite3>better-sqlite3": "12.11.1",
       "@prisma/config>deepmerge-ts": "8.0.2",
       "@prisma/config>effect": "3.22.1"
     },

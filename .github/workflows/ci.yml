@@ -48,6 +48,36 @@ jobs:
       - name: Run unit tests
         run: pnpm test:unit
 
+  node24:
+    name: Node 24 compatibility
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "file:/tmp/worldforge-node24-tests/test.db?connection_limit=1"
+      WORLD_CREATION_TEST_DATABASE_URL: "file:/tmp/worldforge-node24-tests/test.db?connection_limit=1"
+      WORLDFORGE_ASSET_DIR: "/tmp/worldforge-node24-tests/assets"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - name: Build and verify patched SQLite
+        run: |
+          pnpm sqlite:build
+          node scripts/assert-sqlite-version.cjs
+      - name: Prepare isolated test storage
+        run: mkdir -p "$WORLDFORGE_ASSET_DIR"
+      - run: pnpm db:deploy
+      - name: Run unit tests
+        run: pnpm test:unit
+      - name: Run service tests
+        run: pnpm test:service
+
   service:
     name: Service tests
     runs-on: ubuntu-latest

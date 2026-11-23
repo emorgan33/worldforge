@@ -5,7 +5,8 @@ test workflow, and what we look for in pull requests.
 
 ## Prerequisites
 
-- **Node.js 22+**
+- **Node.js 22 or 24** (CI tests both, including a patched-SQLite build on
+  Node 24; the Docker image remains on Node 22)
 - **pnpm 10** (the pinned version in `package.json`; enable via
   `corepack enable`)
 - **Docker** (optional, for the self-hosted stack and container testing)
