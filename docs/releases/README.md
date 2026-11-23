@@ -94,5 +94,8 @@ The `0.4.5` publication was verified by its workflow, including a clean
 pull-only install that passed login and account setup. The `0.4.6` image
 publication was blocked by a fixable HIGH dependency finding, and `0.4.7`
 failed its publish step on a non-native image-ID check; neither version
-published an image. For [v0.4.8](v0.4.8.md) and [v0.4.9](v0.4.9.md), check
-the corresponding GitHub release and its workflow before relying on an image.
+published an image. [v0.4.8](v0.4.8.md) and [v0.4.9](v0.4.9.md) published only
+after reruns of the recorded-digest failure described above; `0.4.9` is the
+verified multi-platform release (`sha256:8fefc0d9…`) that those reruns
+finalized. [v0.4.10](v0.4.10.md) is the first release to publish with the
+corrected step, so check its workflow before relying on an image.
