@@ -74,7 +74,8 @@
     "overrides": {
       "@prisma/adapter-better-sqlite3>better-sqlite3": "12.11.1",
       "@prisma/config>deepmerge-ts": "8.0.2",
-      "@prisma/config>effect": "3.22.1"
+      "@prisma/config>effect": "3.22.1",
+      "@typescript-eslint/typescript-estree>minimatch": "^11.0.1"
     },
     "onlyBuiltDependencies": [
       "better-sqlite3"

@@ -57,6 +57,9 @@ next-env.d.ts
 /prisma/*.db-shm
 /prisma/*.db-journal
 
+# Local backup archives (contain the database and uploaded assets)
+/backups/
+
 # local agent/scaffolding scratch
 .aider*
 .hermes/
