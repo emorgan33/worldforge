@@ -99,6 +99,9 @@ test("publication binds loaded content to the tested artifact and platform", () 
 
   assert.match(publishJob, /docker load -i "\$archive"/);
   assert.match(publishJob, /image_id=\$\(docker image inspect worldforge-release:test --format '\{\{\.Id\}\}'\)/);
+  assert.match(publishJob, /archive_manifest_id=\$\(tar -xOzf "\$archive" index\.json/);
+  assert.match(publishJob, /\[\[ -n "\$archive_manifest_id" && "\$image_id" == "\$archive_manifest_id" \]\]/);
+  assert.match(publishJob, /image_id="\$expected_id"/);
   assert.match(publishJob, /source_digest=[\s\S]*sourceDigest/);
   assert.match(publishJob, /\[\[ "\$source_digest" == "\$child_digest" \]\]/);
   assert.match(publishJob, /\[\[ "\$source_digest" == "\$image_id" \]\]/);

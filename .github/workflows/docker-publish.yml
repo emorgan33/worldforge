@@ -250,7 +250,15 @@ jobs:
             docker load -i "$archive"
             image_id=$(docker image inspect worldforge-release:test --format '{{.Id}}')
             expected_id=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).imageId)' "$metadata")
-            [[ "$image_id" == "$expected_id" ]] || { echo "Loaded image does not match the tested artifact."; exit 1; }
+            # Docker stores non-native images by manifest digest while native
+            # images report their config digest. Accept only the digest from
+            # this hash-verified archive when the IDs differ, then normalize
+            # back to the tested config digest.
+            archive_manifest_id=$(tar -xOzf "$archive" index.json 2>/dev/null | node -e 'let data = ""; process.stdin.on("data", chunk => data += chunk).on("end", () => { const digest = JSON.parse(data)?.manifests?.[0]?.digest; if (typeof digest === "string") process.stdout.write(digest); })' || true)
+            if [[ "$image_id" != "$expected_id" ]]; then
+              [[ -n "$archive_manifest_id" && "$image_id" == "$archive_manifest_id" ]] || { echo "Loaded image does not match the tested artifact."; exit 1; }
+              image_id="$expected_id"
+            fi
             image_arch=$(docker image inspect worldforge-release:test --format '{{.Architecture}}')
             [[ "$image_arch" == "$architecture" ]] || { echo "Loaded image architecture $image_arch does not match $architecture."; exit 1; }
             image_revision=$(docker image inspect worldforge-release:test --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
