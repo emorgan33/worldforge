@@ -84,7 +84,11 @@ test("publication is release-only and gated on both platform jobs", () => {
 
 test("publication revalidates archives and pushes only run-scoped staging tags", () => {
 
-  assert.doesNotMatch(publishJob, /docker build/);
+  // Publish must never build an image; inspecting the pushed reference is
+  // how the platform manifest digest is resolved.
+  assert.doesNotMatch(publishJob, /docker build --|docker buildx build/);
+  assert.match(publishJob, /docker buildx imagetools inspect "\$IMAGE:\$staging_tag" --raw/);
+  assert.match(publishJob, /scripts\/release-publish\.mjs select-child/);
   assert.match(publishJob, /scripts\/release-artifact\.mjs verify/);
   assert.match(publishJob, /docker load -i "\$archive"/);
   assert.match(publishJob, /staging-\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}-\$\{architecture\}/);

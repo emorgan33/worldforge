@@ -281,8 +281,17 @@ jobs:
               staging_tag="staging-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${architecture}"
               docker tag worldforge-release:test "$IMAGE:$staging_tag"
               docker push "$IMAGE:$staging_tag"
-              child_digest=$(docker image inspect "$IMAGE:$staging_tag" --format '{{index .RepoDigests 0}}' | cut -d@ -f2)
-              [[ "$child_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Pushed $architecture image did not report a digest."; exit 1; }
+              pushed_digest=$(docker image inspect "$IMAGE:$staging_tag" --format '{{index .RepoDigests 0}}' | cut -d@ -f2)
+              [[ "$pushed_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Pushed $architecture image did not report a digest."; exit 1; }
+              # A push may publish an OCI index wrapping the platform manifest
+              # with attestations. The release index references the platform
+              # manifest, so record that digest rather than the pushed index.
+              docker buildx imagetools inspect "$IMAGE:$staging_tag" --raw > "$RUNNER_TEMP/pushed-$architecture.json"
+              child_digest=$(node scripts/release-publish.mjs select-child \
+                --manifest "$RUNNER_TEMP/pushed-$architecture.json" \
+                --architecture "$architecture" \
+                --pushed-digest "$pushed_digest")
+              [[ "$child_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Pushed $architecture image did not resolve a platform manifest."; exit 1; }
               source=pushed
             fi
 

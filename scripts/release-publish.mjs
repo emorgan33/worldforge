@@ -9,9 +9,71 @@ const PLATFORMS = {
 };
 const SOURCES = new Set(["pushed", "existing"]);
 const STAGING = /^staging-[0-9]+-[0-9]+-(amd64|arm64)$/;
+const ATTESTATION_TYPE = "vnd.docker.reference.type";
+const ATTESTATION_VALUE = "attestation-manifest";
+const OCI_INDEX = "application/vnd.oci.image.index.v1+json";
+const DOCKER_INDEX = "application/vnd.docker.distribution.manifest.list.v2+json";
+const OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
+const DOCKER_MANIFEST = "application/vnd.docker.distribution.manifest.v2+json";
+const INDEX_TYPES = new Set([OCI_INDEX, DOCKER_INDEX]);
+const MANIFEST_TYPES = new Set([OCI_MANIFEST, DOCKER_MANIFEST]);
 
 function fail(message) {
   throw new Error(`Release publication error: ${message}`);
+}
+
+/**
+ * Resolve the platform image manifest digest a pushed staging reference
+ * contributes to the release index.
+ *
+ * `docker push` may publish an OCI index that wraps the platform manifest and
+ * BuildKit attestation manifests. The release index references the platform
+ * manifest, so the pushed reference digest is not always the child digest.
+ * Accept only a single image manifest or an index with exactly one matching
+ * platform image plus optional attestations; anything else is ambiguous.
+ */
+export function selectPlatformManifestDigest(manifest, { architecture, pushedDigest }) {
+  if (typeof architecture !== "string" || !Object.hasOwn(PLATFORMS, `linux/${architecture}`)) {
+    fail(`architecture must be amd64 or arm64, received ${JSON.stringify(architecture)}.`);
+  }
+  if (typeof pushedDigest !== "string" || !DIGEST.test(pushedDigest)) {
+    fail("pushedDigest must be a sha256 digest.");
+  }
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+    fail("pushed manifest must be a JSON object.");
+  }
+  if (manifest.schemaVersion !== 2) fail("pushed manifest schemaVersion must be 2.");
+  if (MANIFEST_TYPES.has(manifest.mediaType)) return pushedDigest;
+  if (!INDEX_TYPES.has(manifest.mediaType)) {
+    fail(`pushed manifest has unsupported media type ${JSON.stringify(manifest.mediaType)}.`);
+  }
+  if (!Array.isArray(manifest.manifests)) fail("pushed index must include a manifests array.");
+
+  const selected = [];
+  for (const [position, descriptor] of manifest.manifests.entries()) {
+    if (!descriptor || typeof descriptor !== "object") {
+      fail(`pushed manifest descriptor ${position} is malformed.`);
+    }
+    if (typeof descriptor.digest !== "string" || !DIGEST.test(descriptor.digest)) {
+      fail(`pushed manifest descriptor ${position} has an invalid digest.`);
+    }
+    const platform = descriptor.platform;
+    if (descriptor.annotations?.[ATTESTATION_TYPE] === ATTESTATION_VALUE) {
+      if (platform?.os !== "unknown" || platform?.architecture !== "unknown") {
+        fail(`attestation ${descriptor.digest} must use the unknown/unknown platform.`);
+      }
+      continue;
+    }
+    if (platform?.os === "linux" && platform?.architecture === architecture) {
+      selected.push(descriptor.digest);
+      continue;
+    }
+    fail(`pushed manifest references unexpected ${platform?.os ?? "unknown"}/${platform?.architecture ?? "unknown"} content at ${descriptor.digest}.`);
+  }
+  if (selected.length !== 1) {
+    fail(`pushed manifest must reference exactly one linux/${architecture} image; found ${selected.length}.`);
+  }
+  return selected[0];
 }
 
 export function validatePublicationMetadata(metadata) {
@@ -124,8 +186,22 @@ async function main() {
       childDigest: args["child-digest"],
     });
     console.log(verified.childDigest);
+  } else if (command === "select-child") {
+    for (const required of ["manifest", "architecture", "pushed-digest"]) {
+      if (!args[required]) throw new Error(`--${required} is required.`);
+    }
+    let manifest;
+    try {
+      manifest = JSON.parse(readFileSync(args.manifest, "utf8"));
+    } catch (error) {
+      fail(`could not read the pushed manifest: ${error instanceof Error ? error.message : error}`);
+    }
+    console.log(selectPlatformManifestDigest(manifest, {
+      architecture: args.architecture,
+      pushedDigest: args["pushed-digest"],
+    }));
   } else {
-    throw new Error("Choose write, verify or child.");
+    throw new Error("Choose write, verify, child or select-child.");
   }
 }
 

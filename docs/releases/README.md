@@ -38,9 +38,12 @@ moved or reused for a different commit; use a new patch release.
    verifies both platforms natively, scans vulnerabilities and gates fixable
    HIGH/CRITICAL findings, smoke-tests fresh isolated storage, publishes the
    verified child images, and creates the version and full-SHA tags only when
-   both resolve to the same validated multi-platform index. Existing
-   same-content tags are no-ops; conflicting tags fail closed. `latest` and
-   release-note updates are separate finalization steps.
+   both resolve to the same validated multi-platform index. A platform push may
+   publish an OCI index that wraps the platform manifest with build
+   attestations; the workflow records the platform manifest digest that the
+   release index references, so the first attempt is verifiable without a
+   rerun. Existing same-content tags are no-ops; conflicting tags fail closed.
+   `latest` and release-note updates are separate finalization steps.
 5. After both published children pass re-verification, the workflow updates the
    release notes with an idempotent image section and, only when this is
    GitHub's current stable release with a stable version tag, advances `latest`
