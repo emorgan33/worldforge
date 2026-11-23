@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpen, LogOut, Users } from "lucide-react";
+import { ArrowLeft, BookOpen, LogOut, Users } from "lucide-react";
 
 type PlayerWorld = { id: string; slug: string; title: string; description?: string | null };
 
@@ -40,7 +40,7 @@ export default function PlayerHome({ name, email }: { name: string | null; email
     <div className="mx-auto max-w-6xl">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-6">
         <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-400">WorldForge · Player</p><h1 className="mt-2 font-serif text-3xl font-bold">Your worlds</h1><p className="mt-1 text-sm text-zinc-400">Welcome{ name ? `, ${name}` : ""}. Choose a world to continue reading.</p></div>
-        <div className="flex items-center gap-3"><span className="hidden text-sm text-zinc-500 sm:inline">{email}</span><button onClick={signOut} disabled={signingOut} className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500 disabled:opacity-50"><LogOut className="h-4 w-4" />{signingOut ? "Signing out…" : "Sign out"}</button></div>
+        <div className="flex flex-wrap items-center gap-3"><Link href="/" className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"><ArrowLeft className="h-4 w-4" aria-hidden="true" />Back to main site</Link><span className="hidden text-sm text-zinc-500 sm:inline">{email}</span><button onClick={signOut} disabled={signingOut} className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500 disabled:opacity-50"><LogOut className="h-4 w-4" />{signingOut ? "Signing out…" : "Sign out"}</button></div>
       </header>
       <section className="py-8">
         {error && <p role="alert" className="rounded-lg border border-red-900 bg-red-950/40 p-4 text-sm text-red-200">{error}</p>}
