@@ -104,3 +104,74 @@ test("production login issues a session accepted by authenticated APIs", { skip:
   const activeAdminApiResponse = await fetch(`${origin}/api/admin/users`, { headers: { Cookie: activeAdminCookieHeader, Origin: origin } });
   assert.equal(activeAdminApiResponse.status, 200, `active admin /api/admin/users must return 200 (status ${activeAdminApiResponse.status})`);
 });
+
+test("reader pages render instead of the prerender error page", { skip: !origin }, async context => {
+  if (!origin) return;
+  assertIsolatedTestEnvironment();
+  const db = testPrismaClient();
+  const stamp = randomUUID();
+  const owner = await db.user.create({ data: { name: "Reader smoke owner", email: `reader-owner-${stamp}@example.invalid`, role: "GM" } });
+  const player = await db.user.create({ data: { name: "Reader smoke player", email: `reader-player-${stamp}@example.invalid`, role: "PLAYER" } });
+  const world = await db.world.create({ data: { ownerId: owner.id, title: "Reader smoke world", slug: `reader-smoke-${stamp}`, isPublic: true } });
+  const article = await db.article.create({
+    data: {
+      worldId: world.id,
+      slug: `reader-smoke-article-${stamp}`,
+      title: "Reader smoke article",
+      publicationStatus: "PUBLISHED",
+      visibility: "PUBLIC",
+      contentHtml: "<p>Reader smoke body</p>",
+    },
+  });
+  await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "articles", resourceId: article.id, mode: "PUBLIC", createdById: owner.id } });
+  await db.worldMember.create({ data: { worldId: world.id, userId: player.id, role: "PLAYER", status: "ACTIVE" } });
+  const token = randomBytes(32).toString("base64url");
+  await db.authSession.create({
+    data: { userId: player.id, tokenHash: createHash("sha256").update(token).digest("hex"), expiresAt: new Date(Date.now() + 3_600_000) },
+  });
+  context.after(async () => {
+    await db.article.deleteMany({ where: { worldId: world.id } });
+    await db.audiencePolicy.deleteMany({ where: { worldId: world.id } });
+    await db.worldMember.deleteMany({ where: { worldId: world.id } });
+    await db.world.deleteMany({ where: { id: world.id } });
+    for (const userId of [player.id, owner.id]) await deleteTestUsers(db, userId);
+    await db.$disconnect();
+  });
+
+  const ownerToken = randomBytes(32).toString("base64url");
+  await db.authSession.create({
+    data: { userId: owner.id, tokenHash: createHash("sha256").update(ownerToken).digest("hex"), expiresAt: new Date(Date.now() + 3_600_000) },
+  });
+
+  const headers = { Cookie: `${SESSION_COOKIE}=${token}` };
+  for (const [path, heading] of [
+    [`/c/${world.slug}`, "Reader smoke world"],
+    [`/c/${world.slug}/a/${article.slug}`, "Reader smoke article"],
+    [`/w/${world.slug}`, "Reader smoke world"],
+    [`/w/${world.slug}/a/${article.slug}`, "Reader smoke article"],
+  ] as const) {
+    const response = await fetch(`${origin}${path}`, { headers });
+    const html = await response.text();
+    assert.equal(response.status, 200, `${path} returned ${response.status}`);
+    assert.doesNotMatch(html, /__next_error__/, `${path} rendered Next's prerender error page`);
+    assert.match(html, new RegExp(heading), `${path} must render ${heading}`);
+  }
+
+  // Authenticated surfaces that also query the database must not fall back to
+  // the prerender error page either.
+  for (const path of ["/", "/player"]) {
+    const response = await fetch(`${origin}${path}`, { headers: { Cookie: `${SESSION_COOKIE}=${ownerToken}` }, redirect: "manual" });
+    const html = await response.text();
+    assert.equal(response.status, 200, `${path} returned ${response.status}`);
+    assert.doesNotMatch(html, /__next_error__/, `${path} rendered Next's prerender error page`);
+    assert.match(html, /<title>WorldForge/, `${path} must render the application shell`);
+  }
+
+  for (const path of [`/w/${world.slug}`, `/w/${world.slug}/a/${article.slug}`]) {
+    const response = await fetch(`${origin}${path}`);
+    const html = await response.text();
+    assert.equal(response.status, 200, `${path} returned ${response.status} anonymously`);
+    assert.doesNotMatch(html, /__next_error__/, `${path} rendered Next's prerender error page anonymously`);
+    assert.match(html, /Reader smoke (?:world|article)/, `${path} must render its content anonymously`);
+  }
+});

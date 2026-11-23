@@ -3,7 +3,7 @@ export const ensureStatic = false;
 export const instant = false;
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { resolveActor, readableWhere } from "@/lib/access";
+import { resolvePageActor, readableWhere } from "@/lib/access";
 import { parseAppearance } from "@/lib/world-appearance";
 import { WorldPresentation } from "@/components/public/WorldPresentation";
 import { publicImage } from "@/lib/public-content";
@@ -21,7 +21,7 @@ import { ReaderImageCredits, ReaderAdjacentCredit } from "@/components/public/Re
 
 async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
   // Resolve the actor (supports PREVIEW mode via wf_preview cookie)
-  const actor = await resolveActor();
+  const actor = await resolvePageActor();
   // Find the world by slug
   const world = await prisma.world.findFirst({
     where: { slug: worldSlug, deletedAt: null },

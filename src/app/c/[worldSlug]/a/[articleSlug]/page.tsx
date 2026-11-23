@@ -3,7 +3,7 @@ export const ensureStatic = false;
 export const instant = false;
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { resolveActor, requireReadableResource, readableWhere } from "@/lib/access";
+import { resolvePageActor, requireReadableResource, readableWhere } from "@/lib/access";
 import { publicDocument, parseArticleDocument, documentReferences } from "@/lib/public-content";
 import { categoryAncestors } from "@/lib/category-tree";
 import { parseAppearance } from "@/lib/world-appearance";
@@ -29,7 +29,7 @@ import type { ArticleTemplateType } from "@/types";
 
 async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: string; articleSlug: string }> }) {
   const { worldSlug, articleSlug } = await params;
-  const actor = await resolveActor();
+  const actor = await resolvePageActor();
 
   // Find world by slug
   const world = await prisma.world.findFirst({
