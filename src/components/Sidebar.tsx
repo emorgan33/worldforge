@@ -62,7 +62,7 @@ interface SidebarProps {
 }
 
 function navItemClass(active: boolean, mobile = false) {
-  return `group relative flex min-h-[42px] w-full items-center rounded-lg border-l-[3px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight-300 ${mobile ? "gap-2 px-1 text-xs" : "gap-3 px-3 text-[13px]"} ${active ? "border-l-violet-400 bg-[#2b2850] text-[#f1f2f5]" : "border-l-transparent text-[#a9afbb] hover:bg-app-surface hover:text-app-text-strong"}`;
+  return `group relative flex min-h-[42px] w-full items-center rounded-lg border-l-[3px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight-300 ${mobile ? "gap-2 px-1 text-xs" : "gap-3 px-3 text-[13px]"} ${active ? "border-l-highlight-400 bg-[#2b2850] text-[#f1f2f5]" : "border-l-transparent text-[#a9afbb] hover:bg-app-surface hover:text-app-text-strong"}`;
 }
 
 export function Sidebar({

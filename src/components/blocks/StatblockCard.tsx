@@ -11,7 +11,7 @@ export function StatblockCard({ block }: { block: RpgBlockItem }) {
   const values = attributes && typeof attributes === "object" ? attributes as Record<string, unknown> : null;
   const traitTags = pf ? [...new Set([statText(stats.rarity), statText(stats.size), ...statText(stats.traitsText).split(/[,;]/)].map(tag => tag.trim()).filter(tag => tag && tag.toLowerCase() !== "common"))].slice(0, 20) : [];
   const actions = Array.isArray(stats.actions) ? stats.actions : [];
-  return <article data-rules-style={pf ? "pf2-remaster" : isDnd(block.system) ? "dnd-2014" : undefined} aria-label={`${block.name} statblock`} className={`statblock-card rounded-xl border border-primary-800/50 bg-[#201c17] p-6 text-primary-50 shadow-xl ${pf ? "border-t-4 border-t-red-700" : "border-t-4 border-t-amber-500"}`}>
+  return <article data-rules-style={pf ? "pf2-remaster" : isDnd(block.system) ? "dnd-2014" : undefined} aria-label={`${block.name} statblock`} className={`statblock-card rounded-xl border border-primary-800/50 bg-[#201c17] p-6 text-primary-50 shadow-xl ${pf ? "border-t-4 border-t-danger-700" : "border-t-4 border-t-primary-500"}`}>
     <div className="statblock-heading flex flex-wrap items-start justify-between gap-3 border-b border-primary-800/60 pb-4">
       <div className="flex min-w-0 items-center gap-3"><RulesEmblem system={block.system} /><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-widest text-primary-500">{systemProfile(block.system).short}{pf ? " · Remaster" : ""}</p><h3 className="mt-1 font-serif text-3xl text-primary-100">{block.name}</h3></div></div>
       <span className="rounded border border-primary-700/60 px-2 py-1 text-xs font-bold text-primary-300">{blockRating(block)}</span>
