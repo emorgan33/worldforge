@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@prisma/config>deepmerge-ts': 8.0.2
+  '@prisma/config>effect': 3.22.1
 
 importers:
 
@@ -1622,8 +1623,8 @@ packages:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
     engines: {node: '>= 0.4'}
 
-  effect@3.21.0:
-    resolution: {integrity: sha512-PPN80qRokCd1f015IANNhrwOnLO7GrrMQfk4/lnZRE/8j7UPWrNNjPV0uBrZutI/nHzernbW+J0hdqQysHiSnQ==}
+  effect@3.22.1:
+    resolution: {integrity: sha512-TNoXushmPOBAjJlthF5d2QwnX2xBPEtcNJr5XKNKbRLbDvBcOYkXlYDfvGfSA0zriwLFuCll5MDtNMAdZL17PQ==}
 
   electron-to-chromium@1.5.478:
     resolution: {integrity: sha512-pftG+ma5Lm8O6/p45bhYT6StBN5ziQymaRzmCZwFl8DwWHKPPD93FdOmP1aqftcepolQYvrcyTLa17kE8Yf+jg==}
@@ -3565,7 +3566,7 @@ snapshots:
     dependencies:
       c12: 3.1.0
       deepmerge-ts: 8.0.2
-      effect: 3.21.0
+      effect: 3.22.1
       empathic: 2.0.0
     transitivePeerDependencies:
       - magicast
@@ -4381,7 +4382,7 @@ snapshots:
       es-errors: 1.3.0
       gopd: 1.2.0
 
-  effect@3.21.0:
+  effect@3.22.1:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 3.23.2

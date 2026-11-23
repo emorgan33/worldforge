@@ -87,7 +87,8 @@ as **AMD64-only**. The `0.4.5` multi-platform publication was verified by its
 `sha256:a589fbfeeeaad33a87f88bf4e075fe84d2c165166162270c460049bf0b463a0e`,
 and `linux/arm64` child
 `sha256:d40a154145e28d3035bb3d93c8f03d3230a8483656863f750d945727998f7efe`.
-The `0.4.5` publication is GitHub's current stable/`latest` release, and a clean
-pull-only install of the published image passed login and account setup. The
-`0.4.6` notes are prepared for publication; check the GitHub release and its
-workflow before relying on an image.
+The `0.4.5` publication was verified by its workflow, including a clean
+pull-only install that passed login and account setup. The `0.4.6` image
+publication was blocked by a fixable HIGH dependency finding; no `0.4.6` image
+was published. The `0.4.7` notes are prepared for publication; check the GitHub
+release and its workflow before relying on an image.
