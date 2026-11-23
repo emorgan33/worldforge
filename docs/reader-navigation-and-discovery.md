@@ -32,6 +32,7 @@ Pages project credits only for artwork actually used by readable covers, portrai
 - Ordering and route helpers: `src/lib/category-tree.ts`.
 - Public reader data: `src/lib/public-world.ts` and `src/app/w/[worldSlug]/`.
 - Campaign reader data: `src/app/c/[worldSlug]/`.
+- Database-backed pages render at request time through one shared boundary: `requireRequestTime()` in `src/lib/request-time.ts`. `publicWorld()` and `resolvePageActor()` (used by both `/c/` pages) call it before querying, and the workspace, player portal, and admin layout call it at their entry points. better-sqlite3 executes synchronously, so without the boundary the partial-prerender shell runs the queries and Next aborts the route on the `new Date()` in Prisma's clock read (#39). Do not call it from Route Handlers, which have no render scope. Regression coverage is the reader case in `tests/production-auth-smoke.test.ts`, which runs against `next start`; `next dev` does not reproduce the failure.
 - Author workspace navigation: `src/components/AuthorWorkspace.tsx` and `src/components/Sidebar.tsx`.
 - Focused regressions: `tests/reader-navigation.test.tsx`, `tests/stock-credits.test.ts`.
 - Server-backed credit/authorization check: `tests/reader-credits-api.test.tsx` (skips without `WORLDFORGE_TEST_ORIGIN`).

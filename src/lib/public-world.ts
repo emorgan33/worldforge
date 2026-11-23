@@ -1,3 +1,4 @@
+import { requireRequestTime } from "./request-time";
 import { parseAppearance } from "./world-appearance";
 import { prisma } from "./db";
 import { publicArticleFilter } from "./publication";
@@ -13,6 +14,7 @@ import { categoryAncestors } from "./category-tree";
 import type { PrismaClient } from "@prisma/client";
 
 export async function publicWorld(slug: string) {
+  await requireRequestTime();
   const world = await prisma.world.findFirst({ where: { slug, isPublic: true, deletedAt: null }, select: { id: true, slug: true, title: true, system: true, description: true, coverImage: true, coverImageAlt: true, bannerImage: true, bannerImageAlt: true, appearance: true } });
   if (!world) return null;
   const [categories, articles, assets] = await Promise.all([

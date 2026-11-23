@@ -3,6 +3,7 @@ import { prisma } from "./db";
 import { tokenHash } from "./passwords";
 import type { Actor, ResourceKind, ResourceRef } from "./access-types";
 import { AccessError, sessionUser } from "./authorization-core";
+import { requireRequestTime } from "./request-time";
 export { AccessError, resolveResourceWorld, sameOrigin } from "./authorization-core";
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,17 @@ export async function resolveActor(): Promise<Actor> {
 
   if (!identity) return { kind: "ANONYMOUS", userId: null };
   return { kind: "OWNER_GM", userId: identity.id };
+}
+
+/**
+ * Page-only actor resolution. Server Components that resolve a viewer must
+ * render at request time: the session lookup and the synchronous SQLite driver
+ * would otherwise run inside the partial-prerender shell and abort the route
+ * (#39). Route Handlers keep using resolveActor().
+ */
+export async function resolvePageActor(): Promise<Actor> {
+  await requireRequestTime();
+  return resolveActor();
 }
 
 // ---------------------------------------------------------------------------

@@ -1,9 +1,11 @@
+import { requireRequestTime } from "@/lib/request-time";
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-auth";
 
 async function AdminAccess({ children }: { children: React.ReactNode }) {
+  await requireRequestTime();
   const auth = await requireAdmin();
   if (!auth.ok) {
     if (auth.failure.status === 401) redirect("/login");
