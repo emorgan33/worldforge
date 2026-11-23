@@ -29,7 +29,7 @@ container=$(docker compose ps -q worldforge)
 test -n "$container"
 docker compose stop worldforge
 mkdir -p "backups/$stamp/assets"
-docker run --rm --volumes-from "$container" \
+docker run --rm --user 0:0 --volumes-from "$container" \
   -v "$PWD/backups/$stamp:/backup" \
   --entrypoint sh worldforge:local -c \
   'sqlite3 /data/worldforge.db ".backup /backup/worldforge.db" && test "$(sqlite3 /backup/worldforge.db "PRAGMA integrity_check;")" = ok'
@@ -38,6 +38,13 @@ printf 'WorldForge stopped backup %s\n' "$stamp" > "backups/$stamp/manifest.txt"
 tar -czf "backups/worldforge-$stamp.tar.gz" -C backups "$stamp"
 docker compose start worldforge
 ```
+
+The helper runs as container root (`--user 0:0`) so it can write the
+bind-mounted backup directory, which is owned by your account. If you see
+`cannot open "/backup/worldforge.db"`, that permission mismatch is the cause.
+Root also covers a database whose owner differs from the image's UID `10001`.
+On a rootful Docker daemon the snapshot is owned by container root and readable;
+the remaining steps only read it.
 
 If any backup command fails, keep WorldForge stopped until you either complete
 the backup or deliberately remove the partial output and restart the service.
@@ -99,6 +106,9 @@ storage maintenance.
 
 **Source owner:** `wiki/Backup-and-Restore.md`; adapted from
 `docs/backup-restore.md`.
-**Verified against:** WorldForge commit `fdff259` (October 31, 2026).
-Published-image command adaptations match packaging implementation `12d0bff`;
-backup/restore itself was not rerun for this documentation update.
+**Verified against:** WorldForge commit `d0721f1` (November 23, 2026).
+The stopped backup procedure was rerun on a local Compose installation at this
+commit: snapshot, integrity check, assets copy, archive verification, and
+restart. The restore command was exercised against a disposable volume, not a
+production installation. Published-image command adaptations match packaging
+implementation `12d0bff`.

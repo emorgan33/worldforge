@@ -32,7 +32,7 @@ container=$(docker compose ps -q worldforge)
 test -n "$container"
 docker compose stop worldforge
 mkdir -p "backups/$stamp/assets"
-docker run --rm --volumes-from "$container" \
+docker run --rm --user 0:0 --volumes-from "$container" \
   -v "$PWD/backups/$stamp:/backup" \
   --entrypoint sh worldforge:local -c \
   'sqlite3 /data/worldforge.db ".backup /backup/worldforge.db" && test "$(sqlite3 /backup/worldforge.db "PRAGMA integrity_check;")" = ok'
@@ -45,10 +45,17 @@ docker compose start worldforge
 SQLite's `.backup` command opens the stopped database through SQLite, allowing
 hot-journal recovery and producing a consistent snapshot instead of copying a
 possibly incomplete main file. The command checks the snapshot's integrity
-before the assets are added. Keep the database, assets, and manifest together
-in the archive. Store copies outside the host that runs WorldForge. If the
-backup command fails, leave the service stopped until the copy is complete or
-remove the partial directory and start it again. For local non-Compose installs,
+before the assets are added. The helper runs as container root (`--user 0:0`)
+because the image's non-root user cannot write the bind-mounted backup directory,
+which is owned by your account; the command then fails with
+`cannot open "/backup/worldforge.db"`. Root also covers a database whose owner
+differs from the image's UID `10001`. With a rootless Docker daemon the snapshot
+stays owned by you; with a rootful daemon it is owned by container root and
+readable, and the remaining steps only read it. Keep the database, assets, and
+manifest together in the archive. Store copies outside the host that runs
+WorldForge. If the backup command fails, leave the service stopped until the
+copy is complete or remove the partial directory and start it again. For local
+non-Compose installs,
 stop the server service first, resolve `DATABASE_URL` to `DATABASE_FILE`, and
 archive the SQLite snapshot and the complete `WORLDFORGE_ASSET_DIR` together:
 
@@ -77,10 +84,10 @@ docker compose stop worldforge
 mkdir -p restore-work
 tar -xzf backups/worldforge-TIMESTAMP.tar.gz -C restore-work
 container=$(docker compose ps -aq worldforge | head -n 1)
-docker run --rm --volumes-from "$container" \
+docker run --rm --user 0:0 --volumes-from "$container" \
   -v "$PWD/restore-work/TIMESTAMP:/restore:ro" \
   --entrypoint sh worldforge:local -c \
-  'sqlite3 /restore/worldforge.db "PRAGMA integrity_check;" | grep -qx ok && cp /restore/worldforge.db /data/worldforge.db.restore && rm -f /data/worldforge.db-journal /data/worldforge.db-wal /data/worldforge.db-shm && mv /data/worldforge.db.restore /data/worldforge.db && rm -rf /data/assets && mkdir -p /data/assets && cp -a /restore/assets/. /data/assets/'
+  'sqlite3 /restore/worldforge.db "PRAGMA integrity_check;" | grep -qx ok && cp /restore/worldforge.db /data/worldforge.db.restore && rm -f /data/worldforge.db-journal /data/worldforge.db-wal /data/worldforge.db-shm && mv /data/worldforge.db.restore /data/worldforge.db && rm -rf /data/assets && mkdir -p /data/assets && cp -a /restore/assets/. /data/assets/ && chown -R 10001:10001 /data/worldforge.db /data/assets && find /data/assets -type d -exec chmod 700 {} + && find /data/assets -type f -exec chmod 600 {} + && chmod 600 /data/worldforge.db'
 docker compose start worldforge
 ```
 
@@ -88,8 +95,14 @@ If the image tag differs from `worldforge:local`, substitute the image used by
 the Compose service. The integrity check runs on the staged backup before it
 replaces the database. The command removes stale rollback journals and WAL/SHM
 files before atomically replacing the main database file, so a leftover journal
-cannot replay over the restored copy. Startup applies pending Prisma migrations;
-check the logs and verify the restored worlds and images before reopening access.
+cannot replay over the restored copy. The helper runs as container root for two
+reasons: extracted assets keep the mode `0600` recorded by the backup, which the
+image's non-root user cannot read, and the restore must write the extracted
+files back with the ownership the server expects. The final `chown` and mode
+resets give `/data` the UID/GID `10001` database and assets the running server
+requires; without them the server cannot open its restored data. Startup applies
+pending Prisma migrations; check the logs and verify the restored worlds and
+images before reopening access.
 
 For a local install, resolve `DATABASE_FILE` and `WORLDFORGE_ASSET_DIR`, then
 stop the process. This stages the checked database beside the live file so the
