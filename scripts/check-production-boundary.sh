@@ -23,6 +23,13 @@ if [[ "$url" != https://* ]]; then
   exit 1
 fi
 
+loopback_host() {
+  case "$1" in
+    127.*|::1|localhost) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 loopback_address() {
   case "$1" in
     127.*|\[::1\]:*|localhost:*) return 0 ;;
@@ -42,7 +49,7 @@ if command -v docker >/dev/null 2>&1 && docker inspect "$container" >/dev/null 2
     for entry in "${bindings[@]}"; do
       ip="${entry%%|*}"
       port="${entry#*|}"
-      if loopback_address "${ip}:${port}"; then
+      if loopback_host "$ip"; then
         ok "container port 3033 binding ${ip:-*}:${port} is loopback-only"
       else
         fail "container publishes 3033 on ${ip:-*}:${port}, which is not loopback"

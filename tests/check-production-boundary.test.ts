@@ -59,6 +59,16 @@ test("the boundary check passes a loopback, proxied, healthy deployment", () => 
   } finally { h.cleanup(); }
 });
 
+test("IPv6-only and dual loopback bindings pass", () => {
+  for (const bindings of ["::1|3033", "127.0.0.1|3033\\n::1|3033"]) {
+    const h = harness();
+    try {
+      const result = h.run("https://example.test", { STUB_BINDINGS_LINES: bindings });
+      assert.equal(result.status, 0, result.stderr);
+    } finally { h.cleanup(); }
+  }
+});
+
 test("a mixed loopback and wildcard binding fails the boundary check", () => {
   const h = harness();
   try {

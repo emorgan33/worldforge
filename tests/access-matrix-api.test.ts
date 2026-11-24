@@ -43,6 +43,7 @@ test("the campaign access matrix leaks no private resource to the wrong caller",
   const otherWorld = await db.world.create({ data: { ownerId: owner.id, title: "Other matrix world", slug: `matrix-other-${stamp}` } });
   const otherArticle = await db.article.create({ data: { worldId: otherWorld.id, slug: `other-${stamp}`, title: "Other world harbor" } });
   await db.audiencePolicy.create({ data: { worldId: otherWorld.id, resourceKind: "articles", resourceId: otherArticle.id, mode: "PUBLIC", createdById: owner.id } });
+  await db.worldMember.create({ data: { worldId: otherWorld.id, userId: member.id, role: "PLAYER", status: "ACTIVE" } });
   await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "articles", resourceId: shared.id, mode: "PUBLIC", createdById: owner.id } });
   const memberPolicy = await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "articles", resourceId: memberOnly.id, mode: "PLAYER_SNAPSHOT", createdById: owner.id } });
   await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "assets", resourceId: asset.id, mode: "PUBLIC", createdById: owner.id } });
@@ -119,6 +120,10 @@ test("the campaign access matrix leaks no private resource to the wrong caller",
   const activeExport = await fetch(`${origin}/api/worlds/${world.id}/export`, { headers: { Cookie: ownerCookie } });
   assert.equal(activeExport.status, 200, "the owner can export an active world");
   assert.match(activeExport.headers.get("content-disposition") ?? "", /attachment/);
+
+  // The member belongs to both worlds; a preview stays scoped to one.
+  assert.equal((await fetch(`${origin}/api/c/${otherWorld.slug}/search?q=other`, { headers: { Cookie: memberCookie } })).status, 200);
+  assert.match(await fetch(`${origin}/c/${otherWorld.slug}/a/${otherArticle.slug}`, { headers: { Cookie: memberCookie } }).then(response => response.text()), /Other world harbor/);
 
   const directBefore = await fetch(`${origin}/c/${world.slug}/a/${shared.slug}`, { headers: { Cookie: memberCookie } });
   assert.equal(directBefore.status, 200);

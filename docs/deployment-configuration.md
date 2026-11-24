@@ -70,6 +70,10 @@ It verifies:
 - an anonymous private API call is rejected and marked `Cache-Control:
   no-store`.
 
+Run it on the Docker host: it requires Docker access and `ss`. On platforms
+whose Docker publishes only through NAT without a local listener, the listener
+check fails by design rather than claiming evidence it could not collect.
+
 On this installation (November 24, 2026) the check passed: the app port was
 loopback-only, Caddy terminated TLS 1.3 with a valid `*.deskt.theworkpc.com`
 certificate, `header_up X-WorldForge-Client-IP {remote_host}` replaced the
