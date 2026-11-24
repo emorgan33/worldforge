@@ -262,6 +262,7 @@ surface):
 | Daylight white on primary-600 `#973c00` | 7.1:1 |
 | Daylight white on highlight-400 `#7f22fe` | 5.9:1 |
 | Daylight white on sidebar accent `#7008e7` | 7.3:1 |
+| Daylight sidebar control outline `#8a8781` on `#ffffff` | 3.6:1 |
 | Daylight violet-900 on violet-100 active row | 9.2:1 |
 | Pathfinder `#181818` on `#ede3c7` | 13.9:1 |
 | Pathfinder muted `#515c63` on `#ffffff` | 6.9:1 |
@@ -273,7 +274,10 @@ surface):
 
 The Pathfinder reader border `#644117` is 7.1:1 on its paper and can serve as a
 control outline. The D&D reader border `#c0ad6a` is 1.8:1 on its paper and is
-decorative only.
+decorative only. Night watch's sidebar search field edge (`#303540` on
+`#181b22`) is a pre-existing 1.27:1; default parity forbids changing it here, so
+it is recorded rather than fixed. Daylight uses its strong outline for the same
+controls.
 
 ### 8. Naming and trademark
 

@@ -183,6 +183,7 @@ body {
   --aw-accent-soft-text: light-dark(var(--color-violet-900), #f1f2f5);
   --aw-on-accent: light-dark(#ffffff, #111318);
   --aw-sidebar-border: light-dark(#d6d3ce, #303540);
+  --aw-sidebar-control-border: light-dark(#8a8781, #303540);
   --aw-sidebar-muted: light-dark(#5c5952, #a9afbb);
   --aw-sidebar-control: light-dark(#ecebe8, #1d212a);
   background-color: var(--aw-canvas);

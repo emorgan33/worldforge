@@ -68,12 +68,16 @@ const workspaceAccents: Record<string, Record<string, string>> = {
     "on-accent": "#111318",
     soft: "#2b2850",
     "soft-text": "#f1f2f5",
+    sidebar: "#181b22",
+    "control-border": "#303540",
   },
   daylight: {
     accent: "#7008e7",
     "on-accent": "#ffffff",
     soft: "#ede9fe",
     "soft-text": "#4c1d95",
+    sidebar: "#ffffff",
+    "control-border": "#8a8781",
   },
 };
 
@@ -154,3 +158,18 @@ for (const [name, fills] of Object.entries(accentFills)) {
     assert.ok(icon >= 3, `${name}: active row icon is ${icon.toFixed(2)}:1`);
   });
 }
+
+test("daylight sidebar controls meet the 3:1 outline floor", () => {
+  const value = ratio(workspaceAccents.daylight["control-border"], workspaceAccents.daylight.sidebar);
+  assert.ok(value >= 3, `daylight sidebar control outline is ${value.toFixed(2)}:1`);
+});
+
+/**
+ * Night watch's sidebar search field has always used #303540 on #181b22
+ * (1.27:1). Default parity forbids changing it with this palette work; the
+ * measurement is recorded here so a future accessibility pass has the number.
+ */
+test("night watch sidebar control outline keeps its documented pre-existing value", () => {
+  const value = ratio(workspaceAccents.nightWatch["control-border"], workspaceAccents.nightWatch.sidebar);
+  assert.ok(value > 1 && value < 3, `night watch sidebar control outline is ${value.toFixed(2)}:1`);
+});

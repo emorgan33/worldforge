@@ -71,11 +71,13 @@ test("production login issues a session accepted by authenticated APIs", { skip:
     const aside = document.querySelector("aside");
     const accent = Array.from(document.querySelectorAll("button")).find(button => button.textContent?.trim() === "New article");
     const navLabel = Array.from(aside?.querySelectorAll("nav button span") ?? []).find(span => span.textContent === "Articles");
-    const entries: Array<[string, Element | null | undefined, "backgroundColor" | "color"]> = [
+    const search = aside?.querySelector('button[aria-label="Search this world"]');
+    const entries: Array<[string, Element | null | undefined, "backgroundColor" | "color" | "borderTopColor"]> = [
       ["background", aside, "backgroundColor"],
       ["accent", accent, "backgroundColor"],
       ["accentText", accent, "color"],
       ["navLabel", navLabel, "color"],
+      ["searchBorder", search, "borderTopColor"],
     ];
     const result: Record<string, string | null> = {};
     for (const [key, element, property] of entries) {
@@ -93,6 +95,7 @@ test("production login issues a session accepted by authenticated APIs", { skip:
   assert.equal(sidebar.accent, "rgb(112, 8, 231)", "Daylight sidebar action must use the dark-violet accent");
   assert.equal(sidebar.accentText, "rgb(255, 255, 255)", "Daylight sidebar action label must be white");
   assert.equal(sidebar.navLabel, "rgb(92, 89, 82)", "Daylight sidebar labels must use the light-palette muted ink");
+  assert.equal(sidebar.searchBorder, "rgb(138, 135, 129)", "Daylight sidebar controls must use the strong outline, not the decorative divider");
   await workspace.close();
 
   const anonPage = await browser.newPage();
