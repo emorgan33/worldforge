@@ -45,6 +45,20 @@ test("match system follows the operating system preference", async ({ page }) =>
   expect(light).toBe("rgb(246, 245, 243)");
 });
 
+test("the chosen theme outranks the operating system background", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/login");
+
+  await page.getByLabel("Interface theme").selectOption("night-watch");
+  const dark = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+
+  await page.getByLabel("Interface theme").selectOption("daylight");
+  const light = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+
+  expect(light).toBe("rgb(246, 245, 243)");
+  expect(dark).not.toBe(light);
+});
+
 test("invalid theme values are rejected by the preference route", async ({ request, baseURL }) => {
   const response = await request.post(`${baseURL}/api/preferences/theme`, {
     data: { theme: "zinc" },

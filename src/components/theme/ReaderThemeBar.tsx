@@ -8,7 +8,7 @@ import { currentTheme } from "@/lib/theme-server";
 export async function ReaderThemeBar({ className = "" }: { className?: string }) {
   const theme = await currentTheme();
   return (
-    <div className={`flex justify-end px-3 pt-3 ${className}`}>
+    <div className={`flex justify-end bg-app-canvas px-3 pt-3 ${className}`}>
       <ThemeSwitcher current={theme} />
     </div>
   );

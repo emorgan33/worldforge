@@ -110,16 +110,9 @@
   color-scheme: light dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--color-app-canvas);
+  color: var(--color-app-text);
   font-family: Arial, Helvetica, sans-serif;
 }
 
