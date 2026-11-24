@@ -17,6 +17,7 @@ import { ReaderMobileBrowse } from "@/components/public/ReaderMobileBrowse";
 import { ReaderImageCredits, ReaderAdjacentCredit } from "@/components/public/ReaderImageCredits";
 import { imageAssetId } from "@/lib/assets";
 import { resolvePlacementAlt } from "@/lib/image-placement";
+import { ReaderThemeBar } from "@/components/theme/ReaderThemeBar";
 
 async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; articleSlug: string }> }) {
   const { worldSlug, articleSlug } = await params; const data = await publicArticle(worldSlug, articleSlug); if (!data) notFound();
@@ -34,7 +35,7 @@ async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; 
     { label: summary.title },
   ];
 
-  return <WorldPresentation appearance={world.appearance}><main className="space-y-7">
+  return <><ReaderThemeBar /><WorldPresentation appearance={world.appearance}><main className="space-y-7">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-app-border pb-4">
       <ReaderBreadcrumbs items={breadcrumbs} />
       <div className="sm:w-64">
@@ -80,7 +81,7 @@ async function ArticleReader({ params }: { params: Promise<{ worldSlug: string; 
         <ReaderImageCredits credits={data.credits} className="rounded-xl border border-app-border/80 bg-app-canvas/40 p-4" />
       </aside>
     </div>
-  </main></WorldPresentation>;
+  </main></WorldPresentation></>;
 }
 export default function PublicArticlePage(props: { params: Promise<{ worldSlug: string; articleSlug: string }> }) { return <Suspense fallback={<p className="p-8 text-app-muted">Opening article…</p>}><ArticleReader {...props} /></Suspense>; }
 

@@ -34,6 +34,15 @@ test("production login issues a session accepted by authenticated APIs", { skip:
   assert.ok(cookie?.startsWith(`${SESSION_COOKIE}=`), "login must set the session cookie");
   const cookieHeader = cookie!;
 
+  const themeChange = await fetch(`${origin}/api/preferences/theme`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: origin, Cookie: cookieHeader },
+    body: JSON.stringify({ theme: "daylight" }),
+  });
+  assert.equal(themeChange.status, 200, await themeChange.text());
+  assert.match(themeChange.headers.get("set-cookie") ?? "", /wf_theme=daylight/);
+  assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { theme: true } })).theme, "daylight");
+
   const session = await fetch(`${origin}/api/auth/session`, { headers: { Cookie: cookieHeader } });
   assert.equal(session.status, 200);
   assert.equal((await session.json()).user.id, user.id);
@@ -45,6 +54,17 @@ test("production login issues a session accepted by authenticated APIs", { skip:
   // browser navigates to the destination. Assert the user-visible result.
   const browser = await chromium.launch({ headless: true });
   context.after(async () => browser.close());
+  const workspace = await browser.newPage();
+  await workspace.context().addCookies([{ name: SESSION_COOKIE, value: cookie.split("=")[1], url: origin, httpOnly: true, sameSite: "Lax" }]);
+  await workspace.goto(`${origin}/`);
+  await workspace.waitForSelector(".author-workspace", { timeout: 20000 });
+  const shellColor = await workspace.evaluate(() => {
+    const shell = document.querySelector(".author-workspace");
+    return shell ? getComputedStyle(shell).backgroundColor : null;
+  });
+  assert.equal(shellColor, "rgb(246, 245, 243)", "Daylight must reach the workspace shell, not only the login page");
+  await workspace.close();
+
   const anonPage = await browser.newPage();
   await anonPage.goto(`${origin}/admin/users`);
   await anonPage.waitForURL(/\/login(?:\?|$)/);
@@ -173,5 +193,15 @@ test("reader pages render instead of the prerender error page", { skip: !origin 
     assert.equal(response.status, 200, `${path} returned ${response.status} anonymously`);
     assert.doesNotMatch(html, /__next_error__/, `${path} rendered Next's prerender error page anonymously`);
     assert.match(html, /Reader smoke (?:world|article)/, `${path} must render its content anonymously`);
+  }
+
+  for (const theme of ["night-watch", "daylight"]) {
+    const response = await fetch(`${origin}/w/${world.slug}`, { headers: { Cookie: `wf_theme=${theme}` } });
+    const html = await response.text();
+    assert.equal(response.status, 200, `/w/${world.slug} returned ${response.status} for ${theme}`);
+    assert.match(html, new RegExp(`data-theme="${theme}"`), `${theme} must be applied to <html>`);
+    assert.match(html, /aria-label="Interface theme"/, `${theme} reader must render the theme control`);
+    assert.match(html, /<div class="flex justify-end bg-app-canvas/, `${theme} reader bar must paint its own themed background`);
+    assert.match(html, /data-world-theme=/, "world presentation must still carry its own theme marker, not the chrome theme");
   }
 });

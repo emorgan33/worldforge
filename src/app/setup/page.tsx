@@ -1,2 +1,4 @@
 import { AuthForm } from "@/components/auth/AuthForm";
-export default function SetupPage() { return <AuthForm setup />; }
+import { ThemeSwitcher } from "@/components/theme/ThemeSwitcher";
+import { currentTheme } from "@/lib/theme-server";
+export default async function SetupPage() { const theme = await currentTheme(); return <><div className="mx-auto flex w-full max-w-md justify-end p-3"><ThemeSwitcher current={theme} /></div><AuthForm setup /></>; }

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { verifyPassword, validPassword } from "@/lib/passwords";
 import { allowLogin, releaseSuccessfulLogin, loginSource } from "@/lib/login-limit";
 import { AccountLifecycleConflictError } from "@/lib/account-lifecycle";
+import { isThemeId, THEME_COOKIE, THEME_COOKIE_MAX_AGE } from "@/lib/theme";
+import { cookies } from "next/headers";
 export async function POST(request: Request) {
   try {
     sameOrigin(request);
@@ -10,7 +12,7 @@ export async function POST(request: Request) {
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase().slice(0, 254) : "";
     const source = loginSource(request);
     if (!await allowLogin(email, source)) return Response.json({ error: "Too many sign-in attempts. Try again in 15 minutes." }, { status: 429, headers: { "Retry-After": "900" } });
-    const user = await prisma.user.findFirst({ where: { email: { equals: email } }, select: { id: true, passwordHash: true, accountVersion: true } });
+    const user = await prisma.user.findFirst({ where: { email: { equals: email } }, select: { id: true, passwordHash: true, accountVersion: true, theme: true } });
     const encoded = user?.passwordHash || `scrypt-v1:${"0".repeat(32)}:${"0".repeat(128)}`;
     const verified = validPassword(body.password) && await verifyPassword(body.password, encoded);
     if (!user?.passwordHash || !verified) {
@@ -18,6 +20,15 @@ export async function POST(request: Request) {
     }
     if (!await issueSession(user.id, request, { passwordHash: user.passwordHash, accountVersion: user.accountVersion })) return Response.json({ error: "Email or password is incorrect." }, { status: 401, headers: { "Cache-Control": "no-store" } });
     await releaseSuccessfulLogin(email, source);
+    if (isThemeId(user.theme)) {
+      (await cookies()).set(THEME_COOKIE, user.theme, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: (process.env.WORLDFORGE_ORIGIN || request.url).startsWith("https:"),
+        path: "/",
+        maxAge: THEME_COOKIE_MAX_AGE,
+      });
+    }
     return Response.json({ success: true }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof AccessError) return Response.json({ error: error.message }, { status: error.status, headers: { "Cache-Control": "no-store" } });

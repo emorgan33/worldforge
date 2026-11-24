@@ -18,6 +18,7 @@ import { resolvePlacementAlt } from "@/lib/image-placement";
 import { readerCreditsForAssets } from "@/lib/stock-credits";
 import { imageAssetId } from "@/lib/assets";
 import { ReaderImageCredits, ReaderAdjacentCredit } from "@/components/public/ReaderImageCredits";
+import { ReaderThemeBar } from "@/components/theme/ReaderThemeBar";
 
 async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
   // Resolve the actor (supports PREVIEW mode via wf_preview cookie)
@@ -85,6 +86,8 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
     ? (await prisma.user.findUnique({ where: { id: actor.userId }, select: { name: true } }))?.name
     : null;
   return (
+    <>
+    <ReaderThemeBar />
     <WorldPresentation appearance={appearance}>
       {/* Preview Banner */}
       {isPreview && (
@@ -141,6 +144,7 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
         <ReaderImageCredits credits={credits} />
       </main>
     </WorldPresentation>
+    </>
   );
 }
 
