@@ -152,10 +152,20 @@ test("players save readable articles and maps privately, per account", { skip: !
   await db.worldMember.updateMany({ where: { worldId: world.id, userId: playerA.id }, data: { status: "ACTIVE" } });
 
   // Selected-player grants hide and restore a bookmark.
-  await db.audiencePolicy.update({ where: { resourceKind_resourceId: { resourceKind: "articles", resourceId: article.id } }, data: { mode: "PLAYER_SNAPSHOT" } });
+  const articlePolicy = await db.audiencePolicy.update({ where: { resourceKind_resourceId: { resourceKind: "articles", resourceId: article.id } }, data: { mode: "PLAYER_SNAPSHOT" } });
   assert.equal((await list(cookieA)).some(item => item.kind === "article"), false);
-  await db.audiencePolicy.update({ where: { resourceKind_resourceId: { resourceKind: "articles", resourceId: article.id } }, data: { mode: "PUBLIC" } });
+  const grant = await db.audienceGrant.create({ data: { policyId: articlePolicy.id, userId: playerA.id, grantedById: owner.id } });
   assert.equal((await list(cookieA)).some(item => item.kind === "article"), true);
+  await db.audienceGrant.delete({ where: { id: grant.id } });
+  assert.equal((await list(cookieA)).some(item => item.kind === "article"), false, "revoking the specific grant hides the bookmark");
+  await db.audienceGrant.create({ data: { policyId: articlePolicy.id, userId: playerA.id, grantedById: owner.id } });
+  assert.equal((await list(cookieA)).some(item => item.kind === "article"), true, "restoring the grant shows it again");
+  await db.audiencePolicy.update({ where: { resourceKind_resourceId: { resourceKind: "articles", resourceId: article.id } }, data: { mode: "PUBLIC" } });
+
+  // An unpublished map cannot be saved.
+  const draftMap = await db.map.create({ data: { worldId: world.id, title: "Unpublished map", imageUrl: `/api/assets/${asset.id}/file`, width: 1000, height: 600 } });
+  await owned(`${origin}/api/resources/maps/${draftMap.id}/audience`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "PUBLIC", userIds: [] }) });
+  assert.equal((await save(cookieA, "map", draftMap.id)).status, 404, "a map without a publication cannot be saved");
 
   // Hidden bookmarks do not consume the visible list limit.
   await db.playerBookmark.createMany({

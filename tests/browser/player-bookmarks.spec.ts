@@ -133,3 +133,40 @@ test("a saved-list failure leaves what's new and worlds usable", async ({ page, 
     await db.$disconnect();
   }
 });
+
+test("a failed save keeps the toggle unsaved and reports the error", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = testPrismaClient();
+  let userId: string | undefined;
+  let worldId: string | undefined;
+  try {
+    const owner = await db.user.create({ data: { name: "Bookmark save retry owner", email: `bookmark-save-retry-owner-${randomUUID()}@example.invalid` } });
+    const session = await playerSession(db);
+    userId = session.user.id;
+    const stamp = randomUUID();
+    const world = await db.world.create({ data: { ownerId: owner.id, title: "Bookmark save retry world", slug: `bookmark-save-retry-${stamp}` } });
+    worldId = world.id;
+    await db.worldMember.create({ data: { worldId: world.id, userId: session.user.id, role: "PLAYER", status: "ACTIVE" } });
+    const article = await db.article.create({ data: { worldId: world.id, slug: `save-retry-${stamp}`, title: "Save retry gazette" } });
+    await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "articles", resourceId: article.id, mode: "PUBLIC", createdById: owner.id } });
+
+    await context.addCookies([{ name: SESSION_COOKIE, value: session.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+    await page.route("**/api/player/bookmarks", route =>
+      route.request().method() === "POST"
+        ? route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Storage is busy." }) })
+        : route.continue());
+    await page.goto(`/c/${world.slug}/a/${article.slug}`);
+
+    const toggle = page.getByRole("button", { name: "Save", exact: true });
+    await toggle.click();
+    await expect(page.getByText("Storage is busy.")).toBeVisible();
+    await expect(toggle).toBeVisible();
+    await expect(page.getByRole("button", { name: "Saved", exact: true })).toHaveCount(0);
+    expect(await db.playerBookmark.count({ where: { userId: session.user.id } })).toBe(0);
+  } finally {
+    if (worldId) await db.world.delete({ where: { id: worldId } }).catch(() => undefined);
+    if (userId) await db.user.delete({ where: { id: userId } }).catch(() => undefined);
+    await db.user.deleteMany({ where: { email: { startsWith: "bookmark-save-retry-owner-" } } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
