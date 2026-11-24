@@ -163,9 +163,22 @@
   .dndIdentity .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dndIdentity .fields > :nth-child(-n+2) { grid-column: span 1; }
 }
+@container (max-width: 480px) {
+  .dndAbilities .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dndAbilities .field > .label,
+  .dndAbilities .field > label {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: keep-all;
+    hyphens: none;
+  }
+  .dndAbilities .field { padding-inline: 8px; }
+}
 @media print {
   .dnd { background: #fff; border: 1px solid #777; border-top: 5px double #333; padding: 10px; box-shadow: none; }
-  .container section.sheet.dnd .section { border-color: #777; }
+  .container section.sheet.dnd .section { border-color: #777; background: #fff; }
   .container section.sheet.dnd .section h3 { background: #eee; color: #222; border-bottom-color: #333; }
   .dnd .field input:not([type=checkbox]), .dnd .field textarea, .dnd .field select, .dnd .readValue { background: #fff; }
+  .dnd .abilities .field { border-color: #777; background: #f2f2f2; box-shadow: inset 0 0 0 2px #fff; }
+  .dnd, .dnd * { color: #222 !important; }
 }

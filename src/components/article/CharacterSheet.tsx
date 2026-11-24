@@ -101,9 +101,11 @@ export function CharacterSheet({ system, metadata, title, onChange, onTitleChang
         <div className={`${styles.mainColumn} ${!pf ? styles.dndMain : ""}`}>
           {section("Defenses & movement")}
           {section("Hit points & resources")}
-          {rowSection("attacks")}
-          {rowSection("resources")}
+          {pf && rowSection("attacks")}
+          {pf && rowSection("resources")}
         </div>
+        {!pf && rowSection("attacks")}
+        {!pf && rowSection("resources")}
         {rowSection("equipment")}
         {section("Equipment notes", styles.wide)}
         {rowSection("features")}
