@@ -28,7 +28,7 @@ export interface WorldSummary {
   categories: CategoryItem[];
 }
 
-export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshBlocks, onOpenBlock, onGuardChange, openSettingsRequest = 0, onScrollToSettings }: {
+export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshBlocks, onOpenBlock, onGuardChange, openSettingsRequest = 0, onScrollToSettings, onSettingsRequestHandled }: {
   world: WorldSummary;
   articles: ArticleListItem[];
   onSave: (world: WorldSummary) => void;
@@ -38,6 +38,7 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
   onGuardChange?: (registration: GuardRegistration) => void;
   openSettingsRequest?: number;
   onScrollToSettings?: (target: HTMLElement) => void;
+  onSettingsRequestHandled?: () => void;
 }) {
   const [campaignSystem, setCampaignSystem] = useState(world.system);
   const [appearance, setAppearance] = useState(() => parseAppearance(world.appearance));
@@ -57,10 +58,11 @@ export function WorldHome({ world, articles, onSave, onSelectArticle, onRefreshB
     if (!openSettingsRequest) return;
     const frame = requestAnimationFrame(() => {
       setEditing(true);
+      onSettingsRequestHandled?.();
       if (settingsSection.current) onScrollToSettings?.(settingsSection.current);
     });
     return () => cancelAnimationFrame(frame);
-  }, [openSettingsRequest, onScrollToSettings]);
+  }, [openSettingsRequest, onScrollToSettings, onSettingsRequestHandled]);
   
   // Build O(1) lookup: categoryId → articles (avoids scanning all articles per category)
   const articlesByCategory = new Map<string | null, ArticleListItem[]>();
