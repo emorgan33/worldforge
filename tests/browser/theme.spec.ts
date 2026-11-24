@@ -17,6 +17,19 @@ test("theme choice applies immediately and survives a reload", async ({ page }) 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "daylight");
 });
 
+test("the control is disabled while a save is in flight", async ({ page }) => {
+  await page.route("**/api/preferences/theme", async route => {
+    await new Promise(resolve => setTimeout(resolve, 600));
+    await route.continue();
+  });
+  await page.goto("/login");
+  const select = page.getByLabel("Interface theme");
+  await select.selectOption("daylight");
+  await expect(select).toBeDisabled();
+  await expect(select).toBeEnabled({ timeout: 5000 });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "daylight");
+});
+
 test("match system follows the operating system preference", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/login");

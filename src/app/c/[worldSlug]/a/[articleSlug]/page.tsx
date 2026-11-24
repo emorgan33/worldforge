@@ -26,6 +26,7 @@ import { projectReaderMetadata } from "@/lib/metadata-references";
 import { BookOpen, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import type { ArticleTemplateType } from "@/types";
+import { ReaderThemeBar } from "@/components/theme/ReaderThemeBar";
 
 async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: string; articleSlug: string }> }) {
   const { worldSlug, articleSlug } = await params;
@@ -139,6 +140,8 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
   ];
 
   return (
+    <>
+    <ReaderThemeBar />
     <WorldPresentation appearance={appearance}>
       {/* Preview Banner */}
       {isPreview && (
@@ -204,6 +207,7 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
         </div>
       </main>
     </WorldPresentation>
+    </>
   );
 }
 

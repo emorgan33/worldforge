@@ -54,6 +54,17 @@ test("production login issues a session accepted by authenticated APIs", { skip:
   // browser navigates to the destination. Assert the user-visible result.
   const browser = await chromium.launch({ headless: true });
   context.after(async () => browser.close());
+  const workspace = await browser.newPage();
+  await workspace.context().addCookies([{ name: SESSION_COOKIE, value: cookie.split("=")[1], url: origin, httpOnly: true, sameSite: "Lax" }]);
+  await workspace.goto(`${origin}/`);
+  await workspace.waitForSelector(".author-workspace", { timeout: 20000 });
+  const shellColor = await workspace.evaluate(() => {
+    const shell = document.querySelector(".author-workspace");
+    return shell ? getComputedStyle(shell).backgroundColor : null;
+  });
+  assert.equal(shellColor, "rgb(246, 245, 243)", "Daylight must reach the workspace shell, not only the login page");
+  await workspace.close();
+
   const anonPage = await browser.newPage();
   await anonPage.goto(`${origin}/admin/users`);
   await anonPage.waitForURL(/\/login(?:\?|$)/);
