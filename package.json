@@ -24,7 +24,8 @@
     "stock-art:advisories": "tsx scripts/apply-stock-advisories.ts",
     "postinstall": "prisma generate",
     "sqlite:build": "node scripts/build-patched-sqlite.mjs",
-    "docs:check": "node scripts/check-wiki.mjs"
+    "docs:check": "node scripts/check-wiki.mjs",
+    "check:tokens": "node scripts/check-theme-tokens.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
