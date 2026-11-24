@@ -139,7 +139,7 @@ export function MapViewer({ snapshot, articleLinks = {} }: { snapshot: MapSnapsh
                     aria-label={`${marker.title}${marker.description ? `: ${marker.description}` : ""}`}
                     title={marker.title}
                     style={{ left: `${marker.x}%`, top: `${marker.y}%`, backgroundColor: marker.color || "#3b82f6" }}
-                    className={`absolute z-20 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 text-white shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-200 ${isSelected ? "border-white ring-2 ring-primary-400" : "border-white/80"}`}
+                    className={`absolute z-20 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 text-app-on-strong shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-200 ${isSelected ? "border-app-on-strong ring-2 ring-primary-400" : "border-app-on-strong/80"}`}
                   >
                     <MapMarkerIcon name={marker.icon} />
                   </button>
@@ -227,7 +227,7 @@ export function MapPreview({ snapshot }: { snapshot: MapSnapshot }) {
         return <span key={element.id} aria-hidden="true" style={{ left: `${geo.x ?? 0}%`, top: `${geo.y ?? 0}%`, color: style.color || "#f8fafc", fontSize: style.fontSize ?? 18 }} className="pointer-events-none absolute z-10 max-w-[40%] -translate-x-1/2 -translate-y-1/2 whitespace-pre-wrap font-semibold drop-shadow">{geo.text || ""}</span>;
       })}
       {markers.map(marker => (
-        <span key={marker.id} title={marker.title} style={{ left: `${marker.x}%`, top: `${marker.y}%`, backgroundColor: marker.color || "#3b82f6" }} className="absolute z-20 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white text-white shadow-lg"><MapMarkerIcon name={marker.icon} /></span>
+        <span key={marker.id} title={marker.title} style={{ left: `${marker.x}%`, top: `${marker.y}%`, backgroundColor: marker.color || "#3b82f6" }} className="absolute z-20 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-app-on-strong text-app-on-strong shadow-lg"><MapMarkerIcon name={marker.icon} /></span>
       ))}
     </div>
   );
