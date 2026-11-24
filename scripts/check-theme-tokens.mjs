@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-const ROOT = "src";
+const ROOT = process.argv[2] ?? "src";
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".css"]);
 const PREFIXES = [
   "bg", "text", "border", "border-l", "border-r", "border-t", "border-b",
@@ -20,12 +20,20 @@ const PATTERNS = [
     name: "palette arbitrary value",
     pattern: new RegExp(String.raw`\[var\(--color-(?:${FAMILIES.join("|")})-\d+\)\]`, "g"),
   },
+  {
+    name: "palette variable reference",
+    pattern: new RegExp(String.raw`var\(\s*--color-(?:${FAMILIES.join("|")})-\d+\s*\)`, "g"),
+  },
 ];
+
+// The token block itself aliases palette variables; nothing else may.
+const ALIAS_FILE = path.join("app", "globals.css");
 
 function sourceFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
     const full = path.join(directory, entry.name);
     if (entry.isDirectory()) return sourceFiles(full);
+    if (!entry.isFile()) return [];
     if (!SOURCE_EXTENSIONS.has(path.extname(entry.name))) return [];
     if (entry.name.includes(".test.")) return [];
     return [full];
@@ -36,6 +44,7 @@ const failures = [];
 for (const file of sourceFiles(ROOT)) {
   const text = readFileSync(file, "utf8");
   for (const { name, pattern } of PATTERNS) {
+    if (name === "palette variable reference" && path.relative(ROOT, file) === ALIAS_FILE) continue;
     for (const match of text.matchAll(pattern)) {
       const line = text.slice(0, match.index).split("\n").length;
       failures.push(`${file}:${line}: ${name} ${JSON.stringify(match[0])}`);
