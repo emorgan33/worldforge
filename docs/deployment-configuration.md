@@ -46,6 +46,35 @@ in `.env`, then run `docker compose pull` and `docker compose up -d --wait`.
 Check startup logs. An older image may not support a migrated database: rollback
 requires restoring its matching database-and-assets backup as well.
 
+### Verify the production boundary
+
+Keep the container port on loopback and put a reverse proxy in front of it. The
+proxy must terminate TLS and **overwrite** `X-WorldForge-Client-IP` with the
+connection's client address; never append or preserve a client-supplied value.
+With `WORLDFORGE_TRUSTED_PROXY=1`, WorldForge refuses login when that header is
+missing and uses only that header for throttling.
+
+Run the read-only boundary check after any proxy, network, or Compose change:
+
+```bash
+bash scripts/check-production-boundary.sh https://worldforge.example.com
+```
+
+It verifies:
+
+- the container publishes `3033` only on `127.0.0.1`/`::1`;
+- `WORLDFORGE_ORIGIN` is HTTPS and `WORLDFORGE_TRUSTED_PROXY=1`;
+- no second server listens on the local preview port (`:3035`);
+- public `/login` responses carry HSTS, CSP `frame-ancestors`, `nosniff`, and
+  `X-Frame-Options: DENY`;
+- an anonymous private API call is rejected and marked `Cache-Control:
+  no-store`.
+
+On this installation (November 24, 2026) the check passed: the app port was
+loopback-only, Caddy terminated TLS 1.3 with a valid `*.deskt.theworkpc.com`
+certificate, `header_up X-WorldForge-Client-IP {remote_host}` replaced the
+header, and private responses were non-cacheable.
+
 ### Verify the running build
 
 Open **Administration → Users** on the public URL. The header shows
