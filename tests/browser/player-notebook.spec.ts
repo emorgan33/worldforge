@@ -83,3 +83,102 @@ test("a notebook load failure leaves the player able to go back", async ({ page,
     await db.$disconnect();
   }
 });
+
+test("the dirty guard blocks the portal link until the player confirms", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = testPrismaClient();
+  let userId: string | undefined;
+  try {
+    const session = await playerSession(db);
+    userId = session.user.id;
+    await context.addCookies([{ name: SESSION_COOKIE, value: session.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+    await page.goto("/player/notebook");
+    await page.getByRole("button", { name: "New note" }).click();
+    const title = page.getByRole("textbox", { name: "Title", exact: true });
+    await title.fill("Keep this draft");
+
+    page.once("dialog", dialog => dialog.dismiss());
+    await page.getByRole("link", { name: "Player portal" }).click();
+    await expect(page).toHaveURL(/\/player\/notebook$/);
+    await expect(title).toHaveValue("Keep this draft");
+
+    page.once("dialog", dialog => dialog.accept());
+    await page.getByRole("link", { name: "Player portal" }).click();
+    await expect(page).toHaveURL(/\/player$/);
+  } finally {
+    if (userId) await db.user.delete({ where: { id: userId } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
+test("the editor is locked while a save is in flight", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = testPrismaClient();
+  let userId: string | undefined;
+  try {
+    const session = await playerSession(db);
+    userId = session.user.id;
+    await context.addCookies([{ name: SESSION_COOKIE, value: session.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+    await page.goto("/player/notebook");
+    await page.route("**/api/player/notes", async route => {
+      if (route.request().method() === "POST") await new Promise(resolve => setTimeout(resolve, 600));
+      await route.continue();
+    });
+    await page.getByRole("button", { name: "New note" }).click();
+    const title = page.getByRole("textbox", { name: "Title", exact: true });
+    const body = page.getByRole("textbox", { name: "Note", exact: true });
+    await title.fill("Slow save");
+    await body.fill("Typed before the delay.");
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect(title).toBeDisabled();
+    await expect(body).toBeDisabled();
+    await expect(page.getByText("Saved.")).toBeVisible();
+    await expect(title).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Save changes" })).toBeVisible();
+    expect(await db.playerNote.count({ where: { userId: session.user.id } })).toBe(1);
+  } finally {
+    if (userId) await db.user.delete({ where: { id: userId } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
+test("a successful create is not duplicated when the list refresh fails", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = testPrismaClient();
+  let userId: string | undefined;
+  try {
+    const session = await playerSession(db);
+    userId = session.user.id;
+    await context.addCookies([{ name: SESSION_COOKIE, value: session.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+    await page.goto("/player/notebook");
+    let afterCreate = false;
+    let failedRefresh = false;
+    await page.route("**/api/player/notes", async route => {
+      const method = route.request().method();
+      if (method === "POST") {
+        afterCreate = true;
+        await route.continue();
+        return;
+      }
+      if (method === "GET" && afterCreate && !failedRefresh) {
+        failedRefresh = true;
+        await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Storage is busy." }) });
+        return;
+      }
+      await route.continue();
+    });
+    await page.getByRole("button", { name: "New note" }).click();
+    await page.getByRole("textbox", { name: "Title", exact: true }).fill("Only once");
+    await page.getByRole("textbox", { name: "Note", exact: true }).fill("Do not duplicate me.");
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect(page.getByText("Saved, but the note list could not refresh. Reload the page to see it.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save changes" })).toBeVisible();
+    expect(await db.playerNote.count({ where: { userId: session.user.id } })).toBe(1);
+
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect.poll(() => db.playerNote.count({ where: { userId: session.user.id } })).toBe(1);
+  } finally {
+    if (userId) await db.user.delete({ where: { id: userId } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});

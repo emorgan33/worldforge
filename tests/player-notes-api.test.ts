@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { authorFetch, assertIsolatedTestEnvironment, deleteTestUsers } from "./auth-fixture";
 import { hashPassword, tokenHash } from "../src/lib/passwords";
+import { NOTE_LIMIT } from "../src/lib/player-notes";
 
 const origin = process.env.WORLDFORGE_TEST_ORIGIN;
 if (origin) assertIsolatedTestEnvironment();
@@ -83,6 +84,14 @@ test("player notes are private, versioned, and keep their text when access chang
   assert.equal((await call(cookieB, "DELETE", { id: standaloneNote.id })).status, 200);
   assert.equal((await list(cookieA)).length, 2, "another player's delete does not remove the note");
 
+  // Standalone notes can change campaign; referenced notes keep their target's campaign.
+  assert.equal((await call(cookieA, "PATCH", { id: standaloneNote.id, title: "Session plan v3", content: "Bring rope.", version: 2, worldId: world.id })).status, 200);
+  assert.equal((await list(cookieA)).find(note => note.id === standaloneNote.id)?.worldTitle, "Notebook world");
+  assert.equal((await call(cookieA, "PATCH", { id: standaloneNote.id, title: "Session plan v4", content: "Bring rope.", version: 3, worldId: null })).status, 200);
+  assert.equal((await list(cookieA)).find(note => note.id === standaloneNote.id)?.worldId, null);
+  assert.equal((await call(cookieA, "PATCH", { id: referencedNote.id, title: "Ship clue", content: "Harbor master knows.", version: 1, worldId: null })).status, 200);
+  assert.equal((await list(cookieA)).find(note => note.id === referencedNote.id)?.worldId, world.id, "a referenced note stays with its reference's campaign");
+
   // Same-origin and preview protections.
   const foreign = await fetch(`${origin}/api/player/notes`, { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookieA, Origin: "https://evil.invalid" }, body: JSON.stringify({ title: "Nope" }) });
   assert.equal(foreign.status, 403);
@@ -123,6 +132,12 @@ test("player notes are private, versioned, and keep their text when access chang
   const mapNoteId = (await mapNote.json()).note.id as string;
   assert.equal((await list(cookieA)).find(note => note.id === mapNoteId)?.reference?.kind, "map");
 
+  await owned(`${origin}/api/resources/assets/${asset.id}/audience`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "GM_ONLY", userIds: [] }) });
+  assert.equal((await list(cookieA)).find(note => note.id === mapNoteId)?.reference, null, "an unreadable map image hides only the link");
+  assert.equal((await list(cookieA)).find(note => note.id === mapNoteId)?.content, "Come from the north.");
+  await owned(`${origin}/api/resources/assets/${asset.id}/audience`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "PUBLIC", userIds: [] }) });
+  assert.equal((await list(cookieA)).find(note => note.id === mapNoteId)?.reference?.kind, "map");
+
   assert.equal((await publish("DELETE", { worldId: world.id, mapId: map.id })).status, 200);
   const unpublished = (await list(cookieA)).find(note => note.title === "Harbor route")!;
   assert.equal(unpublished.reference, null);
@@ -132,4 +147,39 @@ test("player notes are private, versioned, and keep their text when access chang
   assert.equal((await call(cookieA, "DELETE", { id: standaloneNote.id })).status, 200);
   assert.equal((await list(cookieA)).some(note => note.id === standaloneNote.id), false);
   assert.equal((await call("", "GET")).status, 401);
+});
+
+
+test("the notebook enforces its note limit", { skip: !origin }, async context => {
+  const db = testPrismaClient();
+  const password = "Isolated note limit passphrase 2046!";
+  const player = await db.user.create({ data: { name: "Note limit player", email: `note-limit-${randomUUID()}@example.invalid`, role: "PLAYER", passwordHash: await hashPassword(password) } });
+  context.after(async () => {
+    await deleteTestUsers(db, player.id);
+    await db.$disconnect();
+  });
+
+  await db.playerNote.createMany({
+    data: Array.from({ length: NOTE_LIMIT }, (_, index) => ({ userId: player.id, title: `Note ${index}`, content: "" })),
+  });
+  const login = await fetch(`${origin}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: origin!, "X-WorldForge-Client-IP": "127.0.0.1" },
+    body: JSON.stringify({ email: player.email, password }),
+  });
+  assert.equal(login.status, 200, await login.text());
+  const cookie = login.headers.get("set-cookie")!.split(";")[0];
+  const create = () => fetch(`${origin}/api/player/notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookie, Origin: origin! },
+    body: JSON.stringify({ title: "One too many" }),
+  });
+
+  const full = await create();
+  assert.equal(full.status, 400);
+  assert.match((await full.json()).error, /notebook is full/i);
+  assert.equal(await db.playerNote.count({ where: { userId: player.id } }), NOTE_LIMIT);
+
+  await db.playerNote.deleteMany({ where: { userId: player.id, title: "Note 0" } });
+  assert.equal((await create()).status, 201);
 });

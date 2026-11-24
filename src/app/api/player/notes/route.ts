@@ -1,6 +1,6 @@
 import { resolveActor, sameOrigin, AccessError } from "@/lib/access";
 import { prisma } from "@/lib/db";
-import { noteFields, playerNotes, resolveNoteTarget } from "@/lib/player-notes";
+import { noteFields, playerNotes, resolveNoteTarget, NOTE_LIMIT } from "@/lib/player-notes";
 
 const noStore = { "Cache-Control": "private, no-store" };
 
@@ -47,10 +47,13 @@ export async function POST(request: Request) {
     if (!fields) return Response.json({ error: "Give the note a title (up to 200 characters) and text up to 20,000 characters." }, { status: 400, headers: noStore });
     const target = await resolveNoteTarget(actor, body);
     if (!target) return Response.json({ error: "That campaign or reference is not available to you." }, { status: 400, headers: noStore });
+    if (await prisma.playerNote.count({ where: { userId: actor.userId! } }) >= NOTE_LIMIT) {
+      return Response.json({ error: `Your notebook is full (${NOTE_LIMIT} notes). Delete a note to add another.` }, { status: 400, headers: noStore });
+    }
 
     const note = await prisma.playerNote.create({
       data: { userId: actor.userId!, title: fields.title, content: fields.content, worldId: target.worldId, resourceKind: target.resourceKind, resourceId: target.resourceId },
-      select: { id: true, version: true },
+      select: { id: true, version: true, worldId: true },
     });
     return Response.json({ note }, { status: 201, headers: noStore });
   } catch (error) { return failure(error); }
@@ -70,9 +73,20 @@ export async function PATCH(request: Request) {
     const fields = noteFields(body);
     if (!fields) return Response.json({ error: "Give the note a title (up to 200 characters) and text up to 20,000 characters." }, { status: 400, headers: noStore });
 
+    const existing = await prisma.playerNote.findFirst({ where: { id, userId: actor.userId! }, select: { resourceKind: true, worldId: true } });
+    if (!existing) return Response.json({ error: "Note not found." }, { status: 404, headers: noStore });
+    // A referenced note's campaign follows its reference; standalone notes may
+    // change campaign (or drop it) only to a campaign the player can read.
+    let worldId = existing.worldId;
+    if (!existing.resourceKind && body.worldId !== undefined) {
+      const target = await resolveNoteTarget(actor, { worldId: body.worldId });
+      if (!target) return Response.json({ error: "That campaign is not available to you." }, { status: 400, headers: noStore });
+      worldId = target.worldId;
+    }
+
     const updated = await prisma.playerNote.updateMany({
       where: { id, userId: actor.userId!, version },
-      data: { title: fields.title, content: fields.content, version: { increment: 1 } },
+      data: { title: fields.title, content: fields.content, worldId, version: { increment: 1 } },
     });
     if (updated.count === 0) {
       const current = await prisma.playerNote.findFirst({ where: { id, userId: actor.userId! }, select: { title: true, content: true, version: true, updatedAt: true } });
