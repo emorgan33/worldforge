@@ -17,12 +17,8 @@ const PATTERNS = [
     pattern: new RegExp(String.raw`(?<![\w-])(?:${PREFIXES.join("|")})-(?:${FAMILIES.join("|")})-${SHADE}`, "g"),
   },
   {
-    name: "palette arbitrary value",
-    pattern: new RegExp(String.raw`\[var\(--color-(?:${FAMILIES.join("|")})-\d+\)\]`, "g"),
-  },
-  {
-    name: "palette variable reference",
-    pattern: new RegExp(String.raw`var\(\s*--color-(?:${FAMILIES.join("|")})-\d+\s*\)`, "g"),
+    name: "palette reference",
+    pattern: new RegExp(String.raw`var\(\s*--color-(?:${FAMILIES.join("|")})-\d+[^)]*\)`, "g"),
   },
 ];
 
@@ -44,7 +40,7 @@ const failures = [];
 for (const file of sourceFiles(ROOT)) {
   const text = readFileSync(file, "utf8");
   for (const { name, pattern } of PATTERNS) {
-    if (name === "palette variable reference" && path.relative(ROOT, file) === ALIAS_FILE) continue;
+    if (name === "palette reference" && path.relative(ROOT, file) === ALIAS_FILE) continue;
     for (const match of text.matchAll(pattern)) {
       const line = text.slice(0, match.index).split("\n").length;
       failures.push(`${file}:${line}: ${name} ${JSON.stringify(match[0])}`);

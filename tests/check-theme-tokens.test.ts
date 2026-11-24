@@ -51,7 +51,7 @@ test("rejects palette utilities in every form", () => {
     assert.match(result.stderr, /a\.tsx:2: palette utility "hover:text-amber-300"|a\.tsx:2: palette utility "text-amber-300"/);
     assert.match(result.stderr, /page\.tsx:1: palette utility "border-t-indigo-400"/);
     assert.match(result.stderr, /palette utility "placeholder-violet-200"/);
-    assert.match(result.stderr, /palette arbitrary value "\[var\(--color-red-500\)\]"/);
+    assert.match(result.stderr, /palette reference "var\(--color-red-500\)"/);
   });
 });
 
@@ -62,8 +62,19 @@ test("rejects palette variable references outside the token block", () => {
   }, root => {
     const result = run(root);
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /Legacy\.module\.css:1: palette variable reference "var\(--color-zinc-400\)"/);
-    assert.equal(result.stderr.match(/palette variable reference/g)?.length, 1, "the token block must be exempt");
+    assert.match(result.stderr, /Legacy\.module\.css:1: palette reference "var\(--color-zinc-400\)"/);
+    assert.equal(result.stderr.match(/palette reference/g)?.length, 1, "the token block must be exempt");
+  });
+});
+
+test("rejects palette references that declare a fallback", () => {
+  withRoot({
+    "a.css": ".x { color: var(--color-zinc-400, #999); }\n.y { color: var(--color-app-muted, #999); }",
+  }, root => {
+    const result = run(root);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /palette reference "var\(--color-zinc-400, #999\)"/);
+    assert.doesNotMatch(result.stderr, /palette reference "var\(--color-app-muted/);
   });
 });
 
