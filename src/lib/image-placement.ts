@@ -28,9 +28,9 @@ export const MAX_PLACEMENT_ALT_LENGTH = 300;
 
 /** Renderer geometry keyed by purpose. `fit` documents contain vs cover fitting. */
 export const PLACEMENT_GEOMETRY: Record<Exclude<ImagePlacementPurpose, "background" | "category-icon">, { frameClassName: string; imageClassName: string; fit: "contain" | "cover" }> = {
-  "article-cover": { frameClassName: "relative h-64 w-full overflow-hidden rounded-2xl border border-zinc-800 shadow-2xl md:h-80", imageClassName: "h-full w-full object-cover", fit: "cover" },
-  "world-cover": { frameClassName: "relative h-64 w-full overflow-hidden rounded-xl border border-zinc-800", imageClassName: "h-64 w-full object-cover", fit: "cover" },
-  portrait: { frameClassName: "overflow-hidden rounded-xl border border-zinc-800", imageClassName: "h-64 w-full object-cover", fit: "cover" },
+  "article-cover": { frameClassName: "relative h-64 w-full overflow-hidden rounded-2xl border border-app-border shadow-2xl md:h-80", imageClassName: "h-full w-full object-cover", fit: "cover" },
+  "world-cover": { frameClassName: "relative h-64 w-full overflow-hidden rounded-xl border border-app-border", imageClassName: "h-64 w-full object-cover", fit: "cover" },
+  portrait: { frameClassName: "overflow-hidden rounded-xl border border-app-border", imageClassName: "h-64 w-full object-cover", fit: "cover" },
   body: { frameClassName: "w-full overflow-hidden rounded-lg", imageClassName: "max-h-96 w-full object-contain", fit: "contain" },
 };
 

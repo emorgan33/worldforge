@@ -158,22 +158,22 @@ export default function AdminUsersPage() {
     <section className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-amber-100">Accounts</h2>
-          <p className="mt-1 text-sm text-zinc-400">Create, inspect, and manage installation accounts.</p>
+          <h2 className="text-2xl font-bold text-primary-100">Accounts</h2>
+          <p className="mt-1 text-sm text-app-muted">Create, inspect, and manage installation accounts.</p>
         </div>
         <button
           type="button"
           onClick={() => setShowCreate((value) => !value)}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+          className="rounded-lg bg-secondary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-secondary-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
         >
           {showCreate ? "Cancel" : "Create account"}
         </button>
       </div>
 
       {setupLink && (
-        <section role="status" aria-live="polite" className="rounded-xl border border-emerald-800 bg-emerald-950/30 p-4">
-          <h3 className="font-semibold text-emerald-200">One-time setup link</h3>
-          <p className="mt-1 text-sm text-emerald-100/80">
+        <section role="status" aria-live="polite" className="rounded-xl border border-success-800 bg-success-950/30 p-4">
+          <h3 className="font-semibold text-success-200">One-time setup link</h3>
+          <p className="mt-1 text-sm text-success-100/80">
             Copy this link now. It is shown only once and will not be available again.
           </p>
           <div className="mt-3 flex flex-col gap-2 md:flex-row">
@@ -182,30 +182,30 @@ export default function AdminUsersPage() {
               aria-label="One-time setup link"
               value={setupLink.url}
               onFocus={(event) => event.currentTarget.select()}
-              className="min-w-0 flex-1 rounded-lg border border-emerald-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100"
+              className="min-w-0 flex-1 rounded-lg border border-success-700 bg-app-canvas px-3 py-2 font-mono text-sm text-app-text-strong"
             />
             <button
               type="button"
               onClick={() => void navigator.clipboard?.writeText(setupLink.url)}
-              className="rounded-lg border border-emerald-700 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+              className="rounded-lg border border-success-700 px-4 py-2 text-sm font-semibold text-success-100 hover:bg-success-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
             >
               Copy
             </button>
             <button
               type="button"
               onClick={() => setSetupLink(null)}
-              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+              className="rounded-lg border border-app-border-strong px-4 py-2 text-sm font-medium text-app-text hover:border-app-border-emphasis-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
             >
               I have saved it
             </button>
           </div>
-          <p className="mt-2 text-xs text-emerald-100/70">Expires {new Date(setupLink.expiresAt).toLocaleString()}.</p>
+          <p className="mt-2 text-xs text-success-100/70">Expires {new Date(setupLink.expiresAt).toLocaleString()}.</p>
         </section>
       )}
 
       {showCreate && (
-        <form onSubmit={createAccount} className="grid gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 md:grid-cols-4">
-          <label className="text-sm font-medium text-zinc-200 md:col-span-1">
+        <form onSubmit={createAccount} className="grid gap-4 rounded-xl border border-app-border bg-app-surface/60 p-4 md:grid-cols-4">
+          <label className="text-sm font-medium text-app-text md:col-span-1">
             Email
             <input
               required
@@ -213,25 +213,25 @@ export default function AdminUsersPage() {
               maxLength={254}
               value={form.email}
               onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+              className="mt-1 w-full rounded-lg border border-app-border-strong bg-app-canvas px-3 py-2 text-app-text-strong"
             />
           </label>
-          <label className="text-sm font-medium text-zinc-200 md:col-span-1">
+          <label className="text-sm font-medium text-app-text md:col-span-1">
             Name
             <input
               required
               maxLength={120}
               value={form.name}
               onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+              className="mt-1 w-full rounded-lg border border-app-border-strong bg-app-canvas px-3 py-2 text-app-text-strong"
             />
           </label>
-          <label className="text-sm font-medium text-zinc-200 md:col-span-1">
+          <label className="text-sm font-medium text-app-text md:col-span-1">
             Role
             <select
               value={form.role}
               onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}
-              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+              className="mt-1 w-full rounded-lg border border-app-border-strong bg-app-canvas px-3 py-2 text-app-text-strong"
             >
               <option value="AUTHOR">AUTHOR</option>
               <option value="PLAYER">PLAYER</option>
@@ -241,7 +241,7 @@ export default function AdminUsersPage() {
             <button
               type="submit"
               disabled={creating}
-              className="w-full rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+              className="w-full rounded-lg bg-secondary-600 px-4 py-2 font-semibold text-white hover:bg-secondary-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
             >
               {creating ? "Creating…" : "Create"}
             </button>
@@ -249,22 +249,22 @@ export default function AdminUsersPage() {
         </form>
       )}
 
-      <form onSubmit={applyFilters} className="grid gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 md:grid-cols-4">
-        <label className="text-sm font-medium text-zinc-200 md:col-span-2">
+      <form onSubmit={applyFilters} className="grid gap-3 rounded-xl border border-app-border bg-app-surface/60 p-4 md:grid-cols-4">
+        <label className="text-sm font-medium text-app-text md:col-span-2">
           Search
           <input
             value={searchDraft}
             onChange={(event) => setSearchDraft(event.target.value)}
             placeholder="Email or name"
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+            className="mt-1 w-full rounded-lg border border-app-border-strong bg-app-canvas px-3 py-2 text-app-text-strong"
           />
         </label>
-        <label className="text-sm font-medium text-zinc-200">
+        <label className="text-sm font-medium text-app-text">
           Role
           <select
             value={roleDraftFilter}
             onChange={(event) => setRoleDraftFilter(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+            className="mt-1 w-full rounded-lg border border-app-border-strong bg-app-canvas px-3 py-2 text-app-text-strong"
           >
             <option value="">All roles</option>
             <option value="ADMIN">ADMIN</option>
@@ -273,12 +273,12 @@ export default function AdminUsersPage() {
             <option value="PLAYER">PLAYER</option>
           </select>
         </label>
-        <label className="text-sm font-medium text-zinc-200">
+        <label className="text-sm font-medium text-app-text">
           Status
           <select
             value={statusDraft}
             onChange={(event) => setStatusDraft(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+            className="mt-1 w-full rounded-lg border border-app-border-strong bg-app-canvas px-3 py-2 text-app-text-strong"
           >
             <option value="">All statuses</option>
             <option value="active">Active</option>
@@ -289,7 +289,7 @@ export default function AdminUsersPage() {
           <button
             type="submit"
             disabled={loading || loadingMore}
-            className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+            className="rounded-lg border border-app-border-strong px-4 py-2 text-sm font-medium text-app-text hover:border-app-border-emphasis-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
           >
             Apply filters
           </button>
@@ -297,14 +297,14 @@ export default function AdminUsersPage() {
       </form>
 
       {error && (
-        <p ref={errorRef} tabIndex={-1} role="alert" className="rounded-lg border border-red-800 bg-red-950/30 px-4 py-3 text-sm text-red-300 focus:outline-none">
+        <p ref={errorRef} tabIndex={-1} role="alert" className="rounded-lg border border-danger-800 bg-danger-950/30 px-4 py-3 text-sm text-danger-300 focus:outline-none">
           {error}
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-zinc-800">
+      <div className="overflow-x-auto rounded-xl border border-app-border">
         <table className="w-full min-w-[760px] text-left text-sm">
-          <thead className="border-b border-zinc-800 bg-zinc-900/70 text-xs uppercase tracking-wider text-zinc-400">
+          <thead className="border-b border-app-border bg-app-surface/70 text-xs uppercase tracking-wider text-app-muted">
             <tr>
               <th className="px-3 py-2">Email</th>
               <th className="px-3 py-2">Name</th>
@@ -317,9 +317,9 @@ export default function AdminUsersPage() {
           </thead>
           <tbody>
             {users.map((user) => (
-              <tr key={user.id} className="border-b border-zinc-800/70 hover:bg-zinc-900/40">
+              <tr key={user.id} className="border-b border-app-border/70 hover:bg-app-surface/40">
                 <td className="px-3 py-2">
-                  <Link href={`/admin/users/${user.id}`} className="text-indigo-300 hover:text-indigo-200">
+                  <Link href={`/admin/users/${user.id}`} className="text-secondary-300 hover:text-secondary-200">
                     {user.email}
                   </Link>
                 </td>
@@ -335,14 +335,14 @@ export default function AdminUsersPage() {
         </table>
       </div>
 
-      {loading && <p className="text-sm text-zinc-400">Loading accounts…</p>}
-      {!loading && users.length === 0 && <p className="text-sm text-zinc-400">No accounts match these filters.</p>}
+      {loading && <p className="text-sm text-app-muted">Loading accounts…</p>}
+      {!loading && users.length === 0 && <p className="text-sm text-app-muted">No accounts match these filters.</p>}
       {nextCursor && (
         <button
           type="button"
           disabled={loading || loadingMore}
           onClick={() => void loadUsers(nextCursor, false)}
-          className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-zinc-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+          className="rounded-lg border border-app-border-strong px-4 py-2 text-sm font-medium text-app-text hover:border-app-border-emphasis-strong disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
         >
           {loadingMore ? "Loading…" : "Load more"}
         </button>

@@ -19,17 +19,17 @@ export function PublicRichText({ doc, links, blocks, credits = [] }: { doc: JSON
       case "bulletList": return <ul key={index} className="list-disc pl-6">{children}</ul>;
       case "orderedList": return <ol key={index} className="list-decimal pl-6">{children}</ol>;
       case "listItem": return <li key={index}>{children}</li>;
-      case "blockquote": return <blockquote key={index} className="my-5 border-l-4 border-amber-500 pl-5 italic">{children}</blockquote>;
+      case "blockquote": return <blockquote key={index} className="my-5 border-l-4 border-primary-500 pl-5 italic">{children}</blockquote>;
       case "campaignCallout": return <aside key={index} data-callout={item.attrs?.kind} className="campaign-callout">{children}</aside>;
-      case "codeBlock": return <pre key={index} className="my-4 overflow-auto rounded-lg bg-zinc-900 p-4"><code>{children}</code></pre>;
-      case "horizontalRule": return <hr key={index} className="my-6 border-zinc-700" />;
+      case "codeBlock": return <pre key={index} className="my-4 overflow-auto rounded-lg bg-app-surface p-4"><code>{children}</code></pre>;
+      case "horizontalRule": return <hr key={index} className="my-6 border-app-border-strong" />;
       case "hardBreak": return <br key={index} />;
-      case "table": return <div key={index} className="my-5 overflow-auto"><table className="w-full border-collapse border border-zinc-700"><tbody>{children}</tbody></table></div>;
+      case "table": return <div key={index} className="my-5 overflow-auto"><table className="w-full border-collapse border border-app-border-strong"><tbody>{children}</tbody></table></div>;
       case "tableRow": return <tr key={index}>{children}</tr>;
-      case "tableCell": return <td key={index} className="border border-zinc-700 p-2">{children}</td>;
-      case "tableHeader": return <th key={index} className="border border-zinc-700 bg-zinc-900 p-2">{children}</th>;
+      case "tableCell": return <td key={index} className="border border-app-border-strong p-2">{children}</td>;
+      case "tableHeader": return <th key={index} className="border border-app-border-strong bg-app-surface p-2">{children}</th>;
       default: return <React.Fragment key={index}>{children}</React.Fragment>;
     }
   }
-  return <div className="public-article-content leading-relaxed text-zinc-300">{doc.content?.map(node)}</div>;
+  return <div className="public-article-content leading-relaxed text-app-text-dim">{doc.content?.map(node)}</div>;
 }

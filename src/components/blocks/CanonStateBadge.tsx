@@ -8,27 +8,27 @@ interface CanonStateBadgeProps {
 const canonConfig: Record<string, { label: string; bg: string; text: string; border: string }> = {
   GM_DRAFT: {
     label: "GM Draft",
-    bg: "bg-zinc-500/10",
-    text: "text-zinc-400",
-    border: "border-zinc-500/20",
+    bg: "bg-app-tint/10",
+    text: "text-app-muted",
+    border: "border-app-border-emphasis-strong/20",
   },
   RUMOR: {
     label: "Rumor",
-    bg: "bg-amber-500/10",
-    text: "text-amber-400",
-    border: "border-amber-500/20",
+    bg: "bg-primary-500/10",
+    text: "text-primary-400",
+    border: "border-primary-500/20",
   },
   ESTABLISHED: {
     label: "Established",
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-400",
-    border: "border-emerald-500/20",
+    bg: "bg-success-500/10",
+    text: "text-success-400",
+    border: "border-success-500/20",
   },
   SUPERSEDED: {
     label: "Superseded",
-    bg: "bg-red-500/10",
-    text: "text-red-400 line-through",
-    border: "border-red-500/20",
+    bg: "bg-danger-500/10",
+    text: "text-danger-400 line-through",
+    border: "border-danger-500/20",
   },
 };
 

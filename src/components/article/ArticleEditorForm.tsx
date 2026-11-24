@@ -237,26 +237,26 @@ export function ArticleEditorForm({
 
   return (
     <form onSubmit={handleSubmit} onChange={() => onDirtyChange(true)} className="space-y-6">
-      {recovery && <div role="alert" className="rounded-lg border border-amber-600 p-4 text-sm text-amber-200">
+      {recovery && <div role="alert" className="rounded-lg border border-primary-600 p-4 text-sm text-primary-200">
         A local draft is available: {recovery.title || "Untitled article"}. Restore it before continuing, or discard it to use the saved article.
         <button type="button" onClick={recoverDraft} className="ml-3 underline">Restore draft</button>
         <button type="button" onClick={() => { try { removeArticleDraft(localStorage, draftActorId, worldId, initialArticle?.id, { legacy: true, sessionId: draftSessionId }); } catch {} articleId.current = initialArticle?.id; setRecovery(null); }} className="ml-3 underline">Discard draft</button>
       </div>}
-      {localError && <p role="alert" className="text-amber-400">{localError}</p>}
-      {saveError && <p role="alert" className="text-red-400">{saveError} Changes remain in this editor. <button type="button" onClick={() => void save(true)} className="underline">Retry save</button>{saveConflict && <button type="button" onClick={() => void save(false, true)} className="ml-3 underline">Save as new article</button>}</p>}
-      <p role="status" className={`text-xs ${isDirty ? "text-amber-400" : "text-zinc-500"}`}>{metadataError ? "Autosave paused: check template fields" : isSubmitting ? "Saving article…" : saveError ? "Save failed" : isDirty ? title.trim() ? "Changes pending autosave" : "Add a title to enable autosave" : lastSaved ? "All changes saved" : "Autosave on"}</p>
+      {localError && <p role="alert" className="text-primary-400">{localError}</p>}
+      {saveError && <p role="alert" className="text-danger-400">{saveError} Changes remain in this editor. <button type="button" onClick={() => void save(true)} className="underline">Retry save</button>{saveConflict && <button type="button" onClick={() => void save(false, true)} className="ml-3 underline">Save as new article</button>}</p>}
+      <p role="status" className={`text-xs ${isDirty ? "text-primary-400" : "text-app-subtle"}`}>{metadataError ? "Autosave paused: check template fields" : isSubmitting ? "Saving article…" : saveError ? "Save failed" : isDirty ? title.trim() ? "Changes pending autosave" : "Add a title to enable autosave" : lastSaved ? "All changes saved" : "Autosave on"}</p>
       <fieldset inert={savesPaused || manualSaving || !!recovery || !recoveryReady} disabled={savesPaused || manualSaving || !!recovery || !recoveryReady} className="space-y-6">
       {/* Action Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-zinc-800">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-app-border">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
+          <div className="p-2 rounded-lg bg-secondary-600/20 text-secondary-400 border border-secondary-500/30">
             <TemplateIcon template={template} className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-zinc-100">
+            <h2 className="text-xl font-bold text-app-text-strong">
               {initialArticle?.id ? `Edit: ${initialArticle.title}` : `New ${activeTemplateDef.label}`}
             </h2>
-            <p className="text-xs text-zinc-400">{activeTemplateDef.description}</p>
+            <p className="text-xs text-app-muted">{activeTemplateDef.description}</p>
           </div>
         </div>
 
@@ -264,7 +264,7 @@ export function ArticleEditorForm({
           <button
             type="button"
             onClick={onCancel}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-app-surface hover:bg-app-raised text-app-text-dim border border-app-border transition-colors"
           >
             <X className="w-4 h-4" />
             <span>Cancel</span>
@@ -273,7 +273,7 @@ export function ArticleEditorForm({
           <button
             type="submit"
             disabled={isSubmitting || !!recovery || !recoveryReady || !title.trim() || !!metadataError}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 disabled:opacity-50 transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-secondary-600 hover:bg-secondary-500 text-white shadow-lg shadow-secondary-600/20 disabled:opacity-50 transition-all"
           >
             <Save className="w-4 h-4" />
             <span>{isSubmitting ? "Saving..." : "Save Article"}</span>
@@ -285,8 +285,8 @@ export function ArticleEditorForm({
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
         {/* Title */}
         {!(template === "CHARACTER" && isCharacterSystem(articleSystem)) && <div className="md:col-span-8">
-          <label htmlFor="article-title" className="block text-xs font-semibold text-zinc-300 mb-1">
-            Article Title <span className="text-red-400">*</span>
+          <label htmlFor="article-title" className="block text-xs font-semibold text-app-text-dim mb-1">
+            Article Title <span className="text-danger-400">*</span>
           </label>
           <input
             type="text"
@@ -295,20 +295,20 @@ export function ArticleEditorForm({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Thronehold, the Citadel of Glass"
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-indigo-500 transition-colors"
+            className="w-full bg-app-surface border border-app-border rounded-lg px-3 py-2 text-sm text-app-text-strong focus:outline-none focus:border-secondary-500 transition-colors"
           />
         </div>}
 
         {/* Template Selector */}
         <div className="md:col-span-4">
-          <label className="block text-xs font-semibold text-zinc-300 mb-1">
+          <label className="block text-xs font-semibold text-app-text-dim mb-1">
             Template Type
           </label>
           <select
             aria-label="Template type"
             value={template}
             onChange={(e) => setTemplate(e.target.value as ArticleTemplateType)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-indigo-500 transition-colors"
+            className="w-full bg-app-surface border border-app-border rounded-lg px-3 py-2 text-sm text-app-text-strong focus:outline-none focus:border-secondary-500 transition-colors"
           >
             {Object.values(ARTICLE_TEMPLATES).map((tmpl) => (
               <option key={tmpl.type} value={tmpl.type}>
@@ -320,7 +320,7 @@ export function ArticleEditorForm({
 
         {/* Excerpt */}
         <div className="md:col-span-8">
-          <label className="block text-xs font-semibold text-zinc-300 mb-1">
+          <label className="block text-xs font-semibold text-app-text-dim mb-1">
             Summary / Excerpt
           </label>
           <input
@@ -328,19 +328,19 @@ export function ArticleEditorForm({
             value={excerpt}
             onChange={(e) => setExcerpt(e.target.value)}
             placeholder="Brief 1-2 sentence teaser shown in search and map pin previews..."
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 transition-colors"
+            className="w-full bg-app-surface border border-app-border rounded-lg px-3 py-2 text-xs text-app-text focus:outline-none focus:border-secondary-500 transition-colors"
           />
         </div>
 
         {/* Category */}
         <div className="md:col-span-4">
-          <label className="block text-xs font-semibold text-zinc-300 mb-1">
+          <label className="block text-xs font-semibold text-app-text-dim mb-1">
             Folder Category
           </label>
           <select
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 transition-colors"
+            className="w-full bg-app-surface border border-app-border rounded-lg px-3 py-2 text-xs text-app-text focus:outline-none focus:border-secondary-500 transition-colors"
           >
             <option value="">(No Category - Root)</option>
             {categoryOptions(categories).map((cat) => (
@@ -352,27 +352,27 @@ export function ArticleEditorForm({
         </div>
       </div>
 
-      <label className="block max-w-sm text-xs font-semibold text-amber-300">Article rules profile<select aria-label="Article rules profile" value={articleSystem} onChange={event => setArticleSystem(event.target.value)} className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-sm text-zinc-200">{RPG_SYSTEMS.map(profile => <option key={profile.id} value={profile.id}>{profile.short}{profile.id === "PF_2E" ? " · Remaster" : ""}</option>)}</select></label>
-      {metadataError && <p role="alert" className="text-sm text-red-400">{metadataError} Autosave is paused until this field is corrected.</p>}
+      <label className="block max-w-sm text-xs font-semibold text-primary-300">Article rules profile<select aria-label="Article rules profile" value={articleSystem} onChange={event => setArticleSystem(event.target.value)} className="mt-2 w-full rounded-lg border border-app-border-strong bg-app-surface p-2 text-sm text-app-text">{RPG_SYSTEMS.map(profile => <option key={profile.id} value={profile.id}>{profile.short}{profile.id === "PF_2E" ? " · Remaster" : ""}</option>)}</select></label>
+      {metadataError && <p role="alert" className="text-sm text-danger-400">{metadataError} Autosave is paused until this field is corrected.</p>}
       {template === "CHARACTER" && isCharacterSystem(articleSystem) && <CharacterSheet key={articleSystem} system={articleSystem} metadata={metadata} title={title} onChange={handleMetadataChange} onTitleChange={setTitle} />}
       <ArticleTemplateFields template={activeTemplateDef} system={articleSystem} metadata={metadata} blocks={availableBlocks} onChange={handleMetadataChange} />
 
       <ImageSourceField worldId={worldId} purpose="article-cover" label="Article cover URL" value={coverImage} onChange={setCoverImage} onAssetSelected={asset => { if (coverImageAlt === null && asset.alt) setCoverImageAlt(asset.alt); }} />
-      <p className="text-xs text-zinc-500">An article cover overrides the global article cover. Clear it to use the global cover.</p>
+      <p className="text-xs text-app-subtle">An article cover overrides the global article cover. Clear it to use the global cover.</p>
       <PlacementAltField id="article-cover-alt" label="Article cover description" value={coverImageAlt} onChange={setCoverImageAlt} fallback={initialArticle?.title || title || undefined} />
 
       <ImageSourceField worldId={worldId} purpose="portrait" label="Article portrait URL" value={portraitImage} onChange={setPortraitImage} onAssetSelected={asset => { if (portraitImageAlt === null && asset.alt) setPortraitImageAlt(asset.alt); }} />
-      <p className="text-xs text-zinc-500">Shown beside the article in the reader sidebar. Clear it to show no portrait.</p>
+      <p className="text-xs text-app-subtle">Shown beside the article in the reader sidebar. Clear it to show no portrait.</p>
       <PlacementAltField id="article-portrait-alt" label="Portrait description" value={portraitImageAlt} onChange={setPortraitImageAlt} fallback={initialArticle?.title || title || undefined} />
 
       {/* Rich Text Editor */}
       <div>
-        <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+        <label className="block text-xs font-semibold text-app-text-dim mb-1.5">
           Article Lore & Content (TipTap Block Editor)
         </label>
         {activeTemplateDef.starterSections && <div className="mb-3 flex flex-wrap items-center gap-3">
-          <button type="button" disabled={!isEmptyArticle(contentHtml, contentJson)} onClick={insertOutline} className="rounded-lg border border-amber-700/60 px-3 py-2 text-xs text-amber-300 disabled:opacity-40">Insert template outline</button>
-          <span className="text-xs text-zinc-500">Adds starter headings to an empty article.</span>
+          <button type="button" disabled={!isEmptyArticle(contentHtml, contentJson)} onClick={insertOutline} className="rounded-lg border border-primary-700/60 px-3 py-2 text-xs text-primary-300 disabled:opacity-40">Insert template outline</button>
+          <span className="text-xs text-app-subtle">Adds starter headings to an empty article.</span>
         </div>}
         <TipTapEditor
           worldId={worldId}
@@ -388,9 +388,9 @@ export function ArticleEditorForm({
       </div>
 
       {/* Tags & Visibility */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-zinc-800">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-app-border">
         <div>
-          <label className="block text-xs font-semibold text-zinc-400 mb-1">
+          <label className="block text-xs font-semibold text-app-muted mb-1">
             Tags (Comma-separated)
           </label>
           <input
@@ -398,19 +398,19 @@ export function ArticleEditorForm({
             value={tags}
             onChange={(e) => setTags(e.target.value)}
             placeholder="e.g. capital, high-elf, artifact"
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-app-surface border border-app-border rounded-lg px-3 py-1.5 text-xs text-app-text focus:outline-none focus:border-secondary-500"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-zinc-400 mb-1">
+          <label className="block text-xs font-semibold text-app-muted mb-1">
             Publication status
           </label>
           <select
             aria-label="Publication status"
             value={state}
             onChange={(e) => setState(e.target.value as PublicationStatus)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-app-surface border border-app-border rounded-lg px-3 py-1.5 text-xs text-app-text focus:outline-none focus:border-secondary-500"
           >
             <option value="PUBLISHED">Published</option>
             <option value="WIP">Work in Progress (WIP)</option>
@@ -420,14 +420,14 @@ export function ArticleEditorForm({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-zinc-400 mb-1">
+          <label className="block text-xs font-semibold text-app-muted mb-1">
             Canon State
           </label>
           <select
             aria-label="Canon state"
             value={canonState}
             onChange={(e) => { setCanonState(e.target.value); onDirtyChange(true); }}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-app-surface border border-app-border rounded-lg px-3 py-1.5 text-xs text-app-text focus:outline-none focus:border-secondary-500"
           >
             <option value="GM_DRAFT">GM Draft</option>
             <option value="RUMOR">Rumor</option>
@@ -436,8 +436,8 @@ export function ArticleEditorForm({
           </select>
         </div>
       </div>
-      <label className="block text-xs text-zinc-300">Visibility<select aria-label="Article visibility" value={visibility} onChange={event => setVisibility(event.target.value as ArticleVisibility)} className="mt-2 block w-full rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-sm"><option value="PRIVATE">Private · owner only</option><option value="PUBLIC">Public · readers can view when published</option></select></label>
-      <p className="text-xs text-zinc-400">{!worldPublic ? "This world is private. Its articles remain owner-only, regardless of article visibility." : state === "PUBLISHED" && visibility === "PUBLIC" ? "This article will be available on its public page after saving. GM note blocks and campaign secrets are excluded." : "This article is not publicly readable. Public access requires Published status and Public visibility."}</p>
+      <label className="block text-xs text-app-text-dim">Visibility<select aria-label="Article visibility" value={visibility} onChange={event => setVisibility(event.target.value as ArticleVisibility)} className="mt-2 block w-full rounded-lg border border-app-border-strong bg-app-surface p-3 text-sm"><option value="PRIVATE">Private · owner only</option><option value="PUBLIC">Public · readers can view when published</option></select></label>
+      <p className="text-xs text-app-muted">{!worldPublic ? "This world is private. Its articles remain owner-only, regardless of article visibility." : state === "PUBLISHED" && visibility === "PUBLIC" ? "This article will be available on its public page after saving. GM note blocks and campaign secrets are excluded." : "This article is not publicly readable. Public access requires Published status and Public visibility."}</p>
       </fieldset>
     </form>
   );

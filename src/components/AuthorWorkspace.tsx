@@ -737,8 +737,8 @@ export default function WorldForgeApp() {
   if (isLoading && !world) {
     // First load (nothing mounted yet): full-screen loader.
     return (
-      <div className="w-full h-screen bg-zinc-950 flex flex-col items-center justify-center text-zinc-400 space-y-4">
-        <div className="w-12 h-12 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 animate-spin">
+      <div className="w-full h-screen bg-app-canvas flex flex-col items-center justify-center text-app-muted space-y-4">
+        <div className="w-12 h-12 rounded-xl bg-secondary-600/20 border border-secondary-500/40 flex items-center justify-center text-secondary-400 animate-spin">
           <Globe className="w-6 h-6" />
         </div>
         <p className="text-sm font-semibold tracking-wide">Opening your campaign...</p>
@@ -747,7 +747,7 @@ export default function WorldForgeApp() {
   }
 
   return (
-    <div className="author-workspace relative flex h-dvh overflow-hidden bg-[var(--aw-canvas)] font-sans text-zinc-100">
+    <div className="author-workspace relative flex h-dvh overflow-hidden bg-[var(--aw-canvas)] font-sans text-app-text-strong">
       {/* Keyed by world id: child-local state resets only when a destination
           snapshot commits. During a transition the previous subtree stays
           MOUNTED but inert beneath the loading boundary, so unsaved forms,
@@ -760,13 +760,13 @@ export default function WorldForgeApp() {
         ...([ ["home", "Campaign home"], ["manager", "Articles & Categories"], ["assets", "Image library"], ["blocks", "RPG compendium"], ["map", "Maps"], ["timeline", "Timelines"], ["sessions", "Sessions"], ["variables", "Variables"], ["gm", "GM Screen & Secrets"] ] as const).filter(([view]) => view !== "timeline" || timelines.length > 0).map(([view, title]): SearchCommand => ({ id: `tool-${view}`, title, description: "Workspace tool", run: () => { if (view === "blocks") openCompendium(); else if (canNavigate()) { clearConfirmedLeave(); setActiveView(view); } } })),
       ]} />
       {/* Mobile shell controls stay above either the navigation or workspace. */}
-      <header inert={mobileNavigationOpen || undefined} className={`fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-zinc-800 bg-zinc-950/95 px-3 backdrop-blur md:z-50 md:h-16 md:justify-end md:px-5 ${sidebarCollapsed ? "md:left-[68px]" : "md:left-[280px]"}`}>
-        <button ref={mobileNavigationTrigger} type="button" aria-label={mobileNavigationOpen ? "Close campaign navigation" : "Open campaign navigation"} aria-expanded={mobileNavigationOpen} aria-controls="campaign-navigation" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 md:hidden" onClick={() => setMobileNavigationOpen(open => !open)}>
+      <header inert={mobileNavigationOpen || undefined} className={`fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-app-border bg-app-canvas/95 px-3 backdrop-blur md:z-50 md:h-16 md:justify-end md:px-5 ${sidebarCollapsed ? "md:left-[68px]" : "md:left-[280px]"}`}>
+        <button ref={mobileNavigationTrigger} type="button" aria-label={mobileNavigationOpen ? "Close campaign navigation" : "Open campaign navigation"} aria-expanded={mobileNavigationOpen} aria-controls="campaign-navigation" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-app-border-strong bg-app-surface text-app-text-strong hover:border-app-border-emphasis-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 md:hidden" onClick={() => setMobileNavigationOpen(open => !open)}>
           {mobileNavigationOpen ? <X aria-hidden="true" className="h-5 w-5" /> : <Menu aria-hidden="true" className="h-5 w-5" />}
         </button>
-        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-200 md:hidden" aria-live="polite">{mobileNavigationOpen ? "Campaign navigation" : mobileViewLabel}</p>
-        <button type="button" aria-label="Player view" title="Player view" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 md:h-10 md:w-auto md:px-3" onClick={() => { if (!canNavigate()) return; clearConfirmedLeave(); router.push("/player"); }}><Users aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Player view</span></button>
-        <button type="button" aria-label="Sign out" title="Sign out" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 md:h-10 md:w-auto md:px-3" onClick={async () => { if (!canNavigate()) return; clearConfirmedLeave(); const response = await fetch("/api/auth/logout", { method: "POST" }); if (response.ok) { router.replace("/login"); router.refresh(); } }}><LogOut aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Sign out</span></button>
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-app-text md:hidden" aria-live="polite">{mobileNavigationOpen ? "Campaign navigation" : mobileViewLabel}</p>
+        <button type="button" aria-label="Player view" title="Player view" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-app-border-strong bg-app-surface text-app-text hover:border-app-border-emphasis-strong hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 md:h-10 md:w-auto md:px-3" onClick={() => { if (!canNavigate()) return; clearConfirmedLeave(); router.push("/player"); }}><Users aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Player view</span></button>
+        <button type="button" aria-label="Sign out" title="Sign out" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-app-border-strong bg-app-surface text-app-text hover:border-app-border-emphasis-strong hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 md:h-10 md:w-auto md:px-3" onClick={async () => { if (!canNavigate()) return; clearConfirmedLeave(); const response = await fetch("/api/auth/logout", { method: "POST" }); if (response.ok) { router.replace("/login"); router.refresh(); } }}><LogOut aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Sign out</span></button>
       </header>
       <div id="campaign-navigation" className={`${mobileNavigationOpen ? "fixed inset-0 z-[60] block md:static md:z-auto" : "hidden md:block"} h-full w-full shrink-0 ${sidebarCollapsed ? "md:w-[68px]" : "md:w-[280px]"}`}>
       {mobileNavigationOpen && <button type="button" aria-hidden="true" tabIndex={-1} className="absolute inset-0 bg-black/70 md:hidden" onClick={closeMobileNavigation} />}
@@ -809,20 +809,20 @@ export default function WorldForgeApp() {
       {/* Main Content Workspace */}
       <main ref={mainWorkspaceRef} inert={mobileNavigationOpen || isTransitioning || undefined} aria-hidden={mobileNavigationOpen || undefined} className="mt-14 h-[calc(100dvh-3.5rem)] min-w-0 flex-1 overscroll-contain overflow-y-auto bg-[var(--aw-canvas)] p-4 md:mt-16 md:h-[calc(100dvh-4rem)] md:p-8 lg:p-10">
         <div className="max-w-6xl mx-auto">
-          {worldUnavailable && <section aria-live="polite" className="mb-6 rounded-xl border border-amber-800 bg-amber-950/30 p-6">
-            <h2 className="text-lg font-semibold text-amber-200">This world isn’t available</h2>
-            <p className="mt-1 text-sm text-amber-200/80">It may have been deleted, or the link belongs to another account. Choose one of your worlds to continue.</p>
+          {worldUnavailable && <section aria-live="polite" className="mb-6 rounded-xl border border-primary-800 bg-primary-950/30 p-6">
+            <h2 className="text-lg font-semibold text-primary-200">This world isn’t available</h2>
+            <p className="mt-1 text-sm text-primary-200/80">It may have been deleted, or the link belongs to another account. Choose one of your worlds to continue.</p>
           </section>}
-          {worldError && <p role="alert" className="mb-6 rounded-xl border border-red-900 bg-red-950/40 p-4 text-sm text-red-200">
+          {worldError && <p role="alert" className="mb-6 rounded-xl border border-danger-900 bg-danger-950/40 p-4 text-sm text-danger-200">
             {worldError}
             {world && <button type="button" onClick={returnToCurrentWorld} className="ml-3 underline">Return to {world.title}</button>}
             <button type="button" onClick={() => void retryLoad()} className="ml-3 underline">Try again</button>
           </p>}
-          {!world && !worldUnavailable && !worldError && worlds.length === 0 && <section aria-live="polite" className="mx-auto max-w-xl rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 text-center">
-            <p className="text-xs uppercase tracking-widest text-amber-400">Private campaign</p>
-            <h2 className="mt-2 font-serif text-3xl text-amber-100">Create your first world</h2>
-            <p className="mt-3 text-sm text-zinc-300">New worlds start private and empty. Give yours a title and a rules system to begin your campaign.</p>
-            <button type="button" onClick={openNewWorld} className="mt-6 rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-500">Create your first world</button>
+          {!world && !worldUnavailable && !worldError && worlds.length === 0 && <section aria-live="polite" className="mx-auto max-w-xl rounded-2xl border border-app-border bg-app-surface/60 p-8 text-center">
+            <p className="text-xs uppercase tracking-widest text-primary-400">Private campaign</p>
+            <h2 className="mt-2 font-serif text-3xl text-primary-100">Create your first world</h2>
+            <p className="mt-3 text-sm text-app-text-dim">New worlds start private and empty. Give yours a title and a rules system to begin your campaign.</p>
+            <button type="button" onClick={openNewWorld} className="mt-6 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-app-on-accent hover:bg-primary-500">Create your first world</button>
           </section>}
           {activeView === "home" && world && <div className="space-y-10">
             <CampaignOverview
@@ -944,8 +944,8 @@ export default function WorldForgeApp() {
       </WorldGuardProvider>
       {/* Loading boundary above the still-mounted subtree (milestone 4). */}
       {isTransitioning && (
-        <div role="status" aria-live="polite" className="fixed inset-0 z-[60] flex flex-col items-center justify-center space-y-4 bg-zinc-950/85 text-zinc-300 backdrop-blur-sm">
-          <div className="h-10 w-10 animate-spin rounded-xl border-2 border-indigo-500/40 border-t-indigo-400" />
+        <div role="status" aria-live="polite" className="fixed inset-0 z-[60] flex flex-col items-center justify-center space-y-4 bg-app-canvas/85 text-app-text-dim backdrop-blur-sm">
+          <div className="h-10 w-10 animate-spin rounded-xl border-2 border-secondary-500/40 border-t-secondary-400" />
           <p className="text-sm font-semibold tracking-wide">Switching worlds…</p>
         </div>
       )}

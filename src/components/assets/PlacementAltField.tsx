@@ -17,11 +17,11 @@ export function PlacementAltField({ id, label, value, onChange, fallback }: {
   fallback?: string;
 }) {
   const decorative = value === "";
-  return <fieldset className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 text-xs text-zinc-300">
+  return <fieldset className="space-y-2 rounded-lg border border-app-border bg-app-surface/40 p-3 text-xs text-app-text-dim">
     <legend className="px-1 font-semibold">{label}</legend>
     <label className="flex min-h-11 cursor-pointer items-center gap-2">
       <input type="checkbox" checked={decorative} onChange={event => onChange(event.target.checked ? "" : null)} />
-      <span>Decorative image <span className="text-zinc-500">(no description needed)</span></span>
+      <span>Decorative image <span className="text-app-subtle">(no description needed)</span></span>
     </label>
     <label htmlFor={id} className="block">
       Describe this image
@@ -33,9 +33,9 @@ export function PlacementAltField({ id, label, value, onChange, fallback }: {
         value={decorative ? "" : value ?? ""}
         placeholder={fallback ? `Uses “${fallback}” when left blank` : "What does the image show?"}
         onChange={event => onChange(event.target.value ? event.target.value : null)}
-        className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 disabled:opacity-50"
+        className="mt-1 w-full rounded-lg border border-app-border-strong bg-app-canvas px-3 py-2 text-sm text-app-text disabled:opacity-50"
       />
     </label>
-    <p className="text-zinc-500">Leave blank to keep the existing description{fallback ? ` (“${fallback}”)` : ""}. Mark the image decorative when it adds no information.</p>
+    <p className="text-app-subtle">Leave blank to keep the existing description{fallback ? ` (“${fallback}”)` : ""}. Mark the image decorative when it adds no information.</p>
   </fieldset>;
 }

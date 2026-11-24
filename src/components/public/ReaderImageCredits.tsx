@@ -1,7 +1,7 @@
 import { adjacentCreditsFor, creditIdentity, dedupeCredits, type ReaderCredit } from "@/lib/stock-credits";
 
 function ArtworkCredit({ credit }: { credit: ReaderCredit }) {
-  return <div className="space-y-1 text-sm leading-relaxed text-zinc-300 [overflow-wrap:anywhere]">
+  return <div className="space-y-1 text-sm leading-relaxed text-app-text-dim [overflow-wrap:anywhere]">
     <p><cite>{credit.title}</cite> — {credit.creditText}</p>
     {credit.modificationNotice && <p>{credit.modificationNotice}</p>}
     <p className="flex flex-wrap gap-x-3 gap-y-1">
@@ -18,7 +18,7 @@ export function ReaderImageCredits({ credits, className = "" }: { credits: Reade
   if (!unique.length) return null;
   return (
     <section aria-label="Artwork credits" className={className}>
-      <h2 className="text-sm font-bold text-amber-300">Artwork credits</h2>
+      <h2 className="text-sm font-bold text-primary-300">Artwork credits</h2>
       <ul className="mt-2 space-y-1.5">
         {unique.map(credit => (
           <li

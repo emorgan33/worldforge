@@ -28,7 +28,7 @@ export function ActionCostBadge({ system, cost }: { system: string; cost: unknow
   const value = statText(cost);
   if (!value) return null;
   const DndIcon = ({ action: Sword, bonus: Zap, reaction: RotateCcw, legendary: Crown, passive: Eye } as const)[value as "action"];
-  return <span className="rules-action-badge rounded bg-amber-900/50 px-2 py-0.5 text-xs text-amber-300">
+  return <span className="rules-action-badge rounded bg-primary-900/50 px-2 py-0.5 text-xs text-primary-300">
     {system === "PF_2E" ? <PathfinderActionIcon cost={value} /> : isDnd(system) && DndIcon ? <DndIcon data-action-icon={`dnd-${value}`} className="rules-action-icon" aria-hidden="true" /> : null}
     <span>{actionCostLabel(system, cost)}</span>
   </span>;

@@ -44,17 +44,17 @@ function renderVariable(variable: VariableItem): string {
   const title = escapeHtml(variable.title || variable.value);
   switch (variable.type) {
     case "TERM_SIMPLE":
-      return `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 cursor-help" title="${escapeHtml(variable.description || variable.value)}">${title}</span>`;
+      return `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary-500/10 text-primary-400 border border-primary-500/20 cursor-help" title="${escapeHtml(variable.description || variable.value)}">${title}</span>`;
     case "TERM_ADVANCED":
-      return `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 cursor-pointer shadow-sm hover:bg-indigo-500/25 transition-all" title="${value}">${escapeHtml(variable.title || variable.key)}: ${value}</span>`;
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-secondary-500/15 text-secondary-300 border border-secondary-500/30 cursor-pointer shadow-sm hover:bg-secondary-500/25 transition-all" title="${value}">${escapeHtml(variable.title || variable.key)}: ${value}</span>`;
     case "RENDERED_FRAGMENT":
       return renderVariableFragment(variable.value);
     case "LINK": {
       const href = safeHref(variable.value);
-      return href ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="text-sky-400 hover:text-sky-300 underline underline-offset-2">${title}</a>` : title;
+      return href ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="text-info-400 hover:text-info-300 underline underline-offset-2">${title}</a>` : title;
     }
     case "NUMBER":
-      return `<span class="font-mono text-emerald-400 font-semibold">${value}</span>`;
+      return `<span class="font-mono text-success-400 font-semibold">${value}</span>`;
     default:
       return value;
   }

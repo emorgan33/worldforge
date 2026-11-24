@@ -84,7 +84,7 @@ export const ArticleLink = Node.create<{ articles: LinkableArticle[]; suggestion
           const heading = document.createElement("div"); heading.className = "article-link-picker-heading";
           heading.textContent = "Link an article · ↑ ↓ Enter · Esc to close"; popup.appendChild(heading);
           if (!props.items.length) {
-            const empty = document.createElement("p"); empty.className = "p-3 text-xs text-zinc-400";
+            const empty = document.createElement("p"); empty.className = "p-3 text-xs text-app-muted";
             empty.textContent = "No matching articles. Keep typing to change the search."; popup.appendChild(empty);
           }
           props.items.forEach((article, itemIndex) => {
