@@ -194,4 +194,13 @@ test("reader pages render instead of the prerender error page", { skip: !origin 
     assert.doesNotMatch(html, /__next_error__/, `${path} rendered Next's prerender error page anonymously`);
     assert.match(html, /Reader smoke (?:world|article)/, `${path} must render its content anonymously`);
   }
+
+  for (const theme of ["night-watch", "daylight"]) {
+    const response = await fetch(`${origin}/w/${world.slug}`, { headers: { Cookie: `wf_theme=${theme}` } });
+    const html = await response.text();
+    assert.equal(response.status, 200, `/w/${world.slug} returned ${response.status} for ${theme}`);
+    assert.match(html, /aria-label="Interface theme"/, `${theme} reader must render the theme control`);
+    assert.match(html, /bg-app-canvas/, `${theme} reader bar must paint its own themed background`);
+    assert.match(html, /data-world-theme=/, "world presentation must stay independent of the chrome theme");
+  }
 });
