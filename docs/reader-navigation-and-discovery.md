@@ -23,13 +23,14 @@ articles, session recaps, and published maps across the player's campaigns.
 `/api/player/activity` resolves the caller from the session cookie, then
 re-checks every candidate with `readableWhere()` for the resource kind and the
 reader's asset access for map images. Entries carry no stored titles or links;
-the projection reads the current article or map snapshot, so renaming, revoking
-access, unpublishing a map, or archiving a world removes the entry on the next
-request. Sharing an article (audience policy) or publishing a map records or
-bumps one `PlayerActivity` row in the same transaction as the share write;
-`GM_ONLY`, an audience revoke, or unpublishing deletes it. Drafts that were never
-shared never appear, and the feed never grants access by itself. It is a reading
-aid, not a notification system: there are no unread badges or emails.
+the projection reads the current article or map snapshot, so a rename shows the
+new title, while revoking access, unpublishing a map, or archiving a world
+removes the entry on the next request. Sharing an article (audience policy) or
+publishing a map records or bumps one `PlayerActivity` row in the same
+transaction as the share write; `GM_ONLY`, an audience revoke, or unpublishing
+deletes it. Drafts that were never shared never appear, and the feed never
+grants access by itself. It is a reading aid, not a notification system: there
+are no unread badges or emails.
 
 ## Illustrations and credits
 

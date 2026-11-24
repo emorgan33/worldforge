@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { imageAssetId } from "@/lib/assets";
 import { recordAuditEvent } from "@/lib/audit";
-import { clearPlayerActivity, recordPlayerActivity } from "@/lib/player-activity";
+import { recordPlayerActivity } from "@/lib/player-activity";
 import {
   buildMapSnapshot,
   normalizeSelection,
@@ -185,8 +185,10 @@ async function deleteHandler(request: NextRequest) {
     const worldId = requiredId(body.worldId, "World ID");
     const mapId = requiredId(body.mapId, "Map ID");
     await worldMap(worldId, mapId);
-    await prisma.mapPublication.deleteMany({ where: { mapId } });
-    await clearPlayerActivity(prisma, "map", mapId);
+    await prisma.$transaction(async tx => {
+      await tx.mapPublication.deleteMany({ where: { mapId } });
+      await tx.playerActivity.deleteMany({ where: { resourceKind: "map", resourceId: mapId } });
+    });
     return NextResponse.json({ success: true });
   } catch (error) { return failure(error); }
 }

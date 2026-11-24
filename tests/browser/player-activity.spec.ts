@@ -46,3 +46,32 @@ test("the player portal lists what is new and hides unshared content", async ({ 
     await db.$disconnect();
   }
 });
+
+test("a feed failure leaves the world list usable", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = testPrismaClient();
+  let userId: string | undefined;
+  let worldId: string | undefined;
+  try {
+    const owner = await db.user.create({ data: { name: "Feed failure owner", email: `feed-failure-owner-${randomUUID()}@example.invalid` } });
+    const session = await playerSession(db);
+    userId = session.user.id;
+    const stamp = randomUUID();
+    const world = await db.world.create({ data: { ownerId: owner.id, title: "Feed failure world", slug: `feed-failure-${stamp}` } });
+    worldId = world.id;
+    await db.worldMember.create({ data: { worldId: world.id, userId: session.user.id, role: "PLAYER", status: "ACTIVE" } });
+
+    await context.addCookies([{ name: SESSION_COOKIE, value: session.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+    await page.route("**/api/player/activity", route => route.abort());
+    await page.goto("/player");
+
+    await expect(page.getByText(/Your worlds are still available below/)).toBeVisible();
+    await expect(page.getByRole("link", { name: /Open world/ })).toBeVisible();
+  } finally {
+    if (worldId) await db.world.delete({ where: { id: worldId } }).catch(() => undefined);
+    if (userId) await db.user.delete({ where: { id: userId } }).catch(() => undefined);
+    await db.user.deleteMany({ where: { email: { startsWith: "feed-failure-owner-" } } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+

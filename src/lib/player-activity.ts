@@ -22,17 +22,8 @@ export interface PlayerActivityItem {
 
 type ActivityClient = Pick<Prisma.TransactionClient, "playerActivity"> | typeof prisma;
 
-/**
- * A readable-where may already constrain `id` (for player snapshots). Intersect
- * it with the feed candidates instead of replacing it, or a non-granted player
- * would still receive the article.
- */
-function restrictToReadable(where: Record<string, unknown>, candidates: string[]): string[] {
-  const constraint = (where as { id?: { in?: unknown } }).id?.in;
-  if (!Array.isArray(constraint)) return candidates;
-  const allowed = new Set(constraint.filter((id): id is string => typeof id === "string"));
-  return candidates.filter(id => allowed.has(id));
-}
+const ACTIVITY_PAGE_SIZE = 200;
+const ACTIVITY_MAX_PAGES = 25;
 
 /**
  * Mark a shared article or published map as new for campaign players. Call this
@@ -60,6 +51,10 @@ export async function clearPlayerActivity(client: ActivityClient, resourceKind: 
  * Player-facing "What's new" feed. Every entry is re-checked against the
  * reader's current access, so revoking a grant, unpublishing a map, or
  * unsharing an article removes it without touching stored activity rows.
+ *
+ * Candidates are read in pages and only readable entries count toward the
+ * limit: a burst of shares for other players must not hide older readable
+ * updates.
  */
 export async function playerActivityFeed(actor: Actor, limit = PLAYER_ACTIVITY_LIMIT): Promise<PlayerActivityItem[]> {
   if (!actor.userId) return [];
@@ -74,84 +69,90 @@ export async function playerActivityFeed(actor: Actor, limit = PLAYER_ACTIVITY_L
   });
   if (memberships.length === 0) return [];
   const worlds = memberships.map(member => member.world);
-  const worldById = new Map(worlds.map(world => [world.id, world]));
+  const worldIds = worlds.map(world => world.id);
 
-  const rows = await prisma.playerActivity.findMany({
-    where: { worldId: { in: worlds.map(world => world.id) } },
-    orderBy: { occurredAt: "desc" },
-    take: 200,
-  });
-  if (rows.length === 0) return [];
-
-  const articles = new Map<string, { title: string; template: string; slug: string; worldId: string }>();
-  const maps = new Map<string, { title: string; worldId: string }>();
-
-  for (const world of worlds) {
-    const worldRows = rows.filter(row => row.worldId === world.id);
-    if (worldRows.length === 0) continue;
-
-    if (worldRows.some(row => row.resourceKind === "article")) {
-      const { where } = await readableWhere(world.id, "articles", actor);
-      const candidates = worldRows.filter(row => row.resourceKind === "article").map(row => row.resourceId);
-      const readable = await prisma.article.findMany({
-        where: { ...where, id: { in: restrictToReadable(where, candidates) } },
-        select: { id: true, title: true, template: true, slug: true },
-      });
-      for (const article of readable) articles.set(article.id, { ...article, worldId: world.id });
+  type Access = {
+    articles?: { where: Record<string, unknown> };
+    maps?: { where: Record<string, unknown> };
+    assetIds?: Set<string>;
+  };
+  const access = new Map<string, Access>();
+  async function accessFor(worldId: string): Promise<Access> {
+    let current = access.get(worldId);
+    if (!current) { current = {}; access.set(worldId, current); }
+    if (!current.articles) current.articles = await readableWhere(worldId, "articles", actor);
+    if (!current.maps) current.maps = await readableWhere(worldId, "maps", actor);
+    if (!current.assetIds) {
+      const { where } = await readableWhere(worldId, "assets", actor);
+      const assets = await prisma.imageAsset.findMany({ where: { ...where, displayRestricted: false }, select: { id: true } });
+      current.assetIds = new Set(assets.map(asset => asset.id));
     }
+    return current;
+  }
 
-    if (worldRows.some(row => row.resourceKind === "map")) {
-      const candidates = worldRows.filter(row => row.resourceKind === "map").map(row => row.resourceId);
-      const { where } = await readableWhere(world.id, "maps", actor);
-      const published = await prisma.map.findMany({
-        where: { ...where, worldId: world.id, id: { in: restrictToReadable(where, candidates) }, publication: { isNot: null } },
-        select: { id: true, publication: { select: { snapshot: true } } },
-      });
-      if (published.length > 0) {
-        const assetWhere = await readableWhere(world.id, "assets", actor);
-        const assets = await prisma.imageAsset.findMany({ where: { ...assetWhere.where, displayRestricted: false }, select: { id: true } });
-        const assetIds = new Set(assets.map(asset => asset.id));
+  const items: PlayerActivityItem[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < ACTIVITY_MAX_PAGES && items.length < limit; page++) {
+    const rows = await prisma.playerActivity.findMany({
+      where: { worldId: { in: worldIds } },
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      take: ACTIVITY_PAGE_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+    if (rows.length === 0) break;
+    cursor = rows[rows.length - 1].id;
+
+    const projected = new Map<string, PlayerActivityItem>();
+
+    // Group this page by world so each access predicate is evaluated once.
+    for (const world of worlds) {
+      const worldRows = rows.filter(row => row.worldId === world.id);
+      if (worldRows.length === 0) continue;
+      const resolved = await accessFor(world.id);
+
+      const articleRows = worldRows.filter(row => row.resourceKind === "article");
+      if (articleRows.length > 0) {
+        const readable = await prisma.article.findMany({
+          // AND keeps the access predicate intact. readableWhere may deny with
+          // `id: "__NONE__"`; replacing that with candidate IDs would leak.
+          where: { AND: [resolved.articles!.where, { worldId: world.id, id: { in: articleRows.map(row => row.resourceId) } }] },
+          select: { id: true, title: true, template: true, slug: true },
+        });
+        for (const article of readable) {
+          projected.set(`article:${article.id}`, {
+            id: "", kind: "article",
+            label: article.template === "REPORT" ? "Session recap" : "Article",
+            title: article.title, worldTitle: world.title,
+            href: `/c/${world.slug}/a/${article.slug}`, occurredAt: "",
+          });
+        }
+      }
+
+      const mapRows = worldRows.filter(row => row.resourceKind === "map");
+      if (mapRows.length > 0) {
+        const published = await prisma.map.findMany({
+          where: { AND: [resolved.maps!.where, { worldId: world.id, id: { in: mapRows.map(row => row.resourceId) }, publication: { isNot: null } }] },
+          select: { id: true, publication: { select: { snapshot: true } } },
+        });
         for (const map of published) {
           const snapshot = parseMapSnapshot(map.publication?.snapshot);
           // A map whose base image is no longer readable opens on an
           // unavailable notice; keep it out of the feed instead.
-          if (!snapshot || !publicImage(snapshot.imageUrl, assetIds)) continue;
-          maps.set(map.id, { title: snapshot.title, worldId: world.id });
+          if (!snapshot || !publicImage(snapshot.imageUrl, resolved.assetIds!)) continue;
+          projected.set(`map:${map.id}`, {
+            id: "", kind: "map", label: "Map", title: snapshot.title,
+            worldTitle: world.title, href: `/c/${world.slug}/maps/${map.id}`, occurredAt: "",
+          });
         }
       }
     }
-  }
 
-  const items: PlayerActivityItem[] = [];
-  for (const row of rows) {
-    const world = worldById.get(row.worldId);
-    if (!world) continue;
-    if (row.resourceKind === "article") {
-      const article = articles.get(row.resourceId);
-      if (!article) continue;
-      items.push({
-        id: row.id,
-        kind: "article",
-        label: article.template === "REPORT" ? "Session recap" : "Article",
-        title: article.title,
-        worldTitle: world.title,
-        href: `/c/${world.slug}/a/${article.slug}`,
-        occurredAt: row.occurredAt.toISOString(),
-      });
-    } else if (row.resourceKind === "map") {
-      const map = maps.get(row.resourceId);
-      if (!map) continue;
-      items.push({
-        id: row.id,
-        kind: "map",
-        label: "Map",
-        title: map.title,
-        worldTitle: world.title,
-        href: `/c/${world.slug}/maps/${row.resourceId}`,
-        occurredAt: row.occurredAt.toISOString(),
-      });
+    for (const row of rows) {
+      const item = projected.get(`${row.resourceKind}:${row.resourceId}`);
+      if (!item) continue;
+      items.push({ ...item, id: row.id, occurredAt: row.occurredAt.toISOString() });
+      if (items.length === limit) break;
     }
-    if (items.length === limit) break;
   }
   return items;
 }
