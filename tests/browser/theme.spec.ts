@@ -20,6 +20,24 @@ test("theme choice applies immediately and survives a reload", async ({ page }) 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "daylight");
 });
 
+test("true black paints a pure black canvas", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Interface theme").selectOption("true-black");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "true-black");
+  await expect(page.getByLabel("Interface theme")).toBeEnabled();
+
+  const canvas = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(canvas).toBe("rgb(0, 0, 0)");
+
+  // The surface token, not the canvas, so this proves the overrides applied to
+  // controls as well as the page background.
+  const control = await page.getByLabel("Interface theme").evaluate(el => getComputedStyle(el).backgroundColor);
+  expect(control).toBe("rgb(10, 10, 11)");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "true-black");
+});
+
 test("the control is disabled while a save is in flight", async ({ page }) => {
   await page.route("**/api/preferences/theme", async route => {
     await new Promise(resolve => setTimeout(resolve, 600));
