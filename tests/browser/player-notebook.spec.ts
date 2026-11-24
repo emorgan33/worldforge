@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { testPrismaClient } from "../test-prisma-client";
 import { PrismaClient } from "@prisma/client";
@@ -179,6 +180,129 @@ test("a successful create is not duplicated when the list refresh fails", async 
     await expect.poll(() => db.playerNote.count({ where: { userId: session.user.id } })).toBe(1);
   } finally {
     if (userId) await db.user.delete({ where: { id: userId } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
+test("reference links honor the dirty guard", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = testPrismaClient();
+  let userId: string | undefined;
+  let worldId: string | undefined;
+  try {
+    const owner = await db.user.create({ data: { name: "Notebook reference owner", email: `notebook-reference-owner-${randomUUID()}@example.invalid` } });
+    const session = await playerSession(db);
+    userId = session.user.id;
+    const stamp = randomUUID();
+    const world = await db.world.create({ data: { ownerId: owner.id, title: "Notebook reference world", slug: `notebook-reference-${stamp}` } });
+    worldId = world.id;
+    await db.worldMember.create({ data: { worldId: world.id, userId: session.user.id, role: "PLAYER", status: "ACTIVE" } });
+    const article = await db.article.create({ data: { worldId: world.id, slug: `ship-${stamp}`, title: "The missing ship" } });
+    await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "articles", resourceId: article.id, mode: "PUBLIC", createdById: owner.id } });
+    await db.playerNote.create({ data: { userId: session.user.id, worldId: world.id, resourceKind: "article", resourceId: article.id, title: "Ship note", content: "Original" } });
+
+    await context.addCookies([{ name: SESSION_COOKIE, value: session.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+    await page.goto("/player/notebook");
+    await page.getByRole("button", { name: /Ship note/ }).click();
+    await page.getByRole("textbox", { name: "Note", exact: true }).fill("Edited but unsaved");
+
+    page.once("dialog", dialog => dialog.dismiss());
+    await page.getByRole("link", { name: "The missing ship" }).click();
+    await expect(page).toHaveURL(/\/player\/notebook$/);
+    await expect(page.getByRole("textbox", { name: "Note", exact: true })).toHaveValue("Edited but unsaved");
+
+    page.once("dialog", dialog => dialog.accept());
+    await page.getByRole("link", { name: "The missing ship" }).click();
+    await expect(page).toHaveURL(new RegExp(`/c/${world.slug}/a/${article.slug}$`));
+  } finally {
+    if (worldId) await db.world.delete({ where: { id: worldId } }).catch(() => undefined);
+    if (userId) await db.user.delete({ where: { id: userId } }).catch(() => undefined);
+    await db.user.deleteMany({ where: { email: { startsWith: "notebook-reference-owner-" } } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
+test("Load latest adopts a campaign changed on another device", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = testPrismaClient();
+  let userId: string | undefined;
+  let worldIds: string[] = [];
+  try {
+    const owner = await db.user.create({ data: { name: "Notebook conflict owner", email: `notebook-conflict-owner-${randomUUID()}@example.invalid` } });
+    const session = await playerSession(db);
+    userId = session.user.id;
+    const stamp = randomUUID();
+    const first = await db.world.create({ data: { ownerId: owner.id, title: "Conflict world one", slug: `notebook-conflict-1-${stamp}` } });
+    const second = await db.world.create({ data: { ownerId: owner.id, title: "Conflict world two", slug: `notebook-conflict-2-${stamp}` } });
+    worldIds = [first.id, second.id];
+    await db.worldMember.createMany({ data: [
+      { worldId: first.id, userId: session.user.id, role: "PLAYER", status: "ACTIVE" },
+      { worldId: second.id, userId: session.user.id, role: "PLAYER", status: "ACTIVE" },
+    ] });
+    const note = await db.playerNote.create({ data: { userId: session.user.id, worldId: first.id, title: "Move me", content: "Original" } });
+
+    await context.addCookies([{ name: SESSION_COOKIE, value: session.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+    await page.goto("/player/notebook");
+    await page.getByRole("button", { name: /Move me/ }).click();
+
+    // Another device moves the note and bumps its version.
+    const other = await fetch(`${baseURL}/api/player/notes`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: `${SESSION_COOKIE}=${session.token}`, Origin: baseURL! },
+      body: JSON.stringify({ id: note.id, title: "Move me", content: "Original", version: 1, worldId: second.id }),
+    });
+    assert.equal(other.status, 200, await other.text());
+
+    await page.getByRole("textbox", { name: "Note", exact: true }).fill("Edited on device one");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByText("This note changed on another device.")).toBeVisible();
+    await page.getByRole("button", { name: "Load latest" }).click();
+
+    const editor = page.getByRole("region", { name: "Note editor" });
+    await expect(editor.getByLabel("Campaign")).toHaveValue(second.id);
+    await editor.getByRole("textbox", { name: "Note", exact: true }).fill("Edited after loading latest");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByText("Saved.")).toBeVisible();
+    const stored = await db.playerNote.findUniqueOrThrow({ where: { id: note.id } });
+    expect(stored.worldId).toBe(second.id);
+  } finally {
+    if (worldIds.length) await db.world.deleteMany({ where: { id: { in: worldIds } } }).catch(() => undefined);
+    if (userId) await db.user.delete({ where: { id: userId } }).catch(() => undefined);
+    await db.user.deleteMany({ where: { email: { startsWith: "notebook-conflict-owner-" } } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
+test("editing text does not detach a temporarily hidden campaign", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = testPrismaClient();
+  let userId: string | undefined;
+  let worldId: string | undefined;
+  try {
+    const owner = await db.user.create({ data: { name: "Notebook archive owner", email: `notebook-archive-owner-${randomUUID()}@example.invalid` } });
+    const session = await playerSession(db);
+    userId = session.user.id;
+    const stamp = randomUUID();
+    const world = await db.world.create({ data: { ownerId: owner.id, title: "Notebook archive world", slug: `notebook-archive-${stamp}`, deletedAt: new Date() } });
+    worldId = world.id;
+    await db.worldMember.create({ data: { worldId: world.id, userId: session.user.id, role: "PLAYER", status: "ACTIVE" } });
+    const note = await db.playerNote.create({ data: { userId: session.user.id, worldId: world.id, title: "Hidden campaign note", content: "Original" } });
+
+    await context.addCookies([{ name: SESSION_COOKIE, value: session.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+    await page.goto("/player/notebook");
+    await page.getByRole("button", { name: /Hidden campaign note/ }).click();
+    await page.getByRole("textbox", { name: "Note", exact: true }).fill("Edited while archived");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByText("Saved.")).toBeVisible();
+
+    expect((await db.playerNote.findUniqueOrThrow({ where: { id: note.id } })).worldId).toBe(world.id);
+    await db.world.update({ where: { id: world.id }, data: { deletedAt: null } });
+    await page.reload();
+    await expect(page.getByRole("button", { name: /Hidden campaign note.*Notebook archive world/ })).toBeVisible();
+  } finally {
+    if (worldId) await db.world.delete({ where: { id: worldId } }).catch(() => undefined);
+    if (userId) await db.user.delete({ where: { id: userId } }).catch(() => undefined);
+    await db.user.deleteMany({ where: { email: { startsWith: "notebook-archive-owner-" } } }).catch(() => undefined);
     await db.$disconnect();
   }
 });

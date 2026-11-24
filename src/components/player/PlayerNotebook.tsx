@@ -59,7 +59,8 @@ export default function PlayerNotebook() {
   const [deleting, setDeleting] = useState(false);
   const [query, setQuery] = useState("");
   const [worldFilter, setWorldFilter] = useState("");
-  const [conflict, setConflict] = useState<{ title: string; content: string; version: number } | null>(null);
+  const [conflict, setConflict] = useState<{ title: string; content: string; version: number; worldId: string | null } | null>(null);
+  const [campaignDirty, setCampaignDirty] = useState(false);
   const initialized = useRef(false);
 
   const load = useCallback(async () => {
@@ -122,6 +123,7 @@ export default function PlayerNotebook() {
     if (dirty && !window.confirm("Discard unsaved changes to this note?")) return;
     setDraft(draftFromNote(note));
     setDirty(false);
+    setCampaignDirty(false);
     setConflict(null);
     setActionError("");
     setNotice("");
@@ -132,6 +134,7 @@ export default function PlayerNotebook() {
     if (dirty && !window.confirm("Discard unsaved changes to this note?")) return;
     setDraft({ ...EMPTY_DRAFT, worldId: worldFilter || null });
     setDirty(false);
+    setCampaignDirty(false);
     setConflict(null);
     setActionError("");
     setNotice("");
@@ -152,7 +155,7 @@ export default function PlayerNotebook() {
         method: submitted.id ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(submitted.id
-          ? { id: submitted.id, title: submitted.title, content: submitted.content, version: submitted.version, worldId: submitted.worldId }
+          ? { id: submitted.id, title: submitted.title, content: submitted.content, version: submitted.version, ...(campaignDirty ? { worldId: submitted.worldId } : {}) }
           : {
               title: submitted.title,
               content: submitted.content,
@@ -163,7 +166,7 @@ export default function PlayerNotebook() {
       });
       const data = await response.json().catch(() => ({}));
       if (response.status === 409 && data.note) {
-        setConflict({ title: data.note.title, content: data.note.content, version: data.note.version });
+        setConflict({ title: data.note.title, content: data.note.content, version: data.note.version, worldId: data.note.worldId ?? null });
         return;
       }
       if (!response.ok) throw new Error(data.error || "Could not save this note.");
@@ -174,6 +177,7 @@ export default function PlayerNotebook() {
         ? { ...current, version: typeof data.version === "number" ? data.version : submitted.version + 1 }
         : { ...submitted, id: data.note.id, version: data.note.version, worldId: data.note.worldId ?? submitted.worldId });
       setDirty(false);
+      setCampaignDirty(false);
       setConflict(null);
       setNotice("Saved.");
       try {
@@ -259,7 +263,7 @@ export default function PlayerNotebook() {
           </aside>
 
           <section aria-label="Note editor" className="space-y-3 rounded-xl border border-app-border bg-app-surface/40 p-4 sm:p-5">
-            {draft.reference && <p className="rounded-lg border border-app-border bg-app-canvas/50 px-3 py-2 text-xs text-app-muted">About: {draft.reference.href ? <Link href={draft.reference.href} className="font-semibold text-secondary-300 underline">{draft.reference.title}</Link> : <strong className="text-app-text-dim">{draft.reference.title}</strong>} ({draft.reference.kind})</p>}
+            {draft.reference && <p className="rounded-lg border border-app-border bg-app-canvas/50 px-3 py-2 text-xs text-app-muted">About: {draft.reference.href ? <Link href={draft.reference.href} onNavigate={event => { if (dirty && !window.confirm("Discard unsaved changes to this note?")) event.preventDefault(); }} className="font-semibold text-secondary-300 underline">{draft.reference.title}</Link> : <strong className="text-app-text-dim">{draft.reference.title}</strong>} ({draft.reference.kind})</p>}
             <label className="block text-xs font-semibold uppercase tracking-wider text-app-subtle">Title
               <input value={draft.title} disabled={pending} onChange={event => updateDraft({ title: event.target.value })} maxLength={200} className="mt-1 w-full rounded-lg border border-app-border bg-app-canvas px-3 py-2 text-lg text-app-text-strong focus:border-primary-500 focus:outline-none" placeholder="What is this note about?" />
             </label>
@@ -271,7 +275,7 @@ export default function PlayerNotebook() {
                 <select
                   value={draft.worldId ?? ""}
                   disabled={pending || Boolean(draft.reference)}
-                  onChange={event => updateDraft({ worldId: event.target.value || null })}
+                  onChange={event => { updateDraft({ worldId: event.target.value || null }); setCampaignDirty(true); }}
                   className="rounded-lg border border-app-border bg-app-canvas px-2 py-1.5 text-sm text-app-text-strong disabled:opacity-60"
                 >
                   <option value="">No campaign</option>
@@ -286,7 +290,7 @@ export default function PlayerNotebook() {
               <p className="font-semibold">This note changed on another device.</p>
               <p className="mt-1 text-xs">Your draft is still here. Load the latest version or copy your draft before replacing it.</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                <button type="button" onClick={() => { setDraft(current => ({ ...current, title: conflict.title, content: conflict.content, version: conflict.version })); setConflict(null); setDirty(false); setNotice("Loaded the latest version."); }} className="rounded border border-primary-500/60 px-2 py-1 text-xs text-primary-100 hover:bg-primary-900/40">Load latest</button>
+                <button type="button" onClick={() => { setDraft(current => ({ ...current, title: conflict.title, content: conflict.content, version: conflict.version, worldId: conflict.worldId })); setConflict(null); setDirty(false); setCampaignDirty(false); setNotice("Loaded the latest version."); }} className="rounded border border-primary-500/60 px-2 py-1 text-xs text-primary-100 hover:bg-primary-900/40">Load latest</button>
                 <button type="button" onClick={() => setConflict(null)} className="rounded border border-app-border px-2 py-1 text-xs text-app-text">Keep my draft</button>
                 <button type="button" onClick={() => void copyDraft()} className="rounded border border-app-border px-2 py-1 text-xs text-app-text">Copy my draft</button>
               </div>

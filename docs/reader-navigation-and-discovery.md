@@ -69,11 +69,15 @@ campaign removes the campaign label but keeps the note. Deleting a campaign sets
 the note's `worldId` to null; deleting an article or map does not delete notes.
 
 Updates are optimistic: `PATCH` requires the loaded `version`, increments it, and
-returns `409` with the current server copy when another device changed the note
-first. The editor keeps the player's draft and offers **Load latest** or **Copy
-my draft** rather than overwriting either version. Deleting requires
-confirmation. Notes are excluded from world export/import and never appear in
-reader search, **What's new**, or the GM notebook.
+returns `409` with the current server copy (including its campaign) when another
+device changed the note first. The editor keeps the player's draft and offers
+**Load latest** or **Copy my draft** rather than overwriting either version.
+Campaign changes are sent only when the player actually changes the selector, so
+saving text while a campaign is temporarily hidden does not detach the note.
+Deleting requires confirmation, and while a save or delete is in flight the
+editor, note list, and navigation controls are locked so a late response cannot
+replace newer work. Notes are excluded from world export/import and never appear
+in reader search, **What's new**, or the GM notebook.
 
 ## Illustrations and credits
 

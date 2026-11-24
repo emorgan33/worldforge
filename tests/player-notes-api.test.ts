@@ -182,4 +182,12 @@ test("the notebook enforces its note limit", { skip: !origin }, async context =>
 
   await db.playerNote.deleteMany({ where: { userId: player.id, title: "Note 0" } });
   assert.equal((await create()).status, 201);
+
+  // Concurrent creates at 499 must not exceed the limit.
+  await db.playerNote.deleteMany({ where: { userId: player.id, title: "One too many" } });
+  const before = await db.playerNote.count({ where: { userId: player.id } });
+  assert.equal(before, NOTE_LIMIT - 1);
+  const concurrent = await Promise.all(Array.from({ length: 6 }, () => create()));
+  assert.ok(concurrent.filter(response => response.status === 201).length <= 1, "at most one concurrent create may succeed");
+  assert.ok(await db.playerNote.count({ where: { userId: player.id } }) <= NOTE_LIMIT, "the limit is never exceeded");
 });
