@@ -159,7 +159,7 @@ export function ArticleViewer({
           {!playerView && (
             <button
               onClick={onEdit}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-secondary-600 hover:bg-secondary-500 text-white shadow-lg shadow-secondary-600/20 transition-all"
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-secondary-600 hover:bg-secondary-500 text-app-on-strong shadow-lg shadow-secondary-600/20 transition-all"
             >
               <Edit3 className="w-3.5 h-3.5" />
               <span>Edit Article</span>

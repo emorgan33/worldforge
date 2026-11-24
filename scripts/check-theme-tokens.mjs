@@ -25,6 +25,18 @@ const PATTERNS = [
 // The token block itself aliases palette variables; nothing else may.
 const ALIAS_FILE = path.join("app", "globals.css");
 
+// Fixed black/white utilities bypass the theme layer. These files are allowed
+// because their colours are content, not chrome: map annotations and their
+// halos, rules/statblock art, and a caption scrim over a user image.
+const FIXED_COLOR_PATTERN = /(?<![\w-])(?:text|bg|border|border-[trblxy]|from|via|to|ring|divide|outline|decoration)-(?:white|black)(?:\/\d{1,3})?(?![\w-])/g;
+const FIXED_COLOR_ALLOW = new Set([
+  path.join("components", "map", "InteractiveMap.tsx"),
+  path.join("components", "blocks", "StatblockCard.tsx"),
+  path.join("components", "blocks", "RulesIcons.tsx"),
+  path.join("components", "blocks", "PathfinderActionSymbol.tsx"),
+  path.join("components", "assets", "PlacementPreview.tsx"),
+]);
+
 function sourceFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
     const full = path.join(directory, entry.name);
@@ -39,6 +51,13 @@ function sourceFiles(directory) {
 const failures = [];
 for (const file of sourceFiles(ROOT)) {
   const text = readFileSync(file, "utf8");
+  const relative = path.relative(ROOT, file);
+  if (!FIXED_COLOR_ALLOW.has(relative)) {
+    for (const match of text.matchAll(FIXED_COLOR_PATTERN)) {
+      const line = text.slice(0, match.index).split("\n").length;
+      failures.push(`${file}:${line}: fixed colour ${JSON.stringify(match[0])}; use an app token`);
+    }
+  }
   for (const { name, pattern } of PATTERNS) {
     if (name === "palette reference" && path.relative(ROOT, file) === ALIAS_FILE) continue;
     for (const match of text.matchAll(pattern)) {

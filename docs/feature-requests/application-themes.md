@@ -1,8 +1,8 @@
 # Implementation plan: selectable application themes
 
-Status: P1–P6 done (#43 token layer, #44 switcher, #45 true black, #46 Daylight
-audit, P5/P6 Pathfinder and D&D on `feat/theme-game-palettes`); P7–P8 not
-started. Palette values, in-product names, and the migration order below are
+Status: P1–P7 done (#43 token layer, #44 switcher, #45 true black, #46 Daylight
+audit, #47 Pathfinder and D&D, P7 coverage sweep on `feat/theme-coverage`); P8
+not started. Palette values, in-product names, and the migration order below are
 open for review.
 
 Tracks [GitHub issue #38](https://github.com/emorgan33/worldforge/issues/38).
@@ -102,7 +102,7 @@ accent stay exactly on the reader values. The reader page keeps the dark backdro
 | Root styling | `src/app/globals.css` `:root` background/foreground, `@theme` blocks | P1 added the application token layer and made it runtime-overridable; there is still no theme selector and no `color-scheme` declaration. |
 | Workspace tokens | `--aw-*` variables and `.author-workspace` in `globals.css`, applied in `src/components/AuthorWorkspace.tsx` | Proves the token approach works; should become the default theme's values. |
 | Reader presentation | `.world-presentation` CSS variables, `src/lib/world-appearance.ts` `WORLD_THEMES`, `parseAppearance`; `globals.css` also overrides utility class names such as `[class*="bg-app-"]` | Separate axis. Chrome must not repaint presentation surfaces; presentation must not leak into chrome. Renaming utilities must update these selectors in the same change. |
-| Hardcoded colors | P1 replaced 2,179 palette-utility occurrences across 62 files with tokens: neutral roles in `globals.css` (`--color-app-canvas`, `-surface`, `-raised`, `-border*`, `-text*`, `-muted`, `-subtle`, `-on-accent`) and accent scales (`primary` amber, `secondary` indigo, `highlight` violet, `danger` red, `success` emerald, `info` sky). `text-white`, `bg-black/40`, and dark gradients remain for P7. | The default theme renders identically because each token aliases the Tailwind palette entry it replaced. A second theme can now redefine the variables without touching components. |
+| Hardcoded colors | P1 replaced 2,179 palette-utility occurrences across 62 files with tokens. P7 replaced the remaining fixed chrome literals: `text-white`/`text-black` became `text-app-text*`, `text-app-on-strong` and `text-app-on-accent`; modal scrims became `--color-app-scrim`; the reader search field and editor/article CSS became `light-dark()` or token based. Fixed black/white utilities now survive only in content (map annotations and halos, statblock art, caption gradients over images) and the token guard rejects new ones elsewhere. | The default theme renders identically because each token aliases the Tailwind palette entry it replaced. A second theme can now redefine the variables without touching components. |
 | Character sheets | `src/components/article/CharacterSheet.module.css` (paper palette, `color-scheme: light`) | Already light and self-contained; verify it inside each chrome theme and leave its paper metaphor intact. |
 | Maps | `src/components/map/InteractiveMap.tsx`, `paintStroke` fallback color, toolbar and layer panels | Stored annotation colors are author data and must not change with the viewer's theme. Chrome (toolbar, layer panel, surround) needs theme-aware values; the map backdrop and the `#eab308` fallback for stored elements stay fixed. A default for newly created drawings is persisted into the element at creation, not read from the theme at paint time. |
 | Editors | TipTap chrome, `block-editor` styles in `globals.css` | Editor affordances (hover outlines, placeholders, code blocks, blockquotes) are hardcoded for dark surfaces. |
@@ -237,6 +237,16 @@ Audit these specifically: cover-image gradients (`from-zinc-950`), modal scrims
 focus rings, empty/loading/error states, and transparent PNG placement. Each
 becomes a token pair verified in all five themes.
 
+P7 resolved them as follows: scrims use `--color-app-scrim` (55% ink over paper,
+80% black over dark panels); editor hover outlines, blockquotes, code blocks,
+tables, placeholders, selected cells and callouts use `light-dark()` pairs;
+the article link/picker use the `secondary` scale plus `color-mix()` so they
+darken in light palettes and lighten in dark ones; the reader search field is a
+tint of the world surface and ink; and focus rings already used
+`highlight-300/400`, which the palettes define. Cover gradients over user images
+stay fixed (content over art, not chrome), and native scrollbars follow
+`color-scheme`.
+
 ### 6. Existing map annotations keep their current colors
 
 `paintStroke` in `src/components/map/InteractiveMap.tsx` falls back to `#eab308`
@@ -291,6 +301,9 @@ surface):
 | Pathfinder white on secondary `#644117` | 9.1:1 |
 | Night watch `#f1f2f5` on `#111318` | 16.6:1 |
 | Night watch muted `#b1b7c2` on `#111318` | 9.2:1 |
+| Night watch subtle `#71717a` on `#111318` | 3.8:1 (pre-existing) |
+| Night watch subtle-dim `#52525b` on `#111318` | 2.4:1 (pre-existing) |
+| Night watch faint `#3f3f47` on `#111318` | 1.9:1 (pre-existing) |
 
 The Pathfinder reader border `#644117` is 7.1:1 on its paper and can serve as a
 control outline. The D&D reader border `#c0ad6a` is 1.8:1 on its paper and is
@@ -321,7 +334,7 @@ pass and the evidence is reported.
 | P4 | Daylight palette | Same as P3. **Implemented on `feat/theme-daylight-audit`**: audited `/`, `/admin/users`, `/player`, `/login`, `/w/*`, the article editor, the template dialog and the map editor with a per-text-node contrast probe (0 failures at 4.5:1), and verified Night watch computed colors are unchanged. |
 | P5 | Pathfinder palette derived from the shared source | Same as P3, plus a check that chrome and reader values match. **Implemented on `feat/theme-game-palettes`**: `tests/theme-palettes.test.ts` asserts the checked-in CSS equals the shared module and that surface/ink/muted/primary equal `WORLD_THEMES.pf2remaster`; contrast probe on workspace, admin list/detail, player, login, reader chrome, editor and template dialog reports 0 failures. |
 | P6 | D&D palette derived from the shared source | Same as P3. **Implemented on `feat/theme-game-palettes`**: same module and parity test against `WORLD_THEMES.dnd2014`, with the dark table tinted into the canvas; same contrast-probe routes report 0 failures. |
-| P7 | Coverage sweep: editor, character sheet, maps chrome, dialogs, tables, code, scrollbars, overlays, loading/empty/error, print | Manual checklist per theme on every route group; map annotation colors unchanged |
+| P7 | Coverage sweep: editor, character sheet, maps chrome, dialogs, tables, code, scrollbars, overlays, loading/empty/error, print | Manual checklist per theme on every route group; map annotation colors unchanged. **Implemented on `feat/theme-coverage`**: fixed-colour audit converted the editor, article body, callouts, tables, code, link picker, modal scrims and reader search field; `scripts/check-theme-tokens.mjs` now rejects new fixed black/white chrome utilities; contrast probe on the editor with injected tables/code/callouts/link states and on every dialog reports 0 failures in Daylight, Pathfinder and D&D. Character-sheet paper, map annotation colours and the legacy `#eab308` fallback are unchanged. Print stays with issue #5. |
 | P8 | Update `docs/`, wiki, README screenshots, and the theme-selection help text | `pnpm docs:check`; screenshots captured from an isolated demo database |
 
 ## Acceptance criteria
@@ -333,7 +346,9 @@ pass and the evidence is reported.
 - No theme flashes the wrong palette on first paint, including on public pages.
 - Article presentation continues to follow the world, not the viewer.
 - Every theme passes the contrast floor on the audited surfaces; focus rings are
-  visible on all five.
+  visible on all five. Night watch keeps two documented pre-existing exceptions
+  (control outlines and quiet text), recorded in `tests/theme-contrast.test.ts`
+  rather than silently changed.
 - Stored map annotation colors and character-sheet paper styling are unchanged;
   elements saved without a color keep the legacy `#eab308` fallback.
 - Match system follows a live OS preference change without a reload and without

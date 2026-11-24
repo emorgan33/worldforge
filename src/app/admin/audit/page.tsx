@@ -107,7 +107,7 @@ export default function AdminAuditPage() {
           />
         </label>
         <div className="flex items-end">
-          <button type="submit" disabled={loading || loadingMore} className="w-full rounded-lg bg-secondary-600 px-4 py-2 font-semibold text-white hover:bg-secondary-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300">
+          <button type="submit" disabled={loading || loadingMore} className="w-full rounded-lg bg-secondary-600 px-4 py-2 font-semibold text-app-on-strong hover:bg-secondary-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300">
             Apply filters
           </button>
         </div>

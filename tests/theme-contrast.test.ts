@@ -17,6 +17,9 @@ const nightWatch: Palette = {
   "text-bright": "#f1f2f5",
   text: "#f1f2f5",
   muted: "#b1b7c2",
+  subtle: "#71717a",
+  "subtle-dim": "#52525b",
+  faint: "#3f3f47",
 };
 
 const trueBlack: Palette = {
@@ -126,6 +129,24 @@ for (const [name, palette] of Object.entries({ nightWatch, trueBlack, daylight }
     }
   });
 }
+
+/**
+ * Night watch's quiet text roles are below the body floor on its canvas
+ * (subtle 3.8:1, subtle-dim 2.4:1, faint 1.9:1). They are used for eyebrows,
+ * hints and drop targets that shipped with the default theme; changing them
+ * would visibly change Night watch, so the measured range is recorded here the
+ * same way as the outline floor. Light themes define their own quiet shades
+ * that clear 4.5:1.
+ */
+test("night watch quiet text keeps its documented pre-existing range", () => {
+  const canvas = nightWatch.canvas;
+  const subtle = ratio(nightWatch.subtle, canvas);
+  const subtleDim = ratio(nightWatch["subtle-dim"], canvas);
+  const faint = ratio(nightWatch.faint, canvas);
+  assert.ok(subtle > 3.5 && subtle < 4.5, `night watch subtle is ${subtle.toFixed(2)}:1`);
+  assert.ok(subtleDim > 2 && subtleDim < 3, `night watch subtle-dim is ${subtleDim.toFixed(2)}:1`);
+  assert.ok(faint > 1.5 && faint < 2.2, `night watch faint is ${faint.toFixed(2)}:1`);
+});
 
 test("true black uses a pure black canvas and near-white, not white, body text", () => {
   assert.equal(trueBlack.canvas, "#000000");

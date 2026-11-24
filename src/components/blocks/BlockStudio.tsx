@@ -112,7 +112,7 @@ export function BlockStudio({ blocks, worldId, system, initialCategory, onSaveBl
         </div><StatblockCard block={selected} /><ShareResource key={selected.id} kind="statblocks" resourceId={selected.id} title={selected.name} />
       </> : <div className="rounded-xl border border-app-border p-12 text-center text-app-subtle">Your next encounter starts here.</div>}</div>
     </div>
-    {editing && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm" onMouseDown={event => { if (event.target === event.currentTarget && !busy) setEditing(false); }}>
+    {editing && <div className="fixed inset-0 z-50 flex items-center justify-center bg-app-scrim p-3 backdrop-blur-sm" onMouseDown={event => { if (event.target === event.currentTarget && !busy) setEditing(false); }}>
       <div role="dialog" aria-modal="true" aria-labelledby="statblock-title" className="max-h-[94vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-primary-800/50 bg-app-surface p-5 shadow-2xl sm:p-7" onKeyDown={event => {
         if (event.key === "Escape" && !busy) setEditing(false);
         if (event.key === "Tab") {
