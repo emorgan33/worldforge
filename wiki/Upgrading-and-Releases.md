@@ -137,10 +137,11 @@ before announcing it. Never include access tokens in release notes.
 **Source owner:** `wiki/Upgrading-and-Releases.md`; adapted from
 `docs/releases/`, `docs/deployment-configuration.md`, and
 `docs/backup-restore.md`.
-**Verified against:** `v0.4.5` (`ab8b6be`), published multi-platform release
-metadata and source audit. The release includes verified OS backports and
-embedded SQLite 3.54.1; local scans report 37 unresolved HIGH package matches
-and 12 architecture-scoped vendor-resolved matches, not suppressed. See
-[Wiki Verification](Wiki-Verification) for executed rehearsals and limits.
-Multi-platform selection and Oracle Ampere steps are source-reviewed; native
-Ampere and real TLS deployment remain unverified.
+**Verified against:** `v0.4.11` (`0182a67`) for the upgrade steps and admin
+build check, source-audited. The published multi-platform release metadata and
+container rehearsal below remain the `v0.4.5` (`ab8b6be`) evidence. The release
+includes verified OS backports and embedded SQLite 3.54.1; local scans report 37
+unresolved HIGH package matches and 12 architecture-scoped vendor-resolved
+matches, not suppressed. See [Wiki Verification](Wiki-Verification) for executed
+rehearsals and limits. Multi-platform selection and Oracle Ampere steps are
+source-reviewed; native Ampere and real TLS deployment remain unverified.

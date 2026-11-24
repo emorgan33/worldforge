@@ -107,6 +107,7 @@ environment. Never point rehearsals or tests at real installation data.
 
 **Source owner:** `wiki/Installation-Administration.md`; adapted from
 `docs/installation-administration.md`.
-**Verified against:** `v0.4.3` (`94c694c`), including merged issue #20 remediation
-(`4ab66c1`); source/contract audit. CLI setup/bootstrap were rehearsed on isolated
-storage; see [Wiki Verification](Wiki-Verification).
+**Verified against:** `v0.4.11` (`0182a67`), including merged issue #20
+remediation (`4ab66c1`); source/contract audit, with the admin build label
+covered by the production-auth browser smoke. CLI setup/bootstrap were rehearsed
+on isolated storage; see [Wiki Verification](Wiki-Verification).

@@ -44,5 +44,6 @@ rather than overwriting it. Revisions and exports retain sheet metadata.
 
 **Source owner:** `wiki/Character-Sheets.md`; implementation:
 `docs/character-sheets.md`, `src/lib/character-sheet.ts`, and CharacterSheet component.
-**Verified against:** `v0.4.3` (`94c694c`), source/contract audit; see
+**Verified against:** `v0.4.11` (`0182a67`), source/contract audit of both
+profiles and the character-sheet model/API tests; see
 [verification record](Wiki-Verification).

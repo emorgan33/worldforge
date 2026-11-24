@@ -49,5 +49,6 @@ placement still uses it. See [Images and Stock Art](Images-and-Stock-Art).
 
 **Source owner:** `wiki/World-Appearance-and-Themes.md`; implementation:
 `docs/world-appearance.md` and appearance validation/rendering modules.
-**Verified against:** `v0.4.10` (`38f6cb5`), source/contract audit; see
+**Verified against:** `v0.4.11` (`0182a67`), source/contract audit plus the
+theme palette, contrast, token-guard, and browser theme tests; see
 [verification record](Wiki-Verification).
