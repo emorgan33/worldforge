@@ -40,6 +40,9 @@ test("the campaign access matrix leaks no private resource to the wrong caller",
   const shared = await db.article.create({ data: { worldId: world.id, slug: `shared-${stamp}`, title: "Harbor gazette", publicationStatus: "PUBLISHED", visibility: "PUBLIC" } });
   const memberOnly = await db.article.create({ data: { worldId: world.id, slug: `member-${stamp}`, title: "Member secret", publicationStatus: "PUBLISHED", visibility: "PUBLIC" } });
   const gmOnly = await db.article.create({ data: { worldId: world.id, slug: `gm-${stamp}`, title: "GM vault", publicationStatus: "DRAFT", visibility: "PRIVATE" } });
+  const otherWorld = await db.world.create({ data: { ownerId: owner.id, title: "Other matrix world", slug: `matrix-other-${stamp}` } });
+  const otherArticle = await db.article.create({ data: { worldId: otherWorld.id, slug: `other-${stamp}`, title: "Other world harbor" } });
+  await db.audiencePolicy.create({ data: { worldId: otherWorld.id, resourceKind: "articles", resourceId: otherArticle.id, mode: "PUBLIC", createdById: owner.id } });
   await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "articles", resourceId: shared.id, mode: "PUBLIC", createdById: owner.id } });
   const memberPolicy = await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "articles", resourceId: memberOnly.id, mode: "PLAYER_SNAPSHOT", createdById: owner.id } });
   await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "assets", resourceId: asset.id, mode: "PUBLIC", createdById: owner.id } });
@@ -78,7 +81,9 @@ test("the campaign access matrix leaks no private resource to the wrong caller",
     assert.equal(response.status, 401, `${path} must reject anonymous callers`);
     assert.match(response.headers.get("cache-control") ?? "", /no-store/);
   }
-  assert.equal((await search()).status, 401);
+  const anonSearch = await search();
+  assert.equal(anonSearch.status, 401);
+  assert.match(anonSearch.headers.get("cache-control") ?? "", /no-store/, "search failures are not cacheable");
   assert.equal((await fetch(`${origin}/api/assets/${asset.id}/file`)).status, 404);
   assert.equal((await fetch(`${origin}/api/worlds/${world.id}/export`)).status, 401);
   const anonMap = await fetch(`${origin}/c/${world.slug}/maps/${map.id}`).then(response => response.text());
@@ -91,7 +96,9 @@ test("the campaign access matrix leaks no private resource to the wrong caller",
   assert.deepEqual(memberTitles, ["Harbor gazette"]);
   const grantedSearch = await fetch(`${origin}/api/c/${world.slug}/search?q=member`, { headers: { Cookie: memberCookie } });
   assert.deepEqual(((await grantedSearch.json()).articles as { title: string }[]).map(article => article.title), ["Member secret"]);
-  assert.match(await fetch(`${origin}/api/assets/${asset.id}/file`, { headers: { Cookie: memberCookie } }).then(response => response.text()), /./);
+  const assetResponse = await fetch(`${origin}/api/assets/${asset.id}/file`, { headers: { Cookie: memberCookie } });
+  assert.equal(assetResponse.status, 200);
+  assert.equal((await assetResponse.arrayBuffer()).byteLength, 4, "readable members receive the stored image bytes");
   const memberMap = await fetch(`${origin}/c/${world.slug}/maps/${map.id}`, { headers: { Cookie: memberCookie } });
   const memberMapHtml = await memberMap.text();
   assert.equal(memberMap.status, 200);
@@ -102,8 +109,30 @@ test("the campaign access matrix leaks no private resource to the wrong caller",
   assert.deepEqual(notes.notes.map((note: { title: string }) => note.title), ["Private note"]);
   assert.equal((await fetch(`${origin}/api/player/bookmarks`, { headers: { Cookie: memberCookie } }).then(response => response.json())).items.length, 1);
 
+  // GM-only content is invisible to players, including through search.
+  const memberVault = await fetch(`${origin}/api/c/${world.slug}/search?q=vault`, { headers: { Cookie: memberCookie } }).then(response => response.json());
+  assert.deepEqual(memberVault.articles, [], "GM-only articles never enter player search");
+  const ownerVault = await fetch(`${origin}/api/c/${world.slug}/search?q=vault`, { headers: { Cookie: ownerCookie } });
+  assert.equal(ownerVault.status, 200);
+  assert.deepEqual(((await ownerVault.json()).articles as { title: string }[]).map(article => article.title), ["GM vault"], "the owner can search their own drafts");
+
+  const activeExport = await fetch(`${origin}/api/worlds/${world.id}/export`, { headers: { Cookie: ownerCookie } });
+  assert.equal(activeExport.status, 200, "the owner can export an active world");
+  assert.match(activeExport.headers.get("content-disposition") ?? "", /attachment/);
+
+  const directBefore = await fetch(`${origin}/c/${world.slug}/a/${shared.slug}`, { headers: { Cookie: memberCookie } });
+  assert.equal(directBefore.status, 200);
+  assert.match(await directBefore.text(), /Harbor gazette/);
+
+  const memberActivity = await fetch(`${origin}/api/player/activity`, { headers: { Cookie: memberCookie } }).then(response => response.json());
+  assert.ok(memberActivity.items.some((item: { title: string }) => item.title === "Harbor gazette"), "the member sees readable activity");
+  assert.deepEqual((await fetch(`${origin}/api/player/activity`, { headers: { Cookie: strangerCookie } }).then(response => response.json())).items, [], "a non-member sees no campaign activity");
+  assert.deepEqual((await fetch(`${origin}/api/player/activity`, { headers: { Cookie: ownerCookie } }).then(response => response.json())).items, [], "an owner is not a player member of their own campaign");
+
   // Non-member: no campaign content, no private data about the member.
-  assert.equal((await search(strangerCookie)).status, 404);
+  const strangerSearch = await search(strangerCookie);
+  assert.equal(strangerSearch.status, 404);
+  assert.match(strangerSearch.headers.get("cache-control") ?? "", /no-store/);
   assert.equal((await fetch(`${origin}/api/assets/${asset.id}/file`, { headers: { Cookie: strangerCookie } })).status, 404);
   const strangerMap = await fetch(`${origin}/c/${world.slug}/maps/${map.id}`, { headers: { Cookie: strangerCookie } }).then(response => response.text());
   assert.doesNotMatch(strangerMap, /Published matrix map|Harbor of Dawn/);
@@ -119,10 +148,16 @@ test("the campaign access matrix leaks no private resource to the wrong caller",
   assert.equal((await fetch(`${origin}/api/player/notes`, { headers: { Cookie: previewCookie } })).status, 403);
   assert.deepEqual((await fetch(`${origin}/api/player/bookmarks`, { headers: { Cookie: previewCookie } }).then(response => response.json())).items, []);
   assert.equal((await fetch(`${origin}/c/${world.slug}/maps/${map.id}`, { headers: { Cookie: previewCookie } })).status, 200);
+  const previewOther = await fetch(`${origin}/api/c/${otherWorld.slug}/search?q=other`, { headers: { Cookie: previewCookie } });
+  assert.equal(previewOther.status, 404, "preview cannot search another world");
+  assert.match(previewOther.headers.get("cache-control") ?? "", /no-store/);
+  assert.doesNotMatch(await fetch(`${origin}/c/${otherWorld.slug}/a/${otherArticle.slug}`, { headers: { Cookie: previewCookie } }).then(response => response.text()), /Other world harbor/);
 
   // Archived campaigns leave every campaign surface.
   await db.world.update({ where: { id: world.id }, data: { deletedAt: new Date() } });
-  assert.equal((await search(memberCookie)).status, 404);
+  const archivedSearch = await search(memberCookie);
+  assert.equal(archivedSearch.status, 404);
+  assert.match(archivedSearch.headers.get("cache-control") ?? "", /no-store/);
   assert.equal((await fetch(`${origin}/api/worlds/${world.id}/export`, { headers: { Cookie: memberCookie } })).status, 403);
   assert.equal((await fetch(`${origin}/api/worlds/${world.id}/export`, { headers: { Cookie: ownerCookie } })).status, 404);
   assert.doesNotMatch(await fetch(`${origin}/c/${world.slug}/maps/${map.id}`, { headers: { Cookie: memberCookie } }).then(response => response.text()), /Published matrix map/);
@@ -139,5 +174,7 @@ test("the campaign access matrix leaks no private resource to the wrong caller",
   await db.audiencePolicy.update({ where: { resourceKind_resourceId: { resourceKind: "articles", resourceId: shared.id } }, data: { mode: "GM_ONLY" } });
   const afterRevoke = await search(memberCookie).then(response => response.json());
   assert.equal(afterRevoke.articles.some((article: { title: string }) => article.title === "Harbor gazette"), false);
-  assert.equal(gmOnly.title, "GM vault");
+  const directAfter = await fetch(`${origin}/c/${world.slug}/a/${shared.slug}`, { headers: { Cookie: memberCookie } });
+  assert.doesNotMatch(await directAfter.text(), /Harbor gazette/, "a revoked article is not readable directly");
+  assert.equal((await fetch(`${origin}/api/player/activity`, { headers: { Cookie: memberCookie } }).then(response => response.json())).items.some((item: { title: string }) => item.title === "Harbor gazette"), false);
 });

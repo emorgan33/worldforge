@@ -4,25 +4,24 @@ import { resolveActor, readableWhere } from "@/lib/access";
 import { SEARCH_PAGE_SIZE, parseCampaignSearchParams, presentSearchArticle, SearchInputError } from "@/lib/campaign-search";
 import { rankedSearchPage } from "@/lib/campaign-search-db";
 
+const noStore = { "Cache-Control": "private, no-store" };
+function json(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: noStore });
+}
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ worldSlug: string }> }) {
   try {
     const { worldSlug } = await params;
     const actor = await resolveActor();
-    if (!actor.userId) {
-      return NextResponse.json({ error: "Sign in to search." }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
-    }
+    if (!actor.userId) return json({ error: "Sign in to search." }, 401);
 
     // Find world
     const world = await prisma.world.findFirst({
       where: { slug: worldSlug, deletedAt: null },
       select: { id: true, ownerId: true },
     });
-    if (!world) {
-      return NextResponse.json({ error: "World not found." }, { status: 404 });
-    }
-    if (actor.kind === "PREVIEW" && actor.previewWorldId !== world.id) {
-      return NextResponse.json({ error: "Not found." }, { status: 404 });
-    }
+    if (!world) return json({ error: "World not found." }, 404);
+    if (actor.kind === "PREVIEW" && actor.previewWorldId !== world.id) return json({ error: "Not found." }, 404);
 
     // Check if actor is the owner or an active member
     const isOwner = actor.userId === world.ownerId;
@@ -31,9 +30,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         where: { worldId: world.id, userId: actor.userId, status: "ACTIVE" },
         select: { id: true },
       });
-      if (!member) {
-        return NextResponse.json({ error: "Not found." }, { status: 404 });
-      }
+      if (!member) return json({ error: "Not found." }, 404);
     }
 
     const filters = parseCampaignSearchParams(new URL(request.url).searchParams);
@@ -52,13 +49,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     ]);
     const hasMore = articles.length > SEARCH_PAGE_SIZE;
     const page = articles.slice(0, SEARCH_PAGE_SIZE);
-    return NextResponse.json({
+    return json({
       articles: page.map(article => presentSearchArticle(article, categories)),
       nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
-    }, { headers: { "Cache-Control": "private, no-store" } });
+    });
   } catch (error: unknown) {
-    if (error instanceof SearchInputError) return NextResponse.json({ error: error.message }, { status: error.status, headers: { "Cache-Control": "private, no-store" } });
+    if (error instanceof SearchInputError) return json({ error: error.message }, error.status);
     console.error("Player search failed:", error);
-    return NextResponse.json({ error: "Unable to search." }, { status: 500, headers: { "Cache-Control": "private, no-store" } });
+    return json({ error: "Unable to search." }, 500);
   }
 }

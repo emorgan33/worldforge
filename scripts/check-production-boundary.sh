@@ -18,6 +18,11 @@ fail() { echo "FAIL: $*" >&2; failures=$((failures + 1)); }
 warn() { echo "WARN: $*" >&2; warnings=$((warnings + 1)); }
 ok() { echo "ok: $*"; }
 
+if [[ "$url" != https://* ]]; then
+  echo "FAIL: the boundary check requires an https:// URL (received '$url')" >&2
+  exit 1
+fi
+
 loopback_address() {
   case "$1" in
     127.*|\[::1\]:*|localhost:*) return 0 ;;
@@ -27,12 +32,22 @@ loopback_address() {
 
 # --- Container port and proxy configuration ---------------------------------
 if command -v docker >/dev/null 2>&1 && docker inspect "$container" >/dev/null 2>&1; then
-  bindings=$(docker inspect "$container" --format '{{json .HostConfig.PortBindings}}')
-  host_ip=$(printf '%s' "$bindings" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get("3033/tcp",[{}])[0].get("HostIp",""))')
-  if [ "$host_ip" = "127.0.0.1" ] || [ "$host_ip" = "::1" ]; then
-    ok "container port 3033 is bound to loopback ($host_ip)"
+  bindings=()
+  while IFS= read -r line; do
+    [ -n "$line" ] && bindings+=("$line")
+  done < <(docker inspect "$container" --format '{{range $p, $conf := .HostConfig.PortBindings}}{{if eq $p "3033/tcp"}}{{range $conf}}{{.HostIp}}|{{.HostPort}}{{println}}{{end}}{{end}}{{end}}')
+  if [ "${#bindings[@]}" -eq 0 ]; then
+    fail "container does not publish 3033; expected a loopback binding"
   else
-    fail "container port 3033 is published on '${host_ip:-<all interfaces>}'; bind it to 127.0.0.1"
+    for entry in "${bindings[@]}"; do
+      ip="${entry%%|*}"
+      port="${entry#*|}"
+      if loopback_address "${ip}:${port}"; then
+        ok "container port 3033 binding ${ip:-*}:${port} is loopback-only"
+      else
+        fail "container publishes 3033 on ${ip:-*}:${port}, which is not loopback"
+      fi
+    done
   fi
 
   envs=$(docker inspect "$container" --format '{{range .Config.Env}}{{println .}}{{end}}')
@@ -43,16 +58,17 @@ if command -v docker >/dev/null 2>&1 && docker inspect "$container" >/dev/null 2
     *) fail "WORLDFORGE_ORIGIN must be the canonical HTTPS origin (found '${origin:-unset}')" ;;
   esac
   [ "$proxy" = "1" ] && ok "WORLDFORGE_TRUSTED_PROXY=1" || fail "WORLDFORGE_TRUSTED_PROXY must be 1 behind the proxy (found '${proxy:-unset}')"
-  [ "$(docker inspect "$container" --format '{{.State.Health.Status}}' 2>/dev/null)" = "healthy" ] && ok "container is healthy" || warn "container health status is not 'healthy'"
+  health=$(docker inspect "$container" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null || true)
+  [ "$health" = "healthy" ] && ok "container is healthy" || fail "container health is '${health:-unknown}', expected 'healthy'"
 else
-  warn "container '$container' not found locally; skipped Docker checks"
+  fail "container '$container' is not inspectable; require Docker access to verify the deployment boundary"
 fi
 
 # --- Local listeners ---------------------------------------------------------
 if command -v ss >/dev/null 2>&1; then
   addresses=$(ss -ltn 2>/dev/null | awk 'NR > 1 && $4 ~ /:3033$/ { print $4 }')
   if [ -z "$addresses" ]; then
-    warn "nothing listens on :3033 locally; is the application running?"
+    fail "nothing listens on :3033 locally; the production server is not running"
   else
     while IFS= read -r address; do
       [ -z "$address" ] && continue
@@ -65,21 +81,21 @@ if command -v ss >/dev/null 2>&1; then
     ok "no duplicate server on :3035"
   fi
 else
-  warn "ss is unavailable; skipped listener checks"
+  fail "ss is unavailable; cannot verify that the app port is loopback-only"
 fi
 
 # --- Public HTTPS headers ----------------------------------------------------
-headers=$(curl -fsS --max-time 20 -D - -o /dev/null "$url/login" 2>/dev/null) || { fail "cannot fetch $url/login over verified HTTPS"; headers=""; }
+headers=$(curl --proto '=https' -fsS --max-time 20 -D - -o /dev/null "$url/login" 2>/dev/null) || { fail "cannot fetch $url/login over verified HTTPS"; headers=""; }
 if [ -n "$headers" ]; then
   grep -qi '^strict-transport-security:' <<< "$headers" && ok "HSTS header present" || fail "missing Strict-Transport-Security on HTTPS responses"
   grep -qi 'content-security-policy:.*frame-ancestors' <<< "$headers" && ok "CSP with frame-ancestors present" || fail "missing CSP frame-ancestors"
   grep -qi '^x-content-type-options: *nosniff' <<< "$headers" && ok "nosniff header present" || fail "missing X-Content-Type-Options: nosniff"
-  grep -qi '^x-frame-options: *DENY' <<< "$headers" && ok "X-Frame-Options: DENY present" || warn "X-Frame-Options missing or not DENY (CSP frame-ancestors still applies)"
+  grep -qi '^x-frame-options: *DENY' <<< "$headers" && ok "X-Frame-Options: DENY present" || fail "X-Frame-Options missing or not DENY"
 fi
 
-private_headers=$(curl -sS --max-time 20 -D - -o /dev/null "$url/api/player/bookmarks" 2>/dev/null) || true
-status=$(printf '%s' "$private_headers" | awk 'NR == 1 { print $2 }')
-if [ "$status" = "401" ]; then ok "anonymous private API is rejected"; else warn "anonymous /api/player/bookmarks returned ${status:-no status}; expected 401"; fi
+private_headers=$(curl --proto '=https' -sS --max-time 20 -D - -o /dev/null "$url/api/player/bookmarks" 2>/dev/null) || true
+status=$(printf '%s' "$private_headers" | tr -d '\r' | awk 'NR == 1 { print $2 }')
+if [ "$status" = "401" ]; then ok "anonymous private API is rejected"; else fail "anonymous /api/player/bookmarks returned ${status:-no status}; expected 401"; fi
 grep -qi 'cache-control:.*no-store' <<< "$private_headers" && ok "private response is not cacheable" || fail "private API response lacks Cache-Control: no-store"
 
 echo
