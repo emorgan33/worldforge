@@ -105,7 +105,23 @@ test("players save readable articles and maps privately, per account", { skip: !
 
   await owned(`${origin}/api/resources/assets/${asset.id}/audience`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "GM_ONLY", userIds: [] }) });
   assert.equal((await list(cookieA)).some(item => item.kind === "map"), false, "an unreadable map image hides the bookmark");
+  assert.equal((await save(cookieA, "map", map.id)).status, 404, "a map with an unreadable image cannot be saved");
   await owned(`${origin}/api/resources/assets/${asset.id}/audience`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "PUBLIC", userIds: [] }) });
+
+  // Writes require a matching Origin and reject preview sessions.
+  const foreign = await fetch(`${origin}/api/player/bookmarks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookieA, Origin: "https://evil.invalid" },
+    body: JSON.stringify({ resourceKind: "article", resourceId: article.id }),
+  });
+  assert.equal(foreign.status, 403);
+  const noOrigin = await fetch(`${origin}/api/player/bookmarks`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", Cookie: cookieA },
+    body: JSON.stringify({ resourceKind: "article", resourceId: article.id }),
+  });
+  assert.equal(noOrigin.status, 403);
+  assert.equal((await list(cookieA)).length, 2, "rejected writes leave bookmarks unchanged");
 
   // Preview sessions cannot create or remove bookmarks.
   const previewToken = randomBytes(32).toString("base64url");
@@ -116,6 +132,38 @@ test("players save readable articles and maps privately, per account", { skip: !
     body: JSON.stringify({ resourceKind: "article", resourceId: article.id }),
   });
   assert.equal(previewSave.status, 403);
+  const previewDelete = await fetch(`${origin}/api/player/bookmarks`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", Cookie: `wf_preview=${previewToken}`, Origin: origin! },
+    body: JSON.stringify({ resourceKind: "article", resourceId: article.id }),
+  });
+  assert.equal(previewDelete.status, 403);
+  const previewGet = await fetch(`${origin}/api/player/bookmarks`, { headers: { Cookie: `wf_preview=${previewToken}` } });
+  assert.equal(previewGet.status, 200);
+  assert.deepEqual((await previewGet.json()).items, []);
+
+  // Archived worlds and revoked membership hide saved items without deleting them.
+  await db.world.update({ where: { id: world.id }, data: { deletedAt: new Date() } });
+  assert.deepEqual(await list(cookieA), []);
+  await db.world.update({ where: { id: world.id }, data: { deletedAt: null } });
+  assert.equal((await list(cookieA)).length, 2);
+  await db.worldMember.updateMany({ where: { worldId: world.id, userId: playerA.id }, data: { status: "REVOKED" } });
+  assert.deepEqual(await list(cookieA), []);
+  await db.worldMember.updateMany({ where: { worldId: world.id, userId: playerA.id }, data: { status: "ACTIVE" } });
+
+  // Selected-player grants hide and restore a bookmark.
+  await db.audiencePolicy.update({ where: { resourceKind_resourceId: { resourceKind: "articles", resourceId: article.id } }, data: { mode: "PLAYER_SNAPSHOT" } });
+  assert.equal((await list(cookieA)).some(item => item.kind === "article"), false);
+  await db.audiencePolicy.update({ where: { resourceKind_resourceId: { resourceKind: "articles", resourceId: article.id } }, data: { mode: "PUBLIC" } });
+  assert.equal((await list(cookieA)).some(item => item.kind === "article"), true);
+
+  // Hidden bookmarks do not consume the visible list limit.
+  await db.playerBookmark.createMany({
+    data: Array.from({ length: 105 }, () => ({ userId: playerA.id, worldId: world.id, resourceKind: "article", resourceId: randomUUID() })),
+  });
+  const filtered = await list(cookieA);
+  assert.equal(filtered.length, 2, "only readable bookmarks count toward the list");
+  assert.ok(filtered.some(item => item.resourceId === article.id));
 
   assert.equal((await call("", "GET")).status, 401);
   assert.match((await call("", "GET")).headers.get("cache-control") ?? "", /no-store/);

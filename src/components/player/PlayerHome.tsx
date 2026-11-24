@@ -26,6 +26,7 @@ export default function PlayerHome({ name, email }: { name: string | null; email
   const [saved, setSaved] = useState<SavedItem[]>([]);
   const [savedLoading, setSavedLoading] = useState(true);
   const [savedError, setSavedError] = useState("");
+  const [savedActionError, setSavedActionError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
@@ -68,7 +69,7 @@ export default function PlayerHome({ name, email }: { name: string | null; email
   }, []);
 
   async function removeSaved(item: SavedItem) {
-    setSavedError("");
+    setSavedActionError("");
     try {
       const response = await fetch("/api/player/bookmarks", {
         method: "DELETE",
@@ -79,7 +80,7 @@ export default function PlayerHome({ name, email }: { name: string | null; email
       if (!response.ok) throw new Error(data.error || "Could not remove this saved item.");
       setSaved(current => current.filter(candidate => candidate.id !== item.id));
     } catch (reason) {
-      setSavedError(reason instanceof Error ? reason.message : "Could not remove this saved item.");
+      setSavedActionError(reason instanceof Error ? reason.message : "Could not remove this saved item.");
     }
   }
 
@@ -127,7 +128,9 @@ export default function PlayerHome({ name, email }: { name: string | null; email
           </div>
           {saved.length > 0 && <span className="text-xs uppercase tracking-wider text-app-subtle">{saved.length} saved</span>}
         </div>
-        {savedError ? <p role="alert" className="mt-4 rounded-lg border border-app-border bg-app-surface/40 px-4 py-3 text-sm text-app-muted">{savedError}</p> : savedLoading ? <p role="status" className="mt-4 text-sm text-app-muted">Loading saved items…</p> : saved.length === 0 ? <p className="mt-4 rounded-xl border border-app-border bg-app-surface/40 px-4 py-6 text-sm text-app-muted">Nothing saved yet. Use <strong>Save</strong> on an article or map to keep it here.</p> : <ul className="mt-4 grid gap-2">
+        {savedError ? <p role="alert" className="mt-4 rounded-lg border border-app-border bg-app-surface/40 px-4 py-3 text-sm text-app-muted">{savedError}</p> : savedLoading ? <p role="status" className="mt-4 text-sm text-app-muted">Loading saved items…</p> : saved.length === 0 ? <p className="mt-4 rounded-xl border border-app-border bg-app-surface/40 px-4 py-6 text-sm text-app-muted">Nothing saved yet. Use <strong>Save</strong> on an article or map to keep it here.</p> : <>
+          {savedActionError && <p role="alert" className="mt-4 rounded-lg border border-danger-900 bg-danger-950/40 px-4 py-3 text-sm text-danger-200">{savedActionError} The item is still saved.</p>}
+          <ul className="mt-4 grid gap-2">
           {saved.map(item => <li key={item.id} className="flex items-center gap-2 rounded-xl border border-app-border bg-app-surface/40 pr-2 transition-colors hover:border-secondary-500/70">
             <Link href={item.href} className="flex min-h-12 min-w-0 flex-1 items-center gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300">
               <span className="w-16 shrink-0 text-[11px] font-semibold uppercase tracking-wider text-primary-300">{item.kind}</span>
@@ -138,7 +141,7 @@ export default function PlayerHome({ name, email }: { name: string | null; email
             </Link>
             <button type="button" onClick={() => void removeSaved(item)} aria-label={`Remove ${item.title} from saved`} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-app-subtle hover:bg-app-raised hover:text-danger-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
           </li>)}
-        </ul>}
+        </ul></>}
       </section>
       <section className="py-8">
         {error && <p role="alert" className="rounded-lg border border-danger-900 bg-danger-950/40 p-4 text-sm text-danger-200">{error}</p>}

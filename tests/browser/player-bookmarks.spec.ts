@@ -58,6 +58,53 @@ test("players save an article and find it on another device", async ({ page, con
   }
 });
 
+test("a failed removal keeps the saved item and its controls for retry", async ({ page, context, baseURL }) => {
+  assertIsolatedTestEnvironment();
+  const db = testPrismaClient();
+  let userId: string | undefined;
+  let worldId: string | undefined;
+  try {
+    const owner = await db.user.create({ data: { name: "Bookmark retry owner", email: `bookmark-retry-owner-${randomUUID()}@example.invalid` } });
+    const session = await playerSession(db);
+    userId = session.user.id;
+    const stamp = randomUUID();
+    const world = await db.world.create({ data: { ownerId: owner.id, title: "Bookmark retry world", slug: `bookmark-retry-${stamp}` } });
+    worldId = world.id;
+    await db.worldMember.create({ data: { worldId: world.id, userId: session.user.id, role: "PLAYER", status: "ACTIVE" } });
+    const article = await db.article.create({ data: { worldId: world.id, slug: `retry-${stamp}`, title: "Retry gazette" } });
+    await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "articles", resourceId: article.id, mode: "PUBLIC", createdById: owner.id } });
+    await db.playerBookmark.create({ data: { userId: session.user.id, worldId: world.id, resourceKind: "article", resourceId: article.id } });
+
+    await context.addCookies([{ name: SESSION_COOKIE, value: session.token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
+    let failures = 0;
+    await page.route("**/api/player/bookmarks", async route => {
+      if (route.request().method() === "DELETE" && failures === 0) {
+        failures += 1;
+        await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Storage is busy." }) });
+        return;
+      }
+      await route.continue();
+    });
+    await page.goto("/player");
+
+    const remove = page.getByRole("button", { name: /Remove Retry gazette from saved/ });
+    await expect(remove).toBeVisible();
+    await remove.click();
+    await expect(page.getByText(/Storage is busy\. The item is still saved\./)).toBeVisible();
+    await expect(page.getByRole("link", { name: /Retry gazette/ })).toBeVisible();
+    await expect(remove).toBeVisible();
+
+    await remove.click();
+    await expect(page.getByRole("link", { name: /Retry gazette/ })).toHaveCount(0);
+    await expect(page.getByText(/Nothing saved yet/)).toBeVisible();
+  } finally {
+    if (worldId) await db.world.delete({ where: { id: worldId } }).catch(() => undefined);
+    if (userId) await db.user.delete({ where: { id: userId } }).catch(() => undefined);
+    await db.user.deleteMany({ where: { email: { startsWith: "bookmark-retry-owner-" } } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+});
+
 test("a saved-list failure leaves what's new and worlds usable", async ({ page, context, baseURL }) => {
   assertIsolatedTestEnvironment();
   const db = testPrismaClient();
