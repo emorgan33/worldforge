@@ -23,7 +23,6 @@ export interface PlayerActivityItem {
 type ActivityClient = Pick<Prisma.TransactionClient, "playerActivity"> | typeof prisma;
 
 const ACTIVITY_PAGE_SIZE = 200;
-const ACTIVITY_MAX_PAGES = 25;
 
 /**
  * Mark a shared article or published map as new for campaign players. Call this
@@ -92,7 +91,7 @@ export async function playerActivityFeed(actor: Actor, limit = PLAYER_ACTIVITY_L
 
   const items: PlayerActivityItem[] = [];
   let cursor: string | undefined;
-  for (let page = 0; page < ACTIVITY_MAX_PAGES && items.length < limit; page++) {
+  while (items.length < limit) {
     const rows = await prisma.playerActivity.findMany({
       where: { worldId: { in: worldIds } },
       orderBy: [{ occurredAt: "desc" }, { id: "desc" }],

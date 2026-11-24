@@ -234,3 +234,48 @@ test("the feed pages past inaccessible candidates and caps at 20 readable update
   assert.equal(capped[0].title, "Bulk readable 24");
   assert.equal(capped[19].title, "Bulk readable 5");
 });
+
+test("the feed exhausts candidates instead of stopping at a fixed page budget", { skip: !origin }, async context => {
+  const db = testPrismaClient();
+  const owner = await db.user.create({ data: { name: "Exhaustion owner", email: `exhaust-owner-${randomUUID()}@example.invalid` } });
+  const password = "Isolated exhaustion passphrase 2046!";
+  const player = await db.user.create({ data: { name: "Exhaustion player", email: `exhaust-${randomUUID()}@example.invalid`, role: "PLAYER", passwordHash: await hashPassword(password) } });
+  context.after(async () => {
+    await db.world.deleteMany({ where: { ownerId: owner.id } });
+    await deleteTestUsers(db, owner.id, player.id);
+    await db.$disconnect();
+  });
+
+  const stamp = randomUUID();
+  const world = await db.world.create({ data: { ownerId: owner.id, title: "Exhaustion world", slug: `exhaust-${stamp}` } });
+  await db.worldMember.create({ data: { worldId: world.id, userId: player.id, role: "PLAYER", status: "ACTIVE" } });
+
+  const readable = await db.article.create({ data: { worldId: world.id, slug: `readable-${stamp}`, title: "Still reachable" } });
+  await db.audiencePolicy.create({ data: { worldId: world.id, resourceKind: "articles", resourceId: readable.id, mode: "PUBLIC", createdById: owner.id } });
+  await db.playerActivity.create({ data: { worldId: world.id, resourceKind: "article", resourceId: readable.id, occurredAt: new Date(Date.now() - 86_400_000) } });
+
+  // More inaccessible rows than the old 5,000-candidate ceiling. Their IDs do
+  // not resolve to articles, so they can never be projected.
+  const base = Date.now() - 3_600_000;
+  await db.playerActivity.createMany({
+    data: Array.from({ length: 5_001 }, (_, index) => ({
+      worldId: world.id,
+      resourceKind: "article",
+      resourceId: randomUUID(),
+      occurredAt: new Date(base + index * 10),
+    })),
+  });
+  assert.equal(await db.playerActivity.count({ where: { worldId: world.id } }), 5_002);
+
+  const login = await fetch(`${origin}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: origin!, "X-WorldForge-Client-IP": "127.0.0.1" },
+    body: JSON.stringify({ email: (await db.user.findUniqueOrThrow({ where: { id: player.id } })).email, password }),
+  });
+  assert.equal(login.status, 200, await login.text());
+  const cookie = login.headers.get("set-cookie")!.split(";")[0];
+  const response = await fetch(`${origin}/api/player/activity`, { headers: { Cookie: cookie } });
+  assert.equal(response.status, 200);
+  const titles = ((await response.json()).items as { title: string }[]).map(item => item.title);
+  assert.deepEqual(titles, ["Still reachable"], "a readable update beyond 5,000 inaccessible candidates must still appear");
+});
