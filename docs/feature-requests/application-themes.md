@@ -1,6 +1,7 @@
 # Implementation plan: selectable application themes
 
-Status: P1 (token layer) implemented on `feat/theme-tokens`; P2–P8 not started.
+Status: P1 (token layer) merged in #43; P2 (switcher, persistence, Night watch +
+Daylight) implemented on `feat/theme-switcher`; P3 and P5–P8 not started.
 Palette values, in-product names, and the migration order below are open for
 review.
 
@@ -144,6 +145,12 @@ switch possible. Verified with computed styles in Chromium: overriding
 `--color-app-canvas` on an element changes its background while
 `--color-app-on-accent` and unrelated roles keep their values.
 
+P2 carries both palettes in every token with `light-dark(<daylight>, <night>)`
+and lets `color-scheme` choose: Night watch forces `dark`, Daylight forces
+`light`, and Match system uses `light dark` so the operating system decides,
+including live changes without a reload. That keeps one definition per token and
+avoids duplicating the Daylight block inside a media query.
+
 ### 3. Account preference is authoritative; the cookie is its projection
 
 - **Signed in:** the server reads `User.theme` and renders it. The account value
@@ -179,11 +186,12 @@ Two implementation constraints:
 - Cookies are written only at response-writing boundaries: the theme-change Route
   Handler or Server Action, the sign-in route, and the logout route. The root
   layout never writes a cookie; it only reads the cookie and the account value.
-- `next.config.ts` enables `cacheComponents: true`. A cookie read makes the
-  theme-bearing segment request-time, so the design must confirm that the
-  resolution works with the existing partial-prerender shell and does not
-  silently force otherwise static pages to render per request. Verify this
-  against the installed Next.js documentation before P2 is considered done.
+- `next.config.ts` enables `cacheComponents: true`. Reading the cookie in the
+  root layout makes every route request-time, so `src/app/layout.tsx` sets
+  `export const instant = false` once for the whole app instead of every page
+  opting out. The trade-off is that no route prerenders a themed static shell.
+  Revisit with `use cache: private` if Instant Navigation validation should be
+  re-enabled per route.
 
 ### 4. Default stays Night watch; "Match system" is resolved in CSS
 

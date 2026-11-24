@@ -20,6 +20,7 @@ model User {
   email           String             @unique
   avatar          String?
   role            String             @default("AUTHOR") // ADMIN, AUTHOR, GM, PLAYER
+  theme           String? // UI theme; null uses the default
   passwordHash    String?
   disabledAt      DateTime?
   lastSignInAt    DateTime?

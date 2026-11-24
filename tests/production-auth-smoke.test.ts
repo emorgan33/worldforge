@@ -34,6 +34,15 @@ test("production login issues a session accepted by authenticated APIs", { skip:
   assert.ok(cookie?.startsWith(`${SESSION_COOKIE}=`), "login must set the session cookie");
   const cookieHeader = cookie!;
 
+  const themeChange = await fetch(`${origin}/api/preferences/theme`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: origin, Cookie: cookieHeader },
+    body: JSON.stringify({ theme: "daylight" }),
+  });
+  assert.equal(themeChange.status, 200, await themeChange.text());
+  assert.match(themeChange.headers.get("set-cookie") ?? "", /wf_theme=daylight/);
+  assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { theme: true } })).theme, "daylight");
+
   const session = await fetch(`${origin}/api/auth/session`, { headers: { Cookie: cookieHeader } });
   assert.equal(session.status, 200);
   assert.equal((await session.json()).user.id, user.id);

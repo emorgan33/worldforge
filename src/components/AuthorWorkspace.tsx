@@ -31,8 +31,10 @@ import { fetchWorkspaceArticleList, loadWorkspaceArticle, saveWorkspaceArticle }
 import { WorkspaceHistoryCoordinator } from "@/lib/workspace-history";
 import { saveWorkspaceMapMutation, saveWorkspaceVariable } from "@/lib/workspace-features";
 import { Globe, LogOut, Menu, Users, X } from "lucide-react";
+import { ThemeSwitcher } from "@/components/theme/ThemeSwitcher";
+import type { ThemeId } from "@/lib/theme";
 
-export default function WorldForgeApp() {
+export default function WorldForgeApp({ theme }: { theme: ThemeId }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -765,6 +767,7 @@ export default function WorldForgeApp() {
           {mobileNavigationOpen ? <X aria-hidden="true" className="h-5 w-5" /> : <Menu aria-hidden="true" className="h-5 w-5" />}
         </button>
         <p className="min-w-0 flex-1 truncate text-sm font-semibold text-app-text md:hidden" aria-live="polite">{mobileNavigationOpen ? "Campaign navigation" : mobileViewLabel}</p>
+        <ThemeSwitcher current={theme} className="shrink-0" />
         <button type="button" aria-label="Player view" title="Player view" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-app-border-strong bg-app-surface text-app-text hover:border-app-border-emphasis-strong hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 md:h-10 md:w-auto md:px-3" onClick={() => { if (!canNavigate()) return; clearConfirmedLeave(); router.push("/player"); }}><Users aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Player view</span></button>
         <button type="button" aria-label="Sign out" title="Sign out" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-app-border-strong bg-app-surface text-app-text hover:border-app-border-emphasis-strong hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 md:h-10 md:w-auto md:px-3" onClick={async () => { if (!canNavigate()) return; clearConfirmedLeave(); const response = await fetch("/api/auth/logout", { method: "POST" }); if (response.ok) { router.replace("/login"); router.refresh(); } }}><LogOut aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Sign out</span></button>
       </header>
