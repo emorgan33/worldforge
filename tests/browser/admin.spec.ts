@@ -35,6 +35,7 @@ test("signed-in non-admins see an access-denied page without account data", asyn
     await page.goto("/admin/users");
     await expect(page.getByRole("heading", { name: "Administrator access required" })).toBeVisible();
     await expect(page.getByText("admin-browser-nonadmin")).not.toBeVisible();
+    await expect(page.getByTestId("running-build")).toHaveCount(0);
   } finally {
     if (userId) await db.user.delete({ where: { id: userId } }).catch(() => undefined);
     await db.$disconnect();
@@ -166,6 +167,10 @@ test("administrators can create an account and receive a one-time setup link", a
 
     await page.goto("/admin/users");
     await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
+    const runningBuild = page.getByTestId("running-build");
+    await expect(runningBuild).toContainText("Running build");
+    await expect(runningBuild).toContainText(/v\d+\.\d+\.\d+/);
+    await expect(runningBuild).toContainText(/[0-9a-f]{7,40}|revision unknown/);
     await page.getByRole("button", { name: "Create account" }).click();
     const email = `browser-created-${randomUUID()}@example.invalid`;
     await page.getByLabel("Email").fill(email);

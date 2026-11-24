@@ -1,6 +1,12 @@
 services:
   worldforge:
-    build: .
+    build:
+      context: .
+      args:
+        # The build context excludes .git. Supply this for a meaningful
+        # "Running build" revision in the admin header:
+        #   WORLDFORGE_BUILD_REVISION=$(git rev-parse HEAD) docker compose build
+        WORLDFORGE_BUILD_REVISION: "${WORLDFORGE_BUILD_REVISION:-unknown}"
     image: worldforge:local
     restart: unless-stopped
     ports:

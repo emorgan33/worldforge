@@ -46,6 +46,26 @@ in `.env`, then run `docker compose pull` and `docker compose up -d --wait`.
 Check startup logs. An older image may not support a migrated database: rollback
 requires restoring its matching database-and-assets backup as well.
 
+### Verify the running build
+
+Open **Administration → Users** on the public URL. The header shows
+`Running build vX.Y.Z · <short revision>`, identifying the artifact serving that
+page. Compare it with the intended release tag or the short SHA from
+`git rev-parse HEAD`; this checks the public hostname without relying on what is
+running on another port or host. A `modified source` suffix means the build came
+from a working tree with uncommitted tracked changes. `revision unknown` means
+neither Git metadata nor `WORLDFORGE_BUILD_REVISION` was available at build time.
+
+Published release images record the reviewed commit in the image's
+`org.opencontainers.image.revision` label and in the admin header. The build
+context excludes `.git`, so source-build installations using
+`docker-compose.yml` should pass the revision explicitly:
+
+```bash
+WORLDFORGE_BUILD_REVISION=$(git rev-parse HEAD) docker compose build
+docker compose up -d
+```
+
 To switch an existing source-build installation, keep its Compose **project
 name**, existing named volume, `.env`, and reverse-proxy network settings. Run
 with `-f docker-compose.release.yml` (and explicitly `-f` any proxy override).

@@ -7,7 +7,7 @@ if [[ ! -f "$project_dir/.next/BUILD_ID" ]]; then
   exit 1
 fi
 if systemctl --user is-active --quiet worldforge.service; then
-  echo 'WorldForge is already running at http://localhost:3033'
+  echo 'WorldForge is already running at http://localhost:3035'
   exit 0
 fi
 
@@ -16,7 +16,7 @@ systemd-run --user --unit=worldforge --collect \
   --description='WorldForge local production server' \
   --property=Restart=on-failure --property=RestartSec=3 \
   --working-directory="$project_dir" \
-  "$(command -v node)" "$project_dir/node_modules/next/dist/bin/next" start --hostname 0.0.0.0 --port 3033
+  "$(command -v node)" "$project_dir/node_modules/next/dist/bin/next" start --hostname 0.0.0.0 --port 3035
 
-echo 'WorldForge is starting at http://localhost:3033'
+echo 'WorldForge is starting at http://localhost:3035'
 echo 'Logs: journalctl --user -u worldforge.service'

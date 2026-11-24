@@ -50,6 +50,15 @@ test("verification runs natively on both architectures", () => {
   assert.match(workflow, /docker build --pull --platform "\$PLATFORM"/);
 });
 
+test("verified images bake the checked-out revision into the running build", () => {
+  assert.match(workflow, /--build-arg "WORLDFORGE_BUILD_REVISION=\$REVISION"/);
+  const dockerfile = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
+  assert.match(dockerfile, /ARG WORLDFORGE_BUILD_REVISION=unknown/);
+  assert.match(dockerfile, /ENV WORLDFORGE_BUILD_REVISION=\$WORLDFORGE_BUILD_REVISION/);
+  const compose = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  assert.match(compose, /WORLDFORGE_BUILD_REVISION: "\$\{WORLDFORGE_BUILD_REVISION:-unknown\}"/);
+});
+
 test("existing child images are reused by validated digest", () => {
   assert.match(workflow, /EXISTING_DIGEST:[\s\S]*linux_amd64_digest[\s\S]*linux_arm64_digest/);
   assert.match(workflow, /docker pull "\$IMAGE@\$EXISTING_DIGEST"/);

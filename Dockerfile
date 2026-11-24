@@ -35,6 +35,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
 FROM deps AS build
+# .git is excluded from the build context, so CI and Compose pass the source
+# revision explicitly for the admin "Running build" label.
+ARG WORLDFORGE_BUILD_REVISION=unknown
+ENV WORLDFORGE_BUILD_REVISION=$WORLDFORGE_BUILD_REVISION
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends build-essential python3 unzip \
     && rm -rf /var/lib/apt/lists/*
@@ -44,9 +48,11 @@ RUN export DATABASE_URL=file:/tmp/worldforge-build.db \
     && pnpm db:generate && pnpm stock-art:validate && pnpm build
 
 FROM base AS runner
+ARG WORLDFORGE_BUILD_REVISION=unknown
 ENV NODE_ENV="production" \
     PORT="3033" \
-    WORLDFORGE_ASSET_DIR="/data/assets"
+    WORLDFORGE_ASSET_DIR="/data/assets" \
+    WORLDFORGE_BUILD_REVISION=$WORLDFORGE_BUILD_REVISION
 # Operations use pnpm, Prisma and tsx. The separate npm/npx installation is
 # unused at runtime and brings its own independently vulnerable dependency tree.
 RUN rm -rf /usr/local/lib/node_modules/npm \

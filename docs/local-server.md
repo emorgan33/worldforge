@@ -25,7 +25,7 @@ production catalog does not offer it for new selection until explicitly approved
 
 ## Earlier local helper (port 3033)
 
-The local production site runs at http://localhost:3033 under the systemd user manager. Use `pnpm serve:local` after building with `pnpm build`. This starts the existing production build as `worldforge.service`; running it again while active leaves the existing service alone.
+The local production site runs at http://localhost:3035 under the systemd user manager. Use `pnpm serve:local` after building with `pnpm build`. This starts the existing production build as `worldforge.service`; running it again while active leaves the existing service alone.
 
 The service owns the server independently of Codex tool/terminal sessions and uses Restart=on-failure with a three-second delay. Logs are retained by the journal rather than tied to a temporary tool session.
 
@@ -39,6 +39,22 @@ systemctl --user stop worldforge.service
 ```
 
 After a new build, restart the service to load it. The service is transient: it is not installed for boot startup, and an intentional stop is not automatically undone. Start it again with `pnpm serve:local` after a reboot or stop. The user manager must be available. Database and uploaded assets remain in their existing persistent locations.
+
+## Verify the running build
+
+The admin header shows `Running build vX.Y.Z · <short revision>`. Open
+`/admin/users` and compare it with the intended commit (`git rev-parse --short
+HEAD`). A `modified source` suffix means the build included uncommitted tracked
+changes; `revision unknown` means the build had no Git metadata or explicit
+revision. The label is produced at build time, not read from the host checkout,
+so it also distinguishes a stale deploy from the current source tree.
+
+For a source-built container image, pass the revision because the Docker build
+context excludes `.git`:
+
+```bash
+WORLDFORGE_BUILD_REVISION=$(git rev-parse HEAD) docker compose build
+```
 
 ## October 15 outage diagnosis
 

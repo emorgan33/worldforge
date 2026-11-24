@@ -117,6 +117,7 @@ test("production login issues a session accepted by authenticated APIs", { skip:
   await nonAdminPage.goto(`${origin}/admin/users`);
   await nonAdminPage.getByRole("heading", { name: "Administrator access required" }).waitFor();
   assert.match(await nonAdminPage.locator("body").innerText(), /does not have installation administration rights/i);
+  assert.doesNotMatch(await nonAdminPage.locator("body").innerText(), /Running build/, "build metadata is only shown to administrators");
   const nonAdminApiResponse = await fetch(`${origin}/api/admin/users`, { headers: { Cookie: nonAdminCookieHeader } });
   assert.equal(nonAdminApiResponse.status, 403, `non-admin /api/admin/users must return 403 (status ${nonAdminApiResponse.status})`);
 
@@ -153,6 +154,8 @@ test("production login issues a session accepted by authenticated APIs", { skip:
   await activeAdminPage.goto(`${origin}/admin/users`);
   await activeAdminPage.getByRole("heading", { name: "Installation administration" }).waitFor();
   await activeAdminPage.getByRole("heading", { name: "Accounts" }).waitFor();
+  const runningBuild = await activeAdminPage.getByTestId("running-build").innerText();
+  assert.match(runningBuild, /Running build v\d+\.\d+\.\d+ · [0-9a-f]{7,40}/, "the admin header must identify the build serving the page");
   const accountsHeading = await activeAdminPage.getByRole("heading", { name: "Accounts" }).evaluate(el => {
     const probe = document.createElement("canvas");
     probe.width = 1;

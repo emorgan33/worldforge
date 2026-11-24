@@ -24,6 +24,26 @@ esac
   exit 1
 }
 
+# The admin "Running build" label must identify the same source revision as the
+# OCI label. CI supplies WORLDFORGE_EXPECTED_REVISION as a cross-check.
+image_revision=$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+expected_revision="${WORLDFORGE_EXPECTED_REVISION:-$image_revision}"
+if [ -n "$expected_revision" ]; then
+  [[ "$expected_revision" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "Expected revision $expected_revision is not a full Git revision." >&2
+    exit 1
+  }
+  [[ -z "$image_revision" || "$image_revision" == "$expected_revision" ]] || {
+    echo "Image revision $image_revision does not match expected $expected_revision." >&2
+    exit 1
+  }
+  image_build_revision=$(docker image inspect "$image" --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^WORLDFORGE_BUILD_REVISION=//p' | tail -n1)
+  [[ "$image_build_revision" == "$expected_revision" ]] || {
+    echo "Image build revision $image_build_revision does not match $expected_revision." >&2
+    exit 1
+  }
+fi
+
 project="worldforge-image-test-$(date +%s)-$$"
 case "$project" in
   worldforge-image-test-*) ;;
@@ -60,7 +80,7 @@ curl --fail --silent --show-error "http://$address/login" -o /dev/null
   node scripts/assert-sqlite-version.cjs
 '
 
-prepare_output=$("${compose[@]}" exec -T worldforge pnpm exec tsx scripts/smoke-release-runtime.ts prepare "$expected_arch")
+prepare_output=$("${compose[@]}" exec -T -e WORLDFORGE_EXPECTED_REVISION="$expected_revision" worldforge pnpm exec tsx scripts/smoke-release-runtime.ts prepare "$expected_arch")
 asset_sha256=$(printf '%s\n' "$prepare_output" | sed -n 's/^ASSET_SHA256=//p' | tail -n1)
 [[ "$asset_sha256" =~ ^[0-9a-f]{64}$ ]] || {
   echo "Runtime prepare did not return a valid asset checksum." >&2
@@ -80,7 +100,7 @@ container_after=$("${compose[@]}" ps -q worldforge)
 address=$("${compose[@]}" port worldforge 3033)
 curl --fail --silent --show-error "http://$address/login" -o /dev/null
 
-"${compose[@]}" exec -T worldforge pnpm exec tsx scripts/smoke-release-runtime.ts verify "$expected_arch" "$asset_sha256"
+"${compose[@]}" exec -T -e WORLDFORGE_EXPECTED_REVISION="$expected_revision" worldforge pnpm exec tsx scripts/smoke-release-runtime.ts verify "$expected_arch" "$asset_sha256"
 "${compose[@]}" exec -T worldforge sh -s <<'SMOKE'
 set -e
 test "$(sqlite3 /data/worldforge.db "PRAGMA integrity_check;")" = ok

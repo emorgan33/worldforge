@@ -4,6 +4,7 @@ import { statSync } from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 import { prisma } from "../src/lib/db";
+import { parseBuildInfo, UNKNOWN_REVISION } from "../src/lib/build-info";
 import { assetDirectory, normalizeImage, readAsset, removeAssetFile, writeAsset } from "../src/lib/asset-storage";
 
 const ADMIN_EMAIL = "image-smoke@example.invalid";
@@ -34,6 +35,23 @@ async function assertApplicationData() {
   if (installation !== 1) fail(`installation singleton count was ${installation}`);
   const admin = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL }, select: { role: true } });
   if (admin?.role !== "ADMIN") fail(`seeded administrator ${ADMIN_EMAIL} is missing or not ADMIN`);
+}
+
+function assertBuildMetadata() {
+  const build = parseBuildInfo();
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(build.version)) {
+    fail(`build version ${JSON.stringify(build.version)} is malformed`);
+  }
+  const expectedRevision = process.env.WORLDFORGE_EXPECTED_REVISION?.trim() ?? "";
+  if (expectedRevision) {
+    if (build.revision === UNKNOWN_REVISION) fail("the image did not record its source revision");
+    if (build.revision !== expectedRevision) {
+      fail(`recorded revision ${build.revision} does not match expected ${expectedRevision}`);
+    }
+    if (build.dirty) fail("a release image must not report modified source");
+  }
+  console.log(`BUILD_VERSION=${build.version}`);
+  console.log(`BUILD_REVISION=${build.revision}`);
 }
 
 function storedAssetPath() {
@@ -75,6 +93,7 @@ async function main() {
   const mode = process.argv[2];
   const expected = process.argv[3] ?? "";
   try {
+    assertBuildMetadata();
     if (mode === "prepare") await prepare(expected);
     else if (mode === "verify") await verify(expected, process.argv[4] ?? "");
     else fail(`unknown mode ${JSON.stringify(mode)}`);

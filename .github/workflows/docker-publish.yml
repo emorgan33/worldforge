@@ -133,6 +133,7 @@ jobs:
             echo "SOURCE_DIGEST=$EXISTING_DIGEST" >> "$GITHUB_ENV"
           else
             docker build --pull --platform "$PLATFORM" \
+              --build-arg "WORLDFORGE_BUILD_REVISION=$REVISION" \
               --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
               --label "org.opencontainers.image.revision=$REVISION" \
               -t worldforge-release:test .
