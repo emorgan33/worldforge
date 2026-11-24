@@ -38,6 +38,21 @@ test("true black paints a pure black canvas", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "true-black");
 });
 
+test("daylight paints a light canvas", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Interface theme").selectOption("daylight");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "daylight");
+  await expect(page.getByLabel("Interface theme")).toBeEnabled();
+
+  const canvas = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(canvas).toBe("rgb(246, 245, 243)");
+  const scheme = await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme);
+  expect(scheme).toBe("light");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "daylight");
+});
+
 test("the control is disabled while a save is in flight", async ({ page }) => {
   await page.route("**/api/preferences/theme", async route => {
     await new Promise(resolve => setTimeout(resolve, 600));

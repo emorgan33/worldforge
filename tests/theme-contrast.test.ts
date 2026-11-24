@@ -35,6 +35,46 @@ const daylight: Palette = {
   "text-bright": "#0f0f0e",
   text: "#1c1b19",
   muted: "#5c5952",
+  faint: "#78746d",
+  "subtle-dim": "#75716a",
+};
+
+/**
+ * Light-mode accent fills paired with `--color-app-on-accent`. The night watch
+ * fills are pale, so their label is near-black; the daylight fills take the dark
+ * end of the same scale, so the label flips to white. Both directions have to
+ * clear the floor or a primary button becomes unreadable in one theme.
+ */
+const accentFills: Record<string, Record<string, string>> = {
+  // Rendered sRGB values of the Tailwind v4 palette variables, measured in
+  // Chromium rather than copied from a v3 hex table.
+  nightWatch: {
+    "primary-500": "#fe9a00",
+    "highlight-400": "#a684ff",
+    "on-accent": "#09090b",
+  },
+  daylight: {
+    "primary-500": "#bb4d00",
+    "primary-600": "#973c00",
+    "highlight-400": "#7f22fe",
+    "on-accent": "#ffffff",
+  },
+};
+
+/** Sidebar accent chrome: the solid "New article" button and the active row. */
+const workspaceAccents: Record<string, Record<string, string>> = {
+  nightWatch: {
+    accent: "#9b8cfa",
+    "on-accent": "#111318",
+    soft: "#2b2850",
+    "soft-text": "#f1f2f5",
+  },
+  daylight: {
+    accent: "#7008e7",
+    "on-accent": "#ffffff",
+    soft: "#ede9fe",
+    "soft-text": "#4c1d95",
+  },
 };
 
 function channel(value: number) {
@@ -88,3 +128,29 @@ test("true black uses a pure black canvas and near-white, not white, body text",
   assert.equal(trueBlack.text, "#f2f2f2");
   assert.ok(luminance(trueBlack.text) < luminance(trueBlack["text-bright"]), "body text must stay below pure white");
 });
+
+test("daylight faint and subtle-dim text still clear the body floor", () => {
+  for (const shade of ["faint", "subtle-dim"] as const) {
+    const value = ratio(daylight[shade], daylight.surface);
+    assert.ok(value >= 4.5, `daylight ${shade} on surface is ${value.toFixed(2)}:1`);
+  }
+});
+
+for (const [name, fills] of Object.entries(accentFills)) {
+  test(`${name}: accent fills keep their label readable`, () => {
+    for (const [shade, background] of Object.entries(fills)) {
+      if (shade === "on-accent") continue;
+      const value = ratio(fills["on-accent"], background);
+      assert.ok(value >= 4.5, `${name}: on-accent on ${shade} is ${value.toFixed(2)}:1`);
+    }
+  });
+
+  test(`${name}: sidebar accent chrome is readable`, () => {
+    const label = ratio(workspaceAccents[name]["on-accent"], workspaceAccents[name].accent);
+    assert.ok(label >= 4.5, `${name}: solid accent label is ${label.toFixed(2)}:1`);
+    const row = ratio(workspaceAccents[name]["soft-text"], workspaceAccents[name].soft);
+    assert.ok(row >= 4.5, `${name}: active row text is ${row.toFixed(2)}:1`);
+    const icon = ratio(workspaceAccents[name].accent, workspaceAccents[name].soft);
+    assert.ok(icon >= 3, `${name}: active row icon is ${icon.toFixed(2)}:1`);
+  });
+}
