@@ -92,7 +92,7 @@ function accentRamp(name: "primary" | "secondary" | "highlight", base: Hex) {
     50: darken(base, 0.35),
     100: darken(base, 0.26),
     200: darken(base, 0.18),
-    300: darken(base, 0.18),
+    300: darken(base, 0.26),
     400: darken(base, 0.24),
     500: base,
     600: darken(base, 0.12),

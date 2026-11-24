@@ -273,7 +273,7 @@ export function ArticleEditorForm({
           <button
             type="submit"
             disabled={isSubmitting || !!recovery || !recoveryReady || !title.trim() || !!metadataError}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-secondary-600 hover:bg-secondary-500 text-white shadow-lg shadow-secondary-600/20 disabled:opacity-50 transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-secondary-600 hover:bg-secondary-500 text-app-on-strong shadow-lg shadow-secondary-600/20 disabled:opacity-50 transition-all"
           >
             <Save className="w-4 h-4" />
             <span>{isSubmitting ? "Saving..." : "Save Article"}</span>

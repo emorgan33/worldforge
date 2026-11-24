@@ -251,7 +251,7 @@ export function WorldManagement({ worlds, currentWorldId, actorId, onClose, onRe
     });
   }
 
-  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-app-scrim p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section role="dialog" aria-modal="true" aria-labelledby="world-management-title" onKeyDown={trapFocus} className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-app-border-strong bg-app-canvas text-app-text-strong shadow-2xl">
       <header className="flex items-center justify-between border-b border-app-border p-5"><div><h2 id="world-management-title" className="text-lg font-semibold">Manage worlds</h2><p className="mt-1 text-xs text-app-muted">Copies contain world settings only. Export a backup to copy campaign content.</p></div><button ref={closeButton} type="button" onClick={onClose} disabled={!!busy} aria-label="Close world management" className="rounded px-2 py-1 text-app-muted hover:bg-app-raised">✕</button></header>
       <div className="min-h-0 space-y-6 overflow-y-auto p-5">

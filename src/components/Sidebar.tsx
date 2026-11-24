@@ -168,7 +168,7 @@ export function Sidebar({
 
       {/* New Article Template Picker Modal */}
       {showTemplateModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-app-scrim backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-app-surface border border-app-border rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-150">
             <div className="p-6 border-b border-app-border flex items-center justify-between">
               <div>

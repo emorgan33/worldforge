@@ -319,7 +319,7 @@ function NewMapModal({
   }
 
   return (
-    <div className="absolute inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-4">
+    <div className="absolute inset-0 z-40 flex items-start justify-center overflow-y-auto bg-app-scrim p-4">
       <div className="w-full max-w-3xl rounded-xl border border-app-border-strong bg-app-surface p-5 shadow-2xl">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-app-text-strong">New map</h3>
@@ -333,7 +333,7 @@ function NewMapModal({
           <label className="text-[11px] text-app-muted">Width<input type="number" min={1} value={width} onChange={(e) => setWidth(e.target.value)} placeholder="From image" className={`${inputClass} mt-1`} /></label>
           <label className="text-[11px] text-app-muted">Height<input type="number" min={1} value={height} onChange={(e) => setHeight(e.target.value)} placeholder="From image" className={`${inputClass} mt-1`} /></label>
           <div className="flex items-end gap-2 sm:col-span-2">
-            <button type="submit" disabled={busy || !!libraryGuard?.busy} className="rounded-lg bg-primary-500 px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">Create map</button>
+            <button type="submit" disabled={busy || !!libraryGuard?.busy} className="rounded-lg bg-primary-500 px-4 py-2 text-xs font-semibold text-app-on-accent disabled:opacity-40">Create map</button>
             <button type="button" disabled={!!libraryGuard?.busy} onClick={requestClose} className="rounded-lg border border-app-border-strong px-4 py-2 text-xs text-app-text-dim disabled:opacity-40">Cancel</button>
             <button type="button" disabled={showLibrary && !!libraryGuard?.busy} onClick={toggleLibrary} className="ml-auto text-xs text-secondary-300 disabled:opacity-40">{showLibrary ? "Hide library" : "Choose from library"}</button>
           </div>
@@ -485,7 +485,7 @@ function SelectionPanel({
               </select>
             </label>
             {marker.article && onSelectArticle && (
-              <button type="button" onClick={() => onSelectArticle(marker.article!.id)} className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-secondary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary-500">
+              <button type="button" onClick={() => onSelectArticle(marker.article!.id)} className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-secondary-600 px-3 py-1.5 text-xs font-semibold text-app-on-strong hover:bg-secondary-500">
                 Open article <ExternalLink className="h-3.5 w-3.5" />
               </button>
             )}
@@ -505,7 +505,7 @@ function SelectionPanel({
           </select>
         </label>
         <div className="flex gap-2">
-          <button type="button" disabled={busy || !dirty} onClick={() => void save()} className="flex-1 rounded bg-primary-500 py-1.5 text-xs font-semibold text-black disabled:opacity-40">Save</button>
+          <button type="button" disabled={busy || !dirty} onClick={() => void save()} className="flex-1 rounded bg-primary-500 py-1.5 text-xs font-semibold text-app-on-accent disabled:opacity-40">Save</button>
           <button type="button" disabled={busy} onClick={() => void remove()} className="rounded border border-danger-800 px-3 py-1.5 text-xs text-danger-300 hover:bg-danger-950">Delete</button>
         </div>
       </div>
@@ -815,7 +815,7 @@ export function InteractiveMap({
             type="button"
             onClick={() => { setTool(id); clearPending(); if (id !== "select") setSelection(null); }}
             title={id === "circle" ? "Circle (hold Shift for a perfect circle)" : id === "rect" ? "Rectangle (hold Shift for a square)" : label}
-            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs ${tool === id ? "border-primary-400 bg-primary-500 text-black" : "border-app-border bg-app-canvas text-app-text-dim hover:bg-app-raised"}`}
+            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs ${tool === id ? "border-primary-400 bg-primary-500 text-app-on-accent" : "border-app-border bg-app-canvas text-app-text-dim hover:bg-app-raised"}`}
           >
             <Icon className="h-3.5 w-3.5" />{label}
           </button>
@@ -872,7 +872,7 @@ export function InteractiveMap({
           <MapPin className="h-8 w-8 text-app-subtle-dim" />
           <h3 className="text-sm font-semibold text-app-text">No maps yet</h3>
           <p className="max-w-sm text-xs text-app-muted">Upload a map image, name it, then add layers, pins, labels, and drawings.</p>
-          <button type="button" onClick={() => setNewMapOpen(true)} className="rounded-lg bg-primary-500 px-4 py-2 text-xs font-semibold text-black">Create your first map</button>
+          <button type="button" onClick={() => setNewMapOpen(true)} className="rounded-lg bg-primary-500 px-4 py-2 text-xs font-semibold text-app-on-accent">Create your first map</button>
         </div>
       ) : (
         <div
@@ -944,7 +944,7 @@ export function InteractiveMap({
               )}
               {pending && (
                 <div style={{ left: `${pending.x}%`, top: `${pending.y}%` }} className="absolute z-30 -translate-x-1/2 -translate-y-1/2">
-                  <div className="flex h-8 w-8 animate-bounce items-center justify-center rounded-full border-2 border-white bg-primary-500 text-black shadow-2xl">
+                  <div className="flex h-8 w-8 animate-bounce items-center justify-center rounded-full border-2 border-white bg-primary-500 text-app-on-accent shadow-2xl">
                     {pending.kind === "label" ? <Type className="h-4 w-4" /> : <MapPin className="h-4 w-4" />}
                   </div>
                 </div>
@@ -980,7 +980,7 @@ export function InteractiveMap({
                 {map.layers.map((layer) => <option key={layer.id} value={layer.id}>{layer.name}</option>)}
               </select>
             </label>
-            <button type="submit" disabled={mutating} className="w-full rounded bg-primary-500 py-1.5 text-xs font-semibold text-black disabled:opacity-40">Save</button>
+            <button type="submit" disabled={mutating} className="w-full rounded bg-primary-500 py-1.5 text-xs font-semibold text-app-on-accent disabled:opacity-40">Save</button>
           </form>
         </div>
       )}
@@ -1000,12 +1000,12 @@ export function InteractiveMap({
       )}
 
       {renameOpen && map && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-app-scrim p-4">
           <form onSubmit={(e) => void renameMap(e)} className="w-80 space-y-3 rounded-xl border border-app-border-strong bg-app-surface p-4">
             <h3 className="text-sm font-semibold text-app-text-strong">Rename map</h3>
             <input autoFocus required value={renameTitle} onChange={(e) => setRenameTitle(e.target.value)} className={inputClass} />
             <div className="flex gap-2">
-              <button type="submit" disabled={mutating} className="rounded bg-primary-500 px-3 py-1.5 text-xs font-semibold text-black">Save</button>
+              <button type="submit" disabled={mutating} className="rounded bg-primary-500 px-3 py-1.5 text-xs font-semibold text-app-on-accent">Save</button>
               <button type="button" onClick={() => setRenameOpen(false)} className="rounded border border-app-border-strong px-3 py-1.5 text-xs text-app-text-dim">Cancel</button>
             </div>
           </form>

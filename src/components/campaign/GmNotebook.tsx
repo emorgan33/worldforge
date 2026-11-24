@@ -135,7 +135,7 @@ export function GmNotebook({
                     className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg font-medium transition-colors ${
                       secret.isRevealed
                         ? "bg-app-raised hover:bg-app-control-strong text-app-text-dim border border-app-border-strong"
-                        : "bg-primary-500 hover:bg-primary-400 text-black font-semibold shadow-md"
+                        : "bg-primary-500 hover:bg-primary-400 text-app-on-accent font-semibold shadow-md"
                     }`}
                   >
                     {secret.isRevealed ? (

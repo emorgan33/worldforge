@@ -298,7 +298,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
   if (error && !detail) return (
     <div className="space-y-3">
       <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm text-danger-300 focus:outline-none">{error}</p>
-      <button type="button" onClick={() => void loadDetail().then(ok => { if (ok) void loadSessions(); })} className="rounded-lg border border-app-border-strong px-3 py-2 text-sm text-white">Retry loading account</button>
+      <button type="button" onClick={() => void loadDetail().then(ok => { if (ok) void loadSessions(); })} className="rounded-lg border border-app-border-strong px-3 py-2 text-sm text-app-text">Retry loading account</button>
     </div>
   );
   if (!detail) return null;
@@ -316,7 +316,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
       {error && (
         <div className="space-y-2">
           <p ref={errorRef} tabIndex={-1} role="alert" className="rounded-lg border border-danger-800 bg-danger-950/30 px-4 py-3 text-sm text-danger-300 focus:outline-none">{error}</p>
-          {detailLoadFailed && <button type="button" onClick={() => void loadDetail().then(ok => { if (ok) void loadSessions(); })} className="rounded-lg border border-app-border-strong px-3 py-2 text-sm text-white">Retry loading account</button>}
+          {detailLoadFailed && <button type="button" onClick={() => void loadDetail().then(ok => { if (ok) void loadSessions(); })} className="rounded-lg border border-app-border-strong px-3 py-2 text-sm text-app-text">Retry loading account</button>}
         </div>
       )}
 
@@ -382,7 +382,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                   if (!window.confirm(`Change role to ${roleDraft}?`)) return;
                   void mutate(`/api/admin/users/${id}/role`, "PATCH", { role: roleDraft, expectedVersion: account.accountVersion });
                 }}
-                className="rounded-lg bg-secondary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-secondary-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
+                className="rounded-lg bg-secondary-600 px-4 py-2 text-sm font-semibold text-app-on-strong hover:bg-secondary-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"
               >
                 Change role
               </button>
@@ -655,7 +655,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
                                         },
                                       );
                                     }}
-                                    className="w-fit rounded-lg bg-danger-700 px-4 py-2 text-sm font-semibold text-white hover:bg-danger-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-300"
+                                    className="w-fit rounded-lg bg-danger-700 px-4 py-2 text-sm font-semibold text-app-on-strong hover:bg-danger-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-300"
                                   >
                                     Permanently purge world
                                   </button>
@@ -731,7 +731,7 @@ export default function AdminUserDetail({ id, currentUserId: initialCurrentUserI
           <button
             type="submit"
             disabled={busy || !backupAcknowledged}
-            className="w-fit rounded-lg bg-danger-700 px-4 py-2 text-sm font-semibold text-white hover:bg-danger-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-300"
+            className="w-fit rounded-lg bg-danger-700 px-4 py-2 text-sm font-semibold text-app-on-strong hover:bg-danger-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-300"
           >
             Delete account
           </button>

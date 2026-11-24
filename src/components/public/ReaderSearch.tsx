@@ -13,7 +13,7 @@ export function ReaderSearch({ worldSlug, articles, readerType = "public" }: { w
 
   return (
     <div className="relative my-4">
-      <div className="flex items-center gap-2 rounded-xl border border-[#303540] bg-[#181b22] px-3 py-2 text-sm text-app-text focus-within:border-highlight-400 focus-within:ring-2 focus-within:ring-highlight-400/30">
+      <div className="flex items-center gap-2 reader-search-field rounded-xl border px-3 py-2 text-sm text-app-text focus-within:border-highlight-400 focus-within:ring-2 focus-within:ring-highlight-400/30">
         <Search className="h-4 w-4 shrink-0 text-app-muted" aria-hidden="true" />
         <input
           type="search"
