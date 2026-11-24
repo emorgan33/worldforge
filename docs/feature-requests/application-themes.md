@@ -1,9 +1,8 @@
 # Implementation plan: selectable application themes
 
 Status: P1–P7 done (#43 token layer, #44 switcher, #45 true black, #46 Daylight
-audit, #47 Pathfinder and D&D, P7 coverage sweep on `feat/theme-coverage`); P8
-not started. Palette values, in-product names, and the migration order below are
-open for review.
+audit, #47 Pathfinder and D&D, #48 P7 coverage sweep); P8 docs/wiki/README
+screenshots and theme-selection help text on `feat/theme-docs`.
 
 Tracks [GitHub issue #38](https://github.com/emorgan33/worldforge/issues/38).
 
@@ -335,7 +334,7 @@ pass and the evidence is reported.
 | P5 | Pathfinder palette derived from the shared source | Same as P3, plus a check that chrome and reader values match. **Implemented on `feat/theme-game-palettes`**: `tests/theme-palettes.test.ts` asserts the checked-in CSS equals the shared module and that surface/ink/muted/primary equal `WORLD_THEMES.pf2remaster`; contrast probe on workspace, admin list/detail, player, login, reader chrome, editor and template dialog reports 0 failures. |
 | P6 | D&D palette derived from the shared source | Same as P3. **Implemented on `feat/theme-game-palettes`**: same module and parity test against `WORLD_THEMES.dnd2014`, with the dark table tinted into the canvas; same contrast-probe routes report 0 failures. |
 | P7 | Coverage sweep: editor, character sheet, maps chrome, dialogs, tables, code, scrollbars, overlays, loading/empty/error, print | Manual checklist per theme on every route group; map annotation colors unchanged. **Implemented on `feat/theme-coverage`**: fixed-colour audit converted the editor, article body, callouts, tables, code, link picker, modal scrims and reader search field; `scripts/check-theme-tokens.mjs` now rejects new fixed black/white chrome utilities; contrast probe on the editor with injected tables/code/callouts/link states and on every dialog reports 0 failures in Daylight, Pathfinder and D&D. Character-sheet paper, map annotation colours and the legacy `#eab308` fallback are unchanged. Print stays with issue #5. |
-| P8 | Update `docs/`, wiki, README screenshots, and the theme-selection help text | `pnpm docs:check`; screenshots captured from an isolated demo database |
+| P8 | Update `docs/`, wiki, README screenshots, and the theme-selection help text | `pnpm docs:check`; screenshots captured from an isolated demo database. **Implemented on `feat/theme-docs`**: README screenshots refreshed to show the theme switcher and all six themes; docs/wiki pages updated with theme-selection guidance; `pnpm docs:check` passes. |
 
 ## Acceptance criteria
 

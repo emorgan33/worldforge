@@ -23,8 +23,9 @@ your use, and keep backups of your campaign data. See the
 
 ![Mobile Aethelgard author workspace with the campaign navigation drawer and World contents tree open](docs/screenshots/author-workspace-mobile.png)
 
-Both views come from the optional Aethelgard demo seed and show the current
-Night Watch author workspace.
+Both views come from the optional Aethelgard demo seed and show the Night Watch
+author workspace. The **Interface theme** dropdown in the top-right now offers
+Night watch, True black, Daylight, Pathfinder, D&D, and Match system.
 
 ## Features
 
