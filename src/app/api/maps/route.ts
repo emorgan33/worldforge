@@ -306,7 +306,10 @@ async function deleteHandler(req: NextRequest) {
     switch (body.action) {
       case "deleteMap": {
         await worldMap(worldId, id);
-        await prisma.map.delete({ where: { id } });
+        await prisma.$transaction(async tx => {
+          await tx.map.delete({ where: { id } });
+          await tx.playerActivity.deleteMany({ where: { resourceKind: "map", resourceId: id } });
+        });
         return NextResponse.json({ success: true });
       }
       case "deleteLayer": {

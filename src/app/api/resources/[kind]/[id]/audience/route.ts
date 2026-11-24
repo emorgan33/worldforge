@@ -2,6 +2,7 @@ import { withAuthorResource } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
+import { clearPlayerActivity, recordPlayerActivity } from "@/lib/player-activity";
 
 const KINDS = ["articles", "statblocks", "secrets", "maps", "assets"] as const;
 type ShareableKind = typeof KINDS[number];
@@ -29,6 +30,13 @@ function routeHandlers(kind: ShareableKind) {
     const policy = await tx.audiencePolicy.upsert({ where: { resourceKind_resourceId: { resourceKind: kind, resourceId: id } }, create: { worldId, resourceKind: kind, resourceId: id, mode, createdById: actor.id }, update: { mode } });
     await tx.audienceGrant.deleteMany({ where: { policyId: policy.id } });
     if (userIds.length) await tx.audienceGrant.createMany({ data: userIds.map(userId => ({ policyId: policy.id, userId, grantedById: actor.id })) });
+    if (kind === "articles" || kind === "maps") {
+      const activityKind = kind === "articles" ? "article" : "map";
+      // Sharing makes the resource new for players; GM_ONLY removes it from the
+      // "What's new" feed along with access.
+      if (mode === "GM_ONLY") await clearPlayerActivity(tx, activityKind, id);
+      else await recordPlayerActivity(tx, { worldId, resourceKind: activityKind, resourceId: id });
+    }
     await recordAuditEvent({ worldId, resourceKind: kind, resourceId: id, action: "set_policy", actorId: actor.id, afterJson: JSON.stringify({ mode, userIds }) }, tx);
     return false;
   });
@@ -41,6 +49,7 @@ function routeHandlers(kind: ShareableKind) {
     const policy = await tx.audiencePolicy.findUnique({ where: { resourceKind_resourceId: { resourceKind: kind, resourceId: id } }, select: { id: true, mode: true, worldId: true } });
     if (!policy || policy.worldId !== worldId) return;
     await tx.audiencePolicy.delete({ where: { id: policy.id } });
+    if (kind === "articles" || kind === "maps") await clearPlayerActivity(tx, kind === "articles" ? "article" : "map", id);
     await recordAuditEvent({ worldId, resourceKind: kind, resourceId: id, action: "revoke_policy", actorId: actor.id, beforeJson: JSON.stringify({ mode: policy.mode }) }, tx);
   });
   return NextResponse.json({ success: true });

@@ -24,6 +24,11 @@ or access GM editing tools. Joining does not expose everything in the campaign:
 the GM must [share resources](Publishing-and-Permissions). Images/statblocks
 embedded in a shared article need their own access grants.
 
+**What's new** on the same page lists recently shared articles, session recaps,
+and published maps across all your campaigns. It shows only items you can
+currently open; unsharing, unpublishing, or revoking access removes an entry the
+next time the page loads. It is a reading aid, not a notification system.
+
 ## Remove access or recover an account
 
 Revoke a member in **Players & invitations** to remove membership and selected
@@ -36,6 +41,8 @@ requires the installation operator: there is no email reset service. Follow
 account recovery link, not `--create` for an existing player.
 
 **Source owner:** `wiki/Player-Accounts-and-Invitations.md`; implementation:
-`docs/player-accounts.md`, invitation routes, and `src/lib/access.ts`.
-**Verified against:** `v0.4.3` (`94c694c`), source/contract audit; see
+`docs/player-accounts.md`, invitation routes, `src/lib/player-activity.ts`, and
+`src/lib/access.ts`.
+**Verified against:** `main` (`player activity feed`), source/contract audit plus
+the feed API and browser checks; see
 [verification record](Wiki-Verification).

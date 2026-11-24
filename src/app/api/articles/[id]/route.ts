@@ -247,7 +247,10 @@ async function deleteHandler(
 ) {
   try {
     const { id } = await params;
-    await prisma.article.delete({ where: { id } });
+    await prisma.$transaction(async tx => {
+      await tx.article.delete({ where: { id } });
+      await tx.playerActivity.deleteMany({ where: { resourceKind: "article", resourceId: id } });
+    });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     console.error("Failed to delete article:", error);

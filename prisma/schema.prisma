@@ -86,6 +86,7 @@ model World {
   previewSessions     PreviewSession[]     @relation("PreviewWorld")
   campaignSessions    CampaignSession[]    @relation("CampaignSessionWorld")
   sessionEntityLinks  SessionEntityLink[]  @relation("SessionLinkWorld")
+  playerActivity      PlayerActivity[]     @relation("PlayerActivityWorld")
   createdAt           DateTime             @default(now())
   deletedAt           DateTime?
   updatedAt           DateTime             @updatedAt
@@ -710,6 +711,25 @@ model PlayerInvitation {
   createdAt   DateTime @default(now())
 
   @@index([worldId, email])
+}
+
+// -------------------------------------------------------------
+// Player activity feed
+// -------------------------------------------------------------
+// One row per shareable resource that players can read. The row stores no
+// content: the reader projection resolves the current title and link through
+// access checks, so revoking or unpublishing hides it immediately.
+model PlayerActivity {
+  id           String   @id @default(uuid())
+  worldId      String
+  world        World    @relation("PlayerActivityWorld", fields: [worldId], references: [id], onDelete: Cascade)
+  resourceKind String   // article | map
+  resourceId   String
+  occurredAt   DateTime @default(now())
+
+  @@unique([resourceKind, resourceId])
+  @@index([worldId, occurredAt])
+  @@index([occurredAt])
 }
 
 // -------------------------------------------------------------

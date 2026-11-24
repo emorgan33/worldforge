@@ -25,7 +25,7 @@ The table-access system extends per-article visibility with role-based audience 
 
 ### Architecture
 
-Authorization is an explicit domain layer. A world member has a role (`PLAYER`); every shareable object has an `AudiencePolicy`; grants are snapshot-based so a later member is not automatically included in historic player shares.
+Authorization is an explicit domain layer. A world member has a role (`PLAYER`); every shareable object has an `AudiencePolicy`; grants are snapshot-based so a later member is not automatically included in historic player shares. Setting an article or map audience away from `GM_ONLY` also records it in the player **What's new** feed (`src/lib/player-activity.ts`); revoking the policy removes the entry. The feed re-checks current access on every read, so it cannot expose a resource the player has lost.
 
 ### Members
 

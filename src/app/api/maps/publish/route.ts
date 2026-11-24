@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { imageAssetId } from "@/lib/assets";
 import { recordAuditEvent } from "@/lib/audit";
+import { clearPlayerActivity, recordPlayerActivity } from "@/lib/player-activity";
 import {
   buildMapSnapshot,
   normalizeSelection,
@@ -157,11 +158,14 @@ async function postHandler(request: NextRequest, _context: unknown, { user }: Au
         await recordAuditEvent({ worldId, resourceKind: "assets", resourceId: assetId, action: "set_policy", actorId: user.id, afterJson: JSON.stringify({ mode: "PUBLIC", reason: "map_publication", mapId }) }, tx);
         await tx.audienceGrant.deleteMany({ where: { policyId: policy.id } });
       }
-      return tx.mapPublication.upsert({
+      const publication = await tx.mapPublication.upsert({
         where: { mapId },
         create: { mapId, snapshot: JSON.stringify(snapshot), publishedById: user.id },
         update: { snapshot: JSON.stringify(snapshot), publishedById: user.id, publishedAt: new Date(), revision: { increment: 1 } },
       });
+      // Republishing bumps the map to the top of the players' "What's new" feed.
+      await recordPlayerActivity(tx, { worldId, resourceKind: "map", resourceId: mapId });
+      return publication;
     });
     await recordAuditEvent({ worldId, resourceKind: "maps", resourceId: mapId, action: "publish_snapshot", actorId: user.id, afterJson: JSON.stringify(publicationSummary(snapshot)) });
 
@@ -182,6 +186,7 @@ async function deleteHandler(request: NextRequest) {
     const mapId = requiredId(body.mapId, "Map ID");
     await worldMap(worldId, mapId);
     await prisma.mapPublication.deleteMany({ where: { mapId } });
+    await clearPlayerActivity(prisma, "map", mapId);
     return NextResponse.json({ success: true });
   } catch (error) { return failure(error); }
 }
