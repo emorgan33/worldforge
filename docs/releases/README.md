@@ -100,5 +100,15 @@ verified multi-platform release (`sha256:8fefc0d9…`) that those reruns
 finalized. [v0.4.10](v0.4.10.md) is the first release to publish with the
 corrected step, so check its workflow before relying on an image.
 [v0.4.11](v0.4.11.md) publishes the interface themes, the D&D character-sheet
-layout, and the admin build label; verify its workflow and digest before
-announcing it.
+layout, and the admin build label.
+
+The `0.4.11` publication was verified by its **Release Docker image** workflow
+and by inspecting the registry: the version tag, full-SHA tag, and `latest` all
+resolve to the multi-platform index
+`sha256:7f6cbb26213a31281783063defdc401c17b8a609ef78f03d0f7df8d0ac3c3e1d`,
+with `linux/amd64` child
+`sha256:600c76ea6343a5efcddc214c86a1776866805200430073af565367b71c4d7d6d`
+and `linux/arm64` child
+`sha256:14b6a4160217889fb9efa20205f07a12ad460c64da67eb22b5291e0d561824d9`.
+The workflow appended that image section to the GitHub release after
+re-verifying both published children.
