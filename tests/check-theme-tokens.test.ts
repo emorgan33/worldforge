@@ -86,3 +86,48 @@ test("accepts arbitrary values that are not palette variables", () => {
     assert.equal(result.status, 0, result.stderr);
   });
 });
+
+test("rejects fixed black and white chrome utilities", () => {
+  withRoot({
+    "a.tsx": '<div className="text-white" />\n<div className="hover:text-black" />',
+    "b.tsx": '<div className="bg-black/80" />\n<div className="border-white/80" />\n<div className="bg-white/10" />',
+    "c.tsx": '<div className="from-black/80 via-black/20" />',
+  }, root => {
+    const result = run(root);
+    assert.equal(result.status, 1, "fixed colours must fail the check");
+    assert.match(result.stderr, /a\.tsx:1: fixed colour "text-white"/);
+    assert.match(result.stderr, /a\.tsx:2: fixed colour "text-black"/);
+    assert.match(result.stderr, /b\.tsx:1: fixed colour "bg-black\/80"/);
+    assert.match(result.stderr, /b\.tsx:2: fixed colour "border-white\/80"/);
+    assert.match(result.stderr, /b\.tsx:3: fixed colour "bg-white\/10"/);
+    assert.match(result.stderr, /c\.tsx:1: fixed colour "from-black\/80"/);
+    assert.match(result.stderr, /c\.tsx:1: fixed colour "via-black\/20"/);
+  });
+});
+
+test("allows fixed colours in content files only", () => {
+  withRoot({
+    "components/map/InteractiveMap.tsx": '<div className="border-white/80 text-white" />',
+    "components/blocks/StatblockCard.tsx": '<div className="bg-black/15" />',
+    "components/blocks/RulesIcons.tsx": '<div className="text-white" />',
+    "components/blocks/PathfinderActionSymbol.tsx": '<div className="text-white" />',
+    "components/assets/PlacementPreview.tsx": '<div className="from-black/80 via-black/20 text-white" />',
+    "components/blocks/StatblockCardExtra.tsx": '<div className="text-white" />',
+  }, root => {
+    const result = run(root);
+    assert.equal(result.status, 1, "only the exact allowlisted paths are exempt");
+    assert.doesNotMatch(result.stderr, /InteractiveMap|StatblockCard\.tsx|RulesIcons|PathfinderActionSymbol|PlacementPreview/);
+    assert.match(result.stderr, /StatblockCardExtra\.tsx:1: fixed colour "text-white"/);
+  });
+});
+
+test("skips fixed-colour checks in non-source and test files", () => {
+  withRoot({
+    "components/Card.tsx": '<div className="bg-app-surface" />',
+    "tests/example.test.tsx": '<div className="text-white" />',
+    "docs/example.md": '<div className="bg-black/80" />',
+  }, root => {
+    const result = run(root);
+    assert.equal(result.status, 0, result.stderr);
+  });
+});
