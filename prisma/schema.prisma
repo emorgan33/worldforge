@@ -37,6 +37,7 @@ model User {
   auditEvents     AccessAuditEvent[] @relation("AccessAuditActor")
   previewSessions PreviewSession[]   @relation("PreviewUser")
   issuedPreviews  PreviewSession[]   @relation("PreviewIssuer")
+  playerBookmarks PlayerBookmark[]   @relation("PlayerBookmarkUser")
   foundryPreviews FoundryPreview[]
   foundryRuns     FoundryImportRun[]
   worldTransferImports WorldTransferImport[]
@@ -87,6 +88,7 @@ model World {
   campaignSessions    CampaignSession[]    @relation("CampaignSessionWorld")
   sessionEntityLinks  SessionEntityLink[]  @relation("SessionLinkWorld")
   playerActivity      PlayerActivity[]     @relation("PlayerActivityWorld")
+  playerBookmarks     PlayerBookmark[]     @relation("PlayerBookmarkWorld")
   createdAt           DateTime             @default(now())
   deletedAt           DateTime?
   updatedAt           DateTime             @updatedAt
@@ -730,6 +732,26 @@ model PlayerActivity {
   @@unique([resourceKind, resourceId])
   @@index([worldId, occurredAt])
   @@index([occurredAt])
+}
+
+// -------------------------------------------------------------
+// Player bookmarks
+// -------------------------------------------------------------
+// A private saved article or published map. Bookmarks store only stable IDs;
+// the reader projection resolves current titles and links through access checks.
+model PlayerBookmark {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation("PlayerBookmarkUser", fields: [userId], references: [id], onDelete: Cascade)
+  worldId      String
+  world        World    @relation("PlayerBookmarkWorld", fields: [worldId], references: [id], onDelete: Cascade)
+  resourceKind String   // article | map
+  resourceId   String
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, resourceKind, resourceId])
+  @@index([userId, createdAt])
+  @@index([worldId, resourceKind, resourceId])
 }
 
 // -------------------------------------------------------------

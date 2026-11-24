@@ -309,6 +309,7 @@ async function deleteHandler(req: NextRequest) {
         await prisma.$transaction(async tx => {
           await tx.map.delete({ where: { id } });
           await tx.playerActivity.deleteMany({ where: { resourceKind: "map", resourceId: id } });
+          await tx.playerBookmark.deleteMany({ where: { resourceKind: "map", resourceId: id } });
         });
         return NextResponse.json({ success: true });
       }

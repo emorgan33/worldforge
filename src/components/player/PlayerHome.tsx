@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, BookOpen, LogOut, Users } from "lucide-react";
+import { ArrowLeft, BookOpen, LogOut, Trash2, Users } from "lucide-react";
 
 type PlayerWorld = { id: string; slug: string; title: string; description?: string | null };
 type ActivityItem = { id: string; kind: "article" | "map"; label: string; title: string; worldTitle: string; href: string; occurredAt: string };
+type SavedItem = { id: string; resourceId: string; kind: "article" | "map"; title: string; worldTitle: string; href: string; createdAt: string };
 
 function activityDate(value: string) {
   const date = new Date(value);
@@ -22,6 +23,9 @@ export default function PlayerHome({ name, email }: { name: string | null; email
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
   const [activityError, setActivityError] = useState("");
+  const [saved, setSaved] = useState<SavedItem[]>([]);
+  const [savedLoading, setSavedLoading] = useState(true);
+  const [savedError, setSavedError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
@@ -49,6 +53,35 @@ export default function PlayerHome({ name, email }: { name: string | null; email
       .finally(() => { if (active) setActivityLoading(false); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/player/bookmarks", { cache: "no-store" })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not load saved items.");
+        if (active) setSaved(Array.isArray(data.items) ? data.items : []);
+      })
+      .catch(reason => { if (active) setSavedError(reason instanceof Error ? reason.message : "Could not load saved items."); })
+      .finally(() => { if (active) setSavedLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  async function removeSaved(item: SavedItem) {
+    setSavedError("");
+    try {
+      const response = await fetch("/api/player/bookmarks", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resourceKind: item.kind, resourceId: item.resourceId }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not remove this saved item.");
+      setSaved(current => current.filter(candidate => candidate.id !== item.id));
+    } catch (reason) {
+      setSavedError(reason instanceof Error ? reason.message : "Could not remove this saved item.");
+    }
+  }
 
   async function signOut() {
     setSigningOut(true);
@@ -83,6 +116,27 @@ export default function PlayerHome({ name, email }: { name: string | null; email
               </span>
               <time dateTime={item.occurredAt} className="shrink-0 text-xs text-app-subtle">{activityDate(item.occurredAt)}</time>
             </Link>
+          </li>)}
+        </ul>}
+      </section>
+      <section aria-labelledby="player-saved" className="border-b border-app-border py-8">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 id="player-saved" className="font-serif text-2xl font-semibold">Saved</h2>
+            <p className="mt-1 text-sm text-app-muted">Articles and maps you kept for later. Only you can see this list.</p>
+          </div>
+          {saved.length > 0 && <span className="text-xs uppercase tracking-wider text-app-subtle">{saved.length} saved</span>}
+        </div>
+        {savedError ? <p role="alert" className="mt-4 rounded-lg border border-app-border bg-app-surface/40 px-4 py-3 text-sm text-app-muted">{savedError}</p> : savedLoading ? <p role="status" className="mt-4 text-sm text-app-muted">Loading saved items…</p> : saved.length === 0 ? <p className="mt-4 rounded-xl border border-app-border bg-app-surface/40 px-4 py-6 text-sm text-app-muted">Nothing saved yet. Use <strong>Save</strong> on an article or map to keep it here.</p> : <ul className="mt-4 grid gap-2">
+          {saved.map(item => <li key={item.id} className="flex items-center gap-2 rounded-xl border border-app-border bg-app-surface/40 pr-2 transition-colors hover:border-secondary-500/70">
+            <Link href={item.href} className="flex min-h-12 min-w-0 flex-1 items-center gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300">
+              <span className="w-16 shrink-0 text-[11px] font-semibold uppercase tracking-wider text-primary-300">{item.kind}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-app-text-strong">{item.title}</span>
+                <span className="block truncate text-xs text-app-subtle">{item.worldTitle}</span>
+              </span>
+            </Link>
+            <button type="button" onClick={() => void removeSaved(item)} aria-label={`Remove ${item.title} from saved`} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-app-subtle hover:bg-app-raised hover:text-danger-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
           </li>)}
         </ul>}
       </section>

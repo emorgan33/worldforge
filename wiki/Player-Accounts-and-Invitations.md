@@ -29,6 +29,12 @@ and published maps across all your campaigns. It shows only items you can
 currently open; unsharing, unpublishing, or revoking access removes an entry the
 next time the page loads. It is a reading aid, not a notification system.
 
+**Saved** keeps articles and maps you bookmark with the **Save** button. It is
+private to your account and syncs across devices. A saved item disappears while
+you cannot open it—for example after a GM revokes access or unpublishes a
+map—and returns if access is restored. Removing an item, or the GM deleting the
+resource, clears it permanently.
+
 ## Remove access or recover an account
 
 Revoke a member in **Players & invitations** to remove membership and selected
@@ -41,8 +47,8 @@ requires the installation operator: there is no email reset service. Follow
 account recovery link, not `--create` for an existing player.
 
 **Source owner:** `wiki/Player-Accounts-and-Invitations.md`; implementation:
-`docs/player-accounts.md`, invitation routes, `src/lib/player-activity.ts`, and
-`src/lib/access.ts`.
-**Verified against:** `main` (`player activity feed`), source/contract audit plus
-the feed API and browser checks; see
+`docs/player-accounts.md`, invitation routes, `src/lib/player-activity.ts`,
+`src/lib/player-bookmarks.ts`, and `src/lib/access.ts`.
+**Verified against:** `main` (`player activity feed, bookmarks`), source/contract
+audit plus the feed/bookmark API and browser checks; see
 [verification record](Wiki-Verification).

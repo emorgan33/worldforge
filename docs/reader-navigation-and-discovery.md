@@ -32,6 +32,25 @@ deletes it. Drafts that were never shared never appear, and the feed never
 grants access by itself. It is a reading aid, not a notification system: there
 are no unread badges or emails.
 
+## Player bookmarks
+
+Campaign articles and published maps expose a **Save** toggle. Bookmarks are
+private to the signed-in account (`PlayerBookmark`, one row per account and
+resource) and are deliberately per-user, not per-device: they appear on
+`/player` under **Saved** on any browser signed into the same account. Saving
+validates current reader access and, for maps, a published snapshot with a
+readable base image.
+
+`GET /api/player/bookmarks` resolves the caller from the session cookie, then
+re-checks `readableWhere()` for each saved resource and the reader's asset access
+for map images. Titles and links are projected from the current article or map
+snapshot, and hidden entries never count toward the 100-item list limit.
+Revoking access, unpublishing a map, archiving a world, or losing image access
+hides the bookmark without deleting it, so restoring access brings it back;
+permanently deleting an article or map removes the bookmark rows. GM preview
+sessions can read an empty list but cannot save or remove bookmarks. Bookmarks
+are excluded from world export and are not visible to GMs as a per-player list.
+
 ## Illustrations and credits
 
 Category illustrations and article image credits follow the same publication and visibility boundaries as the content they decorate. The reader tree shows a category's illustration only when the image is readable in that projection, renders it with an empty `alt`, and otherwise falls back to the labelled folder icon; a private or failed image must never leak a URL, a broken-image glyph, or a private warning.

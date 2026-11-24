@@ -27,6 +27,7 @@ import { BookOpen, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import type { ArticleTemplateType } from "@/types";
 import { ReaderThemeBar } from "@/components/theme/ReaderThemeBar";
+import { SaveButton } from "@/components/player/SaveButton";
 
 async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: string; articleSlug: string }> }) {
   const { worldSlug, articleSlug } = await params;
@@ -138,6 +139,12 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
     ...ancestors.map(category => ({ label: category.name })),
     { label: article.title },
   ];
+  const savedBookmark = !isPreview && actor.userId
+    ? await prisma.playerBookmark.findUnique({
+        where: { userId_resourceKind_resourceId: { userId: actor.userId, resourceKind: "article", resourceId: article.id } },
+        select: { id: true },
+      })
+    : null;
 
   return (
     <>
@@ -172,6 +179,7 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
           <p className="text-xs uppercase tracking-wider text-primary-400">{article.template}</p>
           <h1 className="mt-2 font-serif text-4xl">{article.title}</h1>
           {article.excerpt && <p className="mt-3 text-app-muted">{article.excerpt}</p>}
+          {!isPreview && <SaveButton className="mt-4" kind="article" resourceId={article.id} initialSaved={Boolean(savedBookmark)} />}
         </header>
 
         {article.template === "CHARACTER" && isCharacterSystem(system) && <CharacterSheet system={system} metadata={metadata} title={article.title} />}

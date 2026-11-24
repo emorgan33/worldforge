@@ -250,6 +250,7 @@ async function deleteHandler(
     await prisma.$transaction(async tx => {
       await tx.article.delete({ where: { id } });
       await tx.playerActivity.deleteMany({ where: { resourceKind: "article", resourceId: id } });
+      await tx.playerBookmark.deleteMany({ where: { resourceKind: "article", resourceId: id } });
     });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

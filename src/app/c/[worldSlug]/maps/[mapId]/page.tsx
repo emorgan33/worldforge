@@ -11,6 +11,7 @@ import { WorldPresentation } from "@/components/public/WorldPresentation";
 import { ReaderThemeBar } from "@/components/theme/ReaderThemeBar";
 import { MapViewer } from "@/components/map/MapViewer";
 import { parseMapSnapshot, type MapSnapshot } from "@/lib/map-publication";
+import { SaveButton } from "@/components/player/SaveButton";
 
 /** Keep only image references the reader may actually load. */
 function projectPublishedImages(snapshot: MapSnapshot, readableAssetIds: Set<string>): MapSnapshot | null {
@@ -78,6 +79,12 @@ async function PlayerMapContent({ worldSlug, mapId }: { worldSlug: string; mapId
   const actorName = actor.userId
     ? (await prisma.user.findUnique({ where: { id: actor.userId }, select: { name: true } }))?.name
     : null;
+  const savedBookmark = !isPreview && actor.userId
+    ? await prisma.playerBookmark.findUnique({
+        where: { userId_resourceKind_resourceId: { userId: actor.userId, resourceKind: "map", resourceId: map.id } },
+        select: { id: true },
+      })
+    : null;
 
   return (
     <>
@@ -107,6 +114,7 @@ async function PlayerMapContent({ worldSlug, mapId }: { worldSlug: string; mapId
             <h1 className="mt-2 font-serif text-4xl">{snapshot.title}</h1>
             {snapshot.description && <p className="mt-3 max-w-3xl whitespace-pre-wrap text-app-muted">{snapshot.description}</p>}
             <p className="mt-2 text-xs text-app-subtle">Revision {map.publication.revision} · published {map.publication.publishedAt.toLocaleString()}</p>
+            {!isPreview && <SaveButton className="mt-4" kind="map" resourceId={map.id} initialSaved={Boolean(savedBookmark)} />}
           </header>
           {projected ? (
             <MapViewer key={`${map.id}-${map.publication.revision}`} snapshot={projected} articleLinks={articleLinks} />
