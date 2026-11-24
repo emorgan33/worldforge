@@ -1,9 +1,8 @@
 # Implementation plan: selectable application themes
 
-Status: P1 (token layer) merged in #43; P2 (switcher, persistence, Night watch +
-Daylight) implemented on `feat/theme-switcher`; P3 and P5–P8 not started.
-Palette values, in-product names, and the migration order below are open for
-review.
+Status: P1–P4 done (#43 token layer, #44 switcher, #45 true black, P4
+Daylight audit on `feat/theme-daylight-audit`); P5–P8 not started. Palette
+values, in-product names, and the migration order below are open for review.
 
 Tracks [GitHub issue #38](https://github.com/emorgan33/worldforge/issues/38).
 
@@ -151,6 +150,18 @@ and lets `color-scheme` choose: Night watch forces `dark`, Daylight forces
 including live changes without a reload. That keeps one definition per token and
 avoids duplicating the Daylight block inside a media query.
 
+Two shade rules follow from that. The `50`/`100` shades of every accent scale
+are only used as foreground accents, so the light palette takes the dark end of
+the same scale (`text-primary-100` is amber-800 on white and amber-100 on
+black). Mid shades that sit under `--color-app-on-accent` take a dark enough
+light-mode value for white labels (`primary-500` is amber-700, not amber-600),
+because the label token flips from near-black to white with the palette.
+
+Sidebar chrome uses `--aw-*` tokens with the same pattern. The light values are
+derived (violet-700 accent, violet-100 active row, violet-900 row text); the
+Night watch values are the exact literals the sidebar shipped with, so the
+default theme does not shift by a single channel.
+
 ### 3. Account preference is authoritative; the cookie is its projection
 
 - **Signed in:** the server reads `User.theme` and renders it. The account value
@@ -244,8 +255,15 @@ surface):
 | True black border-strong `#63636b` on `#0a0a0b` | 3.3:1 |
 | Daylight `#1c1b19` on `#f6f5f3` | 15.8:1 |
 | Daylight muted `#5c5952` on `#f6f5f3` | 6.4:1 |
+| Daylight faint `#78746d` / subtle-dim `#75716a` on `#ffffff` | 4.7–4.9:1 |
 | Daylight accent `#8a4b12` on `#f6f5f3` | 6.2:1 |
 | Daylight border-strong `#8a8781` on `#ffffff` | 3.6:1 |
+| Daylight white on primary-500 `#bb4d00` | 5.0:1 |
+| Daylight white on primary-600 `#973c00` | 7.1:1 |
+| Daylight white on highlight-400 `#7f22fe` | 5.9:1 |
+| Daylight white on sidebar accent `#7008e7` | 7.3:1 |
+| Daylight sidebar control outline `#8a8781` on `#ffffff` | 3.6:1 |
+| Daylight violet-900 on violet-100 active row | 9.2:1 |
 | Pathfinder `#181818` on `#ede3c7` | 13.9:1 |
 | Pathfinder muted `#515c63` on `#ffffff` | 6.9:1 |
 | D&D `#181818` on `#eee5ce` | 14.2:1 |
@@ -256,7 +274,10 @@ surface):
 
 The Pathfinder reader border `#644117` is 7.1:1 on its paper and can serve as a
 control outline. The D&D reader border `#c0ad6a` is 1.8:1 on its paper and is
-decorative only.
+decorative only. Night watch's sidebar search field edge (`#303540` on
+`#181b22`) is a pre-existing 1.27:1; default parity forbids changing it here, so
+it is recorded rather than fixed. Daylight uses its strong outline for the same
+controls.
 
 ### 8. Naming and trademark
 
@@ -277,7 +298,7 @@ pass and the evidence is reported.
 | P1 | Token layer with Night watch values; migrate every `zinc`/`amber`/`indigo`/`violet`/`red`/`emerald`/`sky` utility to semantic tokens; update the `.world-presentation` selectors that currently match utility class names so reader overrides survive; no theme switcher yet. **Implemented on `feat/theme-tokens`.** | Screenshot diff of key routes shows no visual change; grep proves no raw palette utilities remain outside the token definitions; reader presentation overrides still apply under all world themes |
 | P2 | `User.theme` migration, cookie projection, root-layout resolution, switcher in workspace and public chrome, "Match system" CSS mapping, invalid-value fallback | Unit tests for precedence, validation, and account-over-cookie behavior; Playwright tests for switch + reload with no flash, OS preference change under Match system, and the remote-change → page request → sign-out sequence |
 | P3 | True black palette and elevation rules | Contrast assertions; screenshots of workspace, editor, admin, player, reader chrome |
-| P4 | Daylight palette | Same as P3 |
+| P4 | Daylight palette | Same as P3. **Implemented on `feat/theme-daylight-audit`**: audited `/`, `/admin/users`, `/player`, `/login`, `/w/*`, the article editor, the template dialog and the map editor with a per-text-node contrast probe (0 failures at 4.5:1), and verified Night watch computed colors are unchanged. |
 | P5 | Pathfinder palette derived from the shared source | Same as P3, plus a check that chrome and reader values match |
 | P6 | D&D palette derived from the shared source | Same as P3 |
 | P7 | Coverage sweep: editor, character sheet, maps chrome, dialogs, tables, code, scrollbars, overlays, loading/empty/error, print | Manual checklist per theme on every route group; map annotation colors unchanged |

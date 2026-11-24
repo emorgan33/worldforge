@@ -63,6 +63,39 @@ test("production login issues a session accepted by authenticated APIs", { skip:
     return shell ? getComputedStyle(shell).backgroundColor : null;
   });
   assert.equal(shellColor, "rgb(246, 245, 243)", "Daylight must reach the workspace shell, not only the login page");
+  const sidebar = await workspace.evaluate(() => {
+    const probe = document.createElement("canvas");
+    probe.width = 1;
+    probe.height = 1;
+    const context = probe.getContext("2d");
+    const aside = document.querySelector("aside");
+    const accent = Array.from(document.querySelectorAll("button")).find(button => button.textContent?.trim() === "New article");
+    const navLabel = Array.from(aside?.querySelectorAll("nav button span") ?? []).find(span => span.textContent === "Articles");
+    const search = aside?.querySelector('button[aria-label="Search this world"]');
+    const entries: Array<[string, Element | null | undefined, "backgroundColor" | "color" | "borderTopColor"]> = [
+      ["background", aside, "backgroundColor"],
+      ["accent", accent, "backgroundColor"],
+      ["accentText", accent, "color"],
+      ["navLabel", navLabel, "color"],
+      ["searchBorder", search, "borderTopColor"],
+    ];
+    const result: Record<string, string | null> = {};
+    for (const [key, element, property] of entries) {
+      if (!element || !context) { result[key] = null; continue; }
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = "#000000";
+      context.fillStyle = getComputedStyle(element)[property];
+      context.fillRect(0, 0, 1, 1);
+      const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+      result[key] = `rgb(${r}, ${g}, ${b})`;
+    }
+    return result;
+  });
+  assert.equal(sidebar.background, "rgb(255, 255, 255)", "Daylight sidebar must not stay on the Night watch panel color");
+  assert.equal(sidebar.accent, "rgb(112, 8, 231)", "Daylight sidebar action must use the dark-violet accent");
+  assert.equal(sidebar.accentText, "rgb(255, 255, 255)", "Daylight sidebar action label must be white");
+  assert.equal(sidebar.navLabel, "rgb(92, 89, 82)", "Daylight sidebar labels must use the light-palette muted ink");
+  assert.equal(sidebar.searchBorder, "rgb(138, 135, 129)", "Daylight sidebar controls must use the strong outline, not the decorative divider");
   await workspace.close();
 
   const anonPage = await browser.newPage();
@@ -116,10 +149,23 @@ test("production login issues a session accepted by authenticated APIs", { skip:
   });
   const activeAdminCookieHeader = `${SESSION_COOKIE}=${activeAdminToken}`;
   const activeAdminPage = await browser.newPage();
-  await activeAdminPage.context().addCookies([{ name: SESSION_COOKIE, value: activeAdminToken, url: origin }]);
+  await activeAdminPage.context().addCookies([{ name: SESSION_COOKIE, value: activeAdminToken, url: origin }, { name: "wf_theme", value: "daylight", url: origin }]);
   await activeAdminPage.goto(`${origin}/admin/users`);
   await activeAdminPage.getByRole("heading", { name: "Installation administration" }).waitFor();
   await activeAdminPage.getByRole("heading", { name: "Accounts" }).waitFor();
+  const accountsHeading = await activeAdminPage.getByRole("heading", { name: "Accounts" }).evaluate(el => {
+    const probe = document.createElement("canvas");
+    probe.width = 1;
+    probe.height = 1;
+    const context = probe.getContext("2d");
+    if (!context) return null;
+    context.fillStyle = "#000000";
+    context.fillStyle = getComputedStyle(el).color;
+    context.fillRect(0, 0, 1, 1);
+    const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+    return `rgb(${r}, ${g}, ${b})`;
+  });
+  assert.equal(accountsHeading, "rgb(151, 60, 0)", "Daylight admin headings must use the dark amber foreground, not the pale dark-theme shade");
 
   const activeAdminApiResponse = await fetch(`${origin}/api/admin/users`, { headers: { Cookie: activeAdminCookieHeader, Origin: origin } });
   assert.equal(activeAdminApiResponse.status, 200, `active admin /api/admin/users must return 200 (status ${activeAdminApiResponse.status})`);
