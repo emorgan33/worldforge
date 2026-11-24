@@ -2,7 +2,7 @@ export const ensureStatic = false;
 export const instant = false;
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { BookOpen, ArrowLeft } from "lucide-react";
+import { BookOpen, ArrowLeft, NotebookPen } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { resolvePageActor, requireReadableResource, readableWhere } from "@/lib/access";
 import { publicImage } from "@/lib/public-content";
@@ -114,7 +114,10 @@ async function PlayerMapContent({ worldSlug, mapId }: { worldSlug: string; mapId
             <h1 className="mt-2 font-serif text-4xl">{snapshot.title}</h1>
             {snapshot.description && <p className="mt-3 max-w-3xl whitespace-pre-wrap text-app-muted">{snapshot.description}</p>}
             <p className="mt-2 text-xs text-app-subtle">Revision {map.publication.revision} · published {map.publication.publishedAt.toLocaleString()}</p>
-            {!isPreview && <SaveButton className="mt-4" kind="map" resourceId={map.id} initialSaved={Boolean(savedBookmark)} />}
+            {!isPreview && <div className="mt-4 flex flex-wrap items-center gap-3">
+              <SaveButton kind="map" resourceId={map.id} initialSaved={Boolean(savedBookmark)} />
+              <Link href={`/player/notebook?worldId=${world.id}&kind=map&resourceId=${map.id}&label=${encodeURIComponent(snapshot.title)}`} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-app-border-strong px-3 text-sm font-medium text-app-text-dim hover:border-primary-500/60 hover:text-primary-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"><NotebookPen className="h-4 w-4" aria-hidden="true" />Take a note</Link>
+            </div>}
           </header>
           {projected ? (
             <MapViewer key={`${map.id}-${map.publication.revision}`} snapshot={projected} articleLinks={articleLinks} />

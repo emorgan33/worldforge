@@ -23,7 +23,7 @@ import { CharacterSheet } from "@/components/article/CharacterSheet";
 import { isCharacterSystem, readerCharacterRows } from "@/lib/character-sheet";
 import { getArticleTemplate } from "@/lib/templates";
 import { projectReaderMetadata } from "@/lib/metadata-references";
-import { BookOpen, ArrowLeft } from "lucide-react";
+import { BookOpen, ArrowLeft, NotebookPen } from "lucide-react";
 import Link from "next/link";
 import type { ArticleTemplateType } from "@/types";
 import { ReaderThemeBar } from "@/components/theme/ReaderThemeBar";
@@ -179,7 +179,10 @@ async function PlayerArticleContent({ params }: { params: Promise<{ worldSlug: s
           <p className="text-xs uppercase tracking-wider text-primary-400">{article.template}</p>
           <h1 className="mt-2 font-serif text-4xl">{article.title}</h1>
           {article.excerpt && <p className="mt-3 text-app-muted">{article.excerpt}</p>}
-          {!isPreview && <SaveButton className="mt-4" kind="article" resourceId={article.id} initialSaved={Boolean(savedBookmark)} />}
+          {!isPreview && <div className="mt-4 flex flex-wrap items-center gap-3">
+            <SaveButton kind="article" resourceId={article.id} initialSaved={Boolean(savedBookmark)} />
+            <Link href={`/player/notebook?worldId=${world.id}&kind=article&resourceId=${article.id}&label=${encodeURIComponent(article.title)}`} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-app-border-strong px-3 text-sm font-medium text-app-text-dim hover:border-primary-500/60 hover:text-primary-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"><NotebookPen className="h-4 w-4" aria-hidden="true" />Take a note</Link>
+          </div>}
         </header>
 
         {article.template === "CHARACTER" && isCharacterSystem(system) && <CharacterSheet system={system} metadata={metadata} title={article.title} />}

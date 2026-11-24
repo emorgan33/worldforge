@@ -35,6 +35,13 @@ you cannot open it—for example after a GM revokes access or unpublishes a
 map—and returns if access is restored. Removing an item, or the GM deleting the
 resource, clears it permanently.
 
+**Notebook** at `/player/notebook` holds private notes, including notes started
+with **Take a note** on an article or map. Names, clues, and reminders stay
+yours even if the GM later hides the referenced page; only the link disappears.
+Notes save with an explicit **Save** button, and if another device edited a note
+first you choose whether to load that version or copy your draft. Deleting a
+note is permanent and asks for confirmation.
+
 ## Remove access or recover an account
 
 Revoke a member in **Players & invitations** to remove membership and selected
@@ -48,7 +55,8 @@ account recovery link, not `--create` for an existing player.
 
 **Source owner:** `wiki/Player-Accounts-and-Invitations.md`; implementation:
 `docs/player-accounts.md`, invitation routes, `src/lib/player-activity.ts`,
-`src/lib/player-bookmarks.ts`, and `src/lib/access.ts`.
-**Verified against:** `main` (`player activity feed, bookmarks`), source/contract
-audit plus the feed/bookmark API and browser checks; see
-[verification record](Wiki-Verification).
+`src/lib/player-bookmarks.ts`, `src/lib/player-notes.ts`, and
+`src/lib/access.ts`.
+**Verified against:** `main` (`player activity feed, bookmarks, notebook`),
+source/contract audit plus the feed, bookmark, and notebook API/browser checks;
+see [verification record](Wiki-Verification).

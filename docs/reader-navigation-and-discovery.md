@@ -51,6 +51,30 @@ permanently deleting an article or map removes the bookmark rows. GM preview
 sessions can read an empty list but cannot save or remove bookmarks. Bookmarks
 are excluded from world export and are not visible to GMs as a per-player list.
 
+## Player notebook
+
+`/player/notebook` (linked from the player portal) is a private plain-text
+notebook. A note belongs to one account (`PlayerNote`), may belong to a campaign,
+and may reference one campaign article or published map. Campaign article and map
+pages offer **Take a note**, which prefills the reference; saving validates it
+with the same reader access as **Save**.
+
+`GET/POST/PATCH/DELETE /api/player/notes` are session-only, same-origin for
+writes, and `private, no-store`. GM preview sessions receive 403. Reads return
+the player's own title and body plus a projected campaign label and reference
+link; the reference title and link are re-checked through `readableWhere()` and,
+for maps, the publication and readable base image. Revoking access or
+unpublishing a map hides only the reference: the note text stays. Archiving a
+campaign removes the campaign label but keeps the note. Deleting a campaign sets
+the note's `worldId` to null; deleting an article or map does not delete notes.
+
+Updates are optimistic: `PATCH` requires the loaded `version`, increments it, and
+returns `409` with the current server copy when another device changed the note
+first. The editor keeps the player's draft and offers **Load latest** or **Copy
+my draft** rather than overwriting either version. Deleting requires
+confirmation. Notes are excluded from world export/import and never appear in
+reader search, **What's new**, or the GM notebook.
+
 ## Illustrations and credits
 
 Category illustrations and article image credits follow the same publication and visibility boundaries as the content they decorate. The reader tree shows a category's illustration only when the image is readable in that projection, renders it with an empty `alt`, and otherwise falls back to the labelled folder icon; a private or failed image must never leak a URL, a broken-image glyph, or a private warning.

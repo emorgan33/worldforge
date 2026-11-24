@@ -38,6 +38,7 @@ model User {
   previewSessions PreviewSession[]   @relation("PreviewUser")
   issuedPreviews  PreviewSession[]   @relation("PreviewIssuer")
   playerBookmarks PlayerBookmark[]   @relation("PlayerBookmarkUser")
+  playerNotes     PlayerNote[]       @relation("PlayerNoteUser")
   foundryPreviews FoundryPreview[]
   foundryRuns     FoundryImportRun[]
   worldTransferImports WorldTransferImport[]
@@ -89,6 +90,7 @@ model World {
   sessionEntityLinks  SessionEntityLink[]  @relation("SessionLinkWorld")
   playerActivity      PlayerActivity[]     @relation("PlayerActivityWorld")
   playerBookmarks     PlayerBookmark[]     @relation("PlayerBookmarkWorld")
+  playerNotes         PlayerNote[]         @relation("PlayerNoteWorld")
   createdAt           DateTime             @default(now())
   deletedAt           DateTime?
   updatedAt           DateTime             @updatedAt
@@ -751,6 +753,30 @@ model PlayerBookmark {
 
   @@unique([userId, resourceKind, resourceId])
   @@index([userId, createdAt])
+  @@index([worldId, resourceKind, resourceId])
+}
+
+// -------------------------------------------------------------
+// Player notebook
+// -------------------------------------------------------------
+// Private plain-text notes owned by one account. A note may point at a campaign
+// article or published map; that reference is re-checked when the notebook
+// loads. Notes survive world deletion (`worldId` becomes null).
+model PlayerNote {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation("PlayerNoteUser", fields: [userId], references: [id], onDelete: Cascade)
+  worldId      String?
+  world        World?   @relation("PlayerNoteWorld", fields: [worldId], references: [id], onDelete: SetNull)
+  resourceKind String?  // article | map
+  resourceId   String?
+  title        String
+  content      String   @default("")
+  version      Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId, updatedAt])
   @@index([worldId, resourceKind, resourceId])
 }
 
