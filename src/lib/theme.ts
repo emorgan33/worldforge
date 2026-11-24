@@ -2,7 +2,7 @@
  * Application chrome themes. Stored values are stable identifiers; the
  * `system` value is resolved by CSS, not by the server.
  */
-export const THEME_IDS = ["night-watch", "true-black", "daylight", "system"] as const;
+export const THEME_IDS = ["night-watch", "true-black", "daylight", "pathfinder", "dnd", "system"] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 export const DEFAULT_THEME: ThemeId = "night-watch";
 
@@ -13,6 +13,8 @@ export const THEME_LABELS: Record<ThemeId, string> = {
   "night-watch": "Night watch",
   "true-black": "True black",
   daylight: "Daylight",
+  pathfinder: "Pathfinder",
+  dnd: "D&D",
   system: "Match system",
 };
 
@@ -32,7 +34,7 @@ export function resolveTheme(accountTheme: unknown, cookieTheme: unknown): Theme
 
 /** Browsers need `color-scheme` to style native controls and scrollbars. */
 export function colorSchemeFor(theme: ThemeId): "dark" | "light" {
-  if (theme === "daylight") return "light";
+  if (theme === "daylight" || theme === "pathfinder" || theme === "dnd") return "light";
   if (theme === "system") return "dark";
   return "dark";
 }

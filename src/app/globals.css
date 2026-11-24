@@ -164,6 +164,145 @@ body {
 .sidebar-lore-scroll { scrollbar-width: none; }
 .sidebar-lore-scroll::-webkit-scrollbar { display: none; }
 
+[data-theme="pathfinder"] {
+  color-scheme: light;
+  --color-app-canvas: #ede3c7;
+  --color-app-surface: #ffffff;
+  --color-app-raised: #f7f2e6;
+  --color-app-control: #ffffff;
+  --color-app-control-strong: #ededed;
+  --color-app-tint: #e3e3e3;
+  --color-app-border: #d1d1d1;
+  --color-app-border-strong: #644117;
+  --color-app-border-emphasis: #4d3517;
+  --color-app-border-emphasis-strong: #3a2a18;
+  --color-app-border-contrast: #464646;
+  --color-app-text-bright: #181818;
+  --color-app-text-strong: #181818;
+  --color-app-text: #181818;
+  --color-app-text-dim: #464646;
+  --color-app-muted: #515c63;
+  --color-app-subtle: #5a646b;
+  --color-app-subtle-dim: #5a646b;
+  --color-app-faint: #5a646b;
+  --color-app-on-accent: #ffffff;
+  --color-primary-50: #001b0e;
+  --color-primary-100: #001f10;
+  --color-primary-200: #002212;
+  --color-primary-300: #002212;
+  --color-primary-400: #002011;
+  --color-primary-500: #002a16;
+  --color-primary-600: #002513;
+  --color-primary-700: #002111;
+  --color-primary-800: #9eaea6;
+  --color-primary-900: #ccd4d0;
+  --color-primary-950: #e6eae8;
+  --color-secondary-50: #412a0f;
+  --color-secondary-100: #4a3011;
+  --color-secondary-200: #523513;
+  --color-secondary-300: #523513;
+  --color-secondary-400: #4c3111;
+  --color-secondary-500: #644117;
+  --color-secondary-600: #583914;
+  --color-secondary-700: #4e3312;
+  --color-secondary-800: #c4b7a7;
+  --color-secondary-900: #e0d9d1;
+  --color-secondary-950: #f0ece8;
+  --color-highlight-50: #001b0e;
+  --color-highlight-100: #001f10;
+  --color-highlight-200: #002212;
+  --color-highlight-300: #002212;
+  --color-highlight-400: #002011;
+  --color-highlight-500: #002a16;
+  --color-highlight-600: #002513;
+  --color-highlight-700: #002111;
+  --color-highlight-800: #9eaea6;
+  --color-highlight-900: #ccd4d0;
+  --color-highlight-950: #e6eae8;
+}
+
+[data-theme="dnd"] {
+  color-scheme: light;
+  --color-app-canvas: #dfd5c0;
+  --color-app-surface: #eee5ce;
+  --color-app-raised: #e7dec8;
+  --color-app-control: #eee5ce;
+  --color-app-control-strong: #ddd5bf;
+  --color-app-tint: #d4ccb8;
+  --color-app-border: #c3bcaa;
+  --color-app-border-strong: #8a6a2f;
+  --color-app-border-emphasis: #685128;
+  --color-app-border-emphasis-strong: #4b3d22;
+  --color-app-border-contrast: #43413c;
+  --color-app-text-bright: #181818;
+  --color-app-text-strong: #181818;
+  --color-app-text: #181818;
+  --color-app-text-dim: #43413c;
+  --color-app-muted: #635648;
+  --color-app-subtle: #645749;
+  --color-app-subtle-dim: #645749;
+  --color-app-faint: #645749;
+  --color-app-on-accent: #ffffff;
+  --color-primary-50: #391008;
+  --color-primary-100: #41120a;
+  --color-primary-200: #48140b;
+  --color-primary-300: #48140b;
+  --color-primary-400: #43120a;
+  --color-primary-500: #58180d;
+  --color-primary-600: #4d150b;
+  --color-primary-700: #45130a;
+  --color-primary-800: #c0a7a3;
+  --color-primary-900: #ded1cf;
+  --color-primary-950: #eee8e7;
+  --color-secondary-50: #5a451f;
+  --color-secondary-100: #664e23;
+  --color-secondary-200: #715727;
+  --color-secondary-300: #715727;
+  --color-secondary-400: #695124;
+  --color-secondary-500: #8a6a2f;
+  --color-secondary-600: #795d29;
+  --color-secondary-700: #6c5325;
+  --color-secondary-800: #d3c6b0;
+  --color-secondary-900: #e8e1d5;
+  --color-secondary-950: #f3f0ea;
+  --color-highlight-50: #391008;
+  --color-highlight-100: #41120a;
+  --color-highlight-200: #48140b;
+  --color-highlight-300: #48140b;
+  --color-highlight-400: #43120a;
+  --color-highlight-500: #58180d;
+  --color-highlight-600: #4d150b;
+  --color-highlight-700: #45130a;
+  --color-highlight-800: #c0a7a3;
+  --color-highlight-900: #ded1cf;
+  --color-highlight-950: #eee8e7;
+}
+
+/*
+ * The rule-system themes reuse the reader paper and ink. Their workspace values
+ * reference the app tokens so the two blocks cannot disagree; the workspace
+ * declares --aw-* on itself, so the override has to target that element.
+ */
+[data-theme="pathfinder"] .author-workspace,
+[data-theme="dnd"] .author-workspace {
+  --aw-canvas: var(--color-app-canvas);
+  --aw-sidebar: var(--color-app-surface);
+  --aw-panel: var(--color-app-surface);
+  --aw-control: var(--color-app-control-strong);
+  --aw-border: var(--color-app-border);
+  --aw-text: var(--color-app-text);
+  --aw-muted: var(--color-app-muted);
+  --aw-accent: var(--color-primary-500);
+  --aw-accent-hover: var(--color-primary-700);
+  --aw-accent-soft: var(--color-primary-950);
+  --aw-accent-soft-text: var(--color-primary-100);
+  --aw-on-accent: #ffffff;
+  --aw-sidebar-border: var(--color-app-border);
+  --aw-sidebar-muted: var(--color-app-muted);
+  --aw-sidebar-control: var(--color-app-control-strong);
+  --aw-sidebar-control-border: var(--color-app-border-strong);
+}
+
 /* Night watch author workspace surfaces. Reader themes stay scoped to .world-presentation. */
 .author-workspace {
   --aw-canvas: light-dark(#f6f5f3, #111318);

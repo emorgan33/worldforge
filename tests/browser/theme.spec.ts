@@ -5,7 +5,7 @@ test("theme choice applies immediately and survives a reload", async ({ page }) 
 
   const root = page.locator("html");
   const initial = await root.getAttribute("data-theme");
-  expect(["night-watch", "daylight", "system"]).toContain(initial);
+  expect(["night-watch", "true-black", "daylight", "pathfinder", "dnd", "system"]).toContain(initial);
 
   await page.getByLabel("Interface theme").selectOption("daylight");
   await expect(root).toHaveAttribute("data-theme", "daylight");
@@ -51,6 +51,25 @@ test("daylight paints a light canvas", async ({ page }) => {
 
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "daylight");
+});
+
+test("rule-system themes paint their campaign paper", async ({ page }) => {
+  await page.goto("/login");
+  const root = page.locator("html");
+  const control = page.getByLabel("Interface theme");
+
+  await control.selectOption("pathfinder");
+  await expect(root).toHaveAttribute("data-theme", "pathfinder");
+  await expect(control).toBeEnabled();
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(237, 227, 199)");
+
+  await control.selectOption("dnd");
+  await expect(root).toHaveAttribute("data-theme", "dnd");
+  await expect(control).toBeEnabled();
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(223, 213, 192)");
+
+  await page.reload();
+  await expect(root).toHaveAttribute("data-theme", "dnd");
 });
 
 test("the control is disabled while a save is in flight", async ({ page }) => {
