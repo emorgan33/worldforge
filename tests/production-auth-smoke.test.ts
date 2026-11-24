@@ -199,8 +199,9 @@ test("reader pages render instead of the prerender error page", { skip: !origin 
     const response = await fetch(`${origin}/w/${world.slug}`, { headers: { Cookie: `wf_theme=${theme}` } });
     const html = await response.text();
     assert.equal(response.status, 200, `/w/${world.slug} returned ${response.status} for ${theme}`);
+    assert.match(html, new RegExp(`data-theme="${theme}"`), `${theme} must be applied to <html>`);
     assert.match(html, /aria-label="Interface theme"/, `${theme} reader must render the theme control`);
-    assert.match(html, /bg-app-canvas/, `${theme} reader bar must paint its own themed background`);
-    assert.match(html, /data-world-theme=/, "world presentation must stay independent of the chrome theme");
+    assert.match(html, /<div class="flex justify-end bg-app-canvas/, `${theme} reader bar must paint its own themed background`);
+    assert.match(html, /data-world-theme=/, "world presentation must still carry its own theme marker, not the chrome theme");
   }
 });
