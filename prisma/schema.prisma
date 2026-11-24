@@ -291,10 +291,24 @@ model Map {
   markerGroups MarkerGroup[]
   markers      Marker[]
   elements     MapElement[]
+  publication  MapPublication?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
   @@index([worldId])
+}
+
+// The player-safe projection of a map. A GM publishes an explicit selection of
+// layers, pins and annotations; readers see this snapshot until the GM
+// publishes again, so unpublished edits never reach them.
+model MapPublication {
+  id            String   @id @default(uuid())
+  mapId         String   @unique
+  map           Map      @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  snapshot      String   // Serialized JSON: title, image, layers, markers, elements
+  revision      Int      @default(1)
+  publishedAt   DateTime @default(now())
+  publishedById String?
 }
 
 model MapLayer {

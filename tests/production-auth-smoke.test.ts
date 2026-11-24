@@ -254,3 +254,69 @@ test("reader pages render instead of the prerender error page", { skip: !origin 
     assert.match(html, /data-world-theme=/, "world presentation must still carry its own theme marker, not the chrome theme");
   }
 });
+
+test("published maps reach players without unpublished content", { skip: !origin }, async context => {
+  if (!origin) return;
+  assertIsolatedTestEnvironment();
+  const db = testPrismaClient();
+  const stamp = randomUUID();
+  const owner = await db.user.create({ data: { name: "Map reader owner", email: `map-reader-owner-${stamp}@example.invalid`, role: "GM" } });
+  const player = await db.user.create({ data: { name: "Map reader player", email: `map-reader-player-${stamp}@example.invalid`, role: "PLAYER" } });
+  const world = await db.world.create({ data: { ownerId: owner.id, title: "Map reader world", slug: `map-reader-${stamp}`, isPublic: false } });
+  const asset = await db.imageAsset.create({
+    data: {
+      worldId: world.id, title: "Player map", originalName: "map.webp", byteSize: 64, width: 1200, height: 800,
+      sha256: stamp.replaceAll("-", "").padEnd(64, "0").slice(0, 64),
+    },
+  });
+  const map = await db.map.create({
+    data: { worldId: world.id, title: "Working map title", imageUrl: `/api/assets/${asset.id}/file`, width: 1200, height: 800 },
+  });
+  const snapshot = {
+    version: 1,
+    title: "Map reader world atlas",
+    description: "Everything the party has discovered.",
+    imageUrl: `/api/assets/${asset.id}/file`,
+    width: 1200,
+    height: 800,
+    defaultZoom: 1,
+    layers: [],
+    markers: [{ id: "published-pin", layerId: null, title: "Harbor of Dawn", description: "A safe port", x: 30, y: 40, icon: "flag", color: "#3b82f6", articleId: null }],
+    elements: [],
+  };
+  await db.audiencePolicy.createMany({
+    data: [
+      { worldId: world.id, resourceKind: "maps", resourceId: map.id, mode: "PUBLIC", createdById: owner.id },
+      { worldId: world.id, resourceKind: "assets", resourceId: asset.id, mode: "PUBLIC", createdById: owner.id },
+    ],
+  });
+  await db.mapPublication.create({ data: { mapId: map.id, snapshot: JSON.stringify(snapshot), publishedById: owner.id } });
+  await db.marker.create({ data: { mapId: map.id, title: "Hidden vault", x: 10, y: 10 } });
+  await db.worldMember.create({ data: { worldId: world.id, userId: player.id, role: "PLAYER", status: "ACTIVE" } });
+  const token = randomBytes(32).toString("base64url");
+  await db.authSession.create({ data: { userId: player.id, tokenHash: createHash("sha256").update(token).digest("hex"), expiresAt: new Date(Date.now() + 3_600_000) } });
+  context.after(async () => {
+    await db.audiencePolicy.deleteMany({ where: { worldId: world.id } });
+    await db.worldMember.deleteMany({ where: { worldId: world.id } });
+    await db.world.deleteMany({ where: { id: world.id } });
+    for (const userId of [player.id, owner.id]) await deleteTestUsers(db, userId);
+    await db.$disconnect();
+  });
+
+  const page = await fetch(`${origin}/c/${world.slug}/maps/${map.id}`, { headers: { Cookie: `${SESSION_COOKIE}=${token}` } });
+  const html = await page.text();
+  assert.equal(page.status, 200, `player map page returned ${page.status}`);
+  assert.doesNotMatch(html, /__next_error__/, "the player map page must not render the prerender error page");
+  assert.match(html, /Map reader world atlas/, "readers see the published snapshot title, not the working map title");
+  assert.match(html, /Harbor of Dawn/, "published pins are rendered");
+  assert.doesNotMatch(html, /Working map title/, "the editable map record must not leak");
+  assert.doesNotMatch(html, /Hidden vault/, "pins outside the published snapshot must not leak");
+  assert.match(html, /aria-label="Map pins"/, "the pin list is keyboard accessible");
+
+  const campaignHome = await fetch(`${origin}/c/${world.slug}`, { headers: { Cookie: `${SESSION_COOKIE}=${token}` } });
+  assert.match(await campaignHome.text(), /Map reader world atlas/, "campaign home lists published maps");
+
+  const anonymous = await fetch(`${origin}/c/${world.slug}/maps/${map.id}`, { redirect: "manual" });
+  const anonymousHtml = await anonymous.text();
+  assert.doesNotMatch(anonymousHtml, /Map reader world atlas/, "anonymous readers must not receive the published map");
+});

@@ -4,23 +4,26 @@
 
 import { useWorldGuard } from "@/components/worlds/WorldGuard";
 import { AssetLibrary } from "@/components/assets/AssetLibrary";
+import { MapMarkerIcon } from "@/components/map/MapMarkerIcon";
+import { MapSharePanel } from "@/components/map/MapSharePanel";
 import type { ImageAssetItem } from "@/lib/assets";
 import type { GuardRegistration } from "@/lib/navigation-guard";
+import {
+  layerIsVisible as layerVisible,
+  paintMapStroke as paintStroke,
+  parseMapJson as parseJson,
+  strokeStyleFor,
+  type MapStrokeStyle as StrokeStyle,
+} from "@/lib/map-rendering";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  Castle,
   ChevronDown,
   ChevronUp,
   Circle,
-  Crown,
   Eraser,
   ExternalLink,
   Eye,
   EyeOff,
-  Flag,
-  Footprints,
-  Gem,
-  Home,
   Layers,
   MapPin,
   Maximize2,
@@ -28,14 +31,10 @@ import {
   MousePointer2,
   PenLine,
   Plus,
-  Skull,
   Square,
-  Star,
   Trash2,
-  TreePine,
   Type,
   X,
-  Zap,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -109,7 +108,6 @@ type Selection = { type: "marker"; id: string } | { type: "element"; id: string 
 
 const COLOR_SWATCHES = ["#eab308", "#ef4444", "#f97316", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#f8fafc", "#111827"];
 const ERASER_CURSOR = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f4f4f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg>')}") 2 21, crosshair`;
-type StrokeStyle = { color?: string; strokeWidth?: number; fontSize?: number; erase?: boolean };
 const MARKER_ICONS = ["map-pin", "castle", "skull", "zap", "eye", "flag", "star", "gem", "tree-pine", "home", "crown", "footprints"] as const;
 const inputClass = "w-full rounded border border-app-border bg-app-canvas px-2.5 py-1.5 text-xs text-app-text-strong focus:border-primary-500 focus:outline-none";
 const btnClass = "inline-flex items-center gap-1.5 rounded-lg border border-app-border bg-app-surface/90 px-3 py-2 text-xs font-medium text-app-text-dim shadow-xl backdrop-blur-md hover:bg-app-raised";
@@ -118,37 +116,8 @@ function clampPercent(n: number) {
   return Math.max(0, Math.min(100, Math.round(n * 10) / 10));
 }
 
-function parseJson<T>(value: string | null | undefined, fallback: T): T {
-  if (!value) return fallback;
-  try {
-    const parsed = JSON.parse(value) as T;
-    return parsed && typeof parsed === "object" ? parsed : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function markerIcon(name?: string | null) {
-  switch (name?.toLowerCase()) {
-    case "castle": return <Castle className="h-3.5 w-3.5" />;
-    case "skull": return <Skull className="h-3.5 w-3.5" />;
-    case "zap": return <Zap className="h-3.5 w-3.5" />;
-    case "eye": return <Eye className="h-3.5 w-3.5" />;
-    case "flag": return <Flag className="h-3.5 w-3.5" />;
-    case "star": return <Star className="h-3.5 w-3.5" />;
-    case "gem": return <Gem className="h-3.5 w-3.5" />;
-    case "tree-pine": return <TreePine className="h-3.5 w-3.5" />;
-    case "home": return <Home className="h-3.5 w-3.5" />;
-    case "crown": return <Crown className="h-3.5 w-3.5" />;
-    case "footprints": return <Footprints className="h-3.5 w-3.5" />;
-    default: return <MapPin className="h-3.5 w-3.5" />;
-  }
-}
-
-function layerVisible(layers: MapLayerData[], layerId?: string | null) {
-  if (!layerId) return true;
-  const layer = layers.find((item) => item.id === layerId);
-  return layer ? layer.isVisible : true;
+  return <MapMarkerIcon name={name} />;
 }
 
 function percentFromEvent(rect: DOMRect, clientX: number, clientY: number) {
@@ -158,47 +127,13 @@ function percentFromEvent(rect: DOMRect, clientX: number, clientY: number) {
   };
 }
 
-function strokeStyle(element: MapElementData): StrokeStyle {
-  return parseJson<StrokeStyle>(element.style, {});
-}
-
-function paintStroke(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  kind: string,
-  geo: { x1?: number; y1?: number; x2?: number; y2?: number; points?: { x: number; y: number }[] },
-  style: StrokeStyle,
-  fallbackColor: string,
-) {
-  const x = (n: number) => (n / 100) * width;
-  const y = (n: number) => (n / 100) * height;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = style.color || fallbackColor;
-  ctx.lineWidth = style.strokeWidth ?? 3;
-  ctx.beginPath();
-  if (kind === "LINE") {
-    ctx.moveTo(x(geo.x1 ?? 0), y(geo.y1 ?? 0));
-    ctx.lineTo(x(geo.x2 ?? 0), y(geo.y2 ?? 0));
-  } else if (kind === "CIRCLE") {
-    ctx.ellipse(x(geo.x1 ?? 0), y(geo.y1 ?? 0), Math.abs(x(geo.x2 ?? 0) - x(geo.x1 ?? 0)), Math.abs(y(geo.y2 ?? 0) - y(geo.y1 ?? 0)), 0, 0, Math.PI * 2);
-  } else if (kind === "RECT") {
-    ctx.rect(x(Math.min(geo.x1 ?? 0, geo.x2 ?? 0)), y(Math.min(geo.y1 ?? 0, geo.y2 ?? 0)), Math.abs(x(geo.x2 ?? 0) - x(geo.x1 ?? 0)), Math.abs(y(geo.y2 ?? 0) - y(geo.y1 ?? 0)));
-  } else if (kind === "PATH" && Array.isArray(geo.points) && geo.points.length) {
-    geo.points.forEach((point, index) => {
-      if (index === 0) ctx.moveTo(x(point.x), y(point.y));
-      else ctx.lineTo(x(point.x), y(point.y));
-    });
-  } else {
-    return;
-  }
-  ctx.stroke();
-}
-
 function paintDraft(ctx: CanvasRenderingContext2D, width: number, height: number, draft: Draft, style: StrokeStyle, color: string) {
   if (draft.kind === "PATH") paintStroke(ctx, width, height, "PATH", { points: draft.points }, style, color);
   else paintStroke(ctx, width, height, draft.kind, draft, style, color);
+}
+
+function strokeStyle(element: { style?: string | null }): StrokeStyle {
+  return strokeStyleFor(element.style);
 }
 
 function ColorControl({ value, onChange }: { value: string; onChange: (value: string) => void }) {
@@ -537,6 +472,7 @@ export function InteractiveMap({
   const [fontSize, setFontSize] = useState(18);
   const [eraserPos, setEraserPos] = useState<{ x: number; y: number } | null>(null);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [newMapOpen, setNewMapOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameTitle, setRenameTitle] = useState("");
@@ -836,6 +772,7 @@ export function InteractiveMap({
           <label className="flex items-center gap-1 text-[11px] text-app-muted">Size<input type="number" min={10} max={72} value={fontSize} onChange={(e) => setFontSize(Number(e.target.value) || 18)} className="w-14 rounded border border-app-border bg-app-canvas px-1 py-1 text-xs" /></label>
         )}
         <div className="relative ml-auto">
+          <button type="button" onClick={() => setShareOpen(true)} disabled={!map || drafts.length > 0} title={map ? "Choose what campaign players can see" : undefined} className={`${btnClass} disabled:cursor-not-allowed disabled:opacity-50`}><Eye className="h-4 w-4 text-success-400" />Share with players</button>
           <button type="button" onClick={() => setLayersOpen((open) => !open)} className={btnClass}><Layers className="h-4 w-4 text-secondary-400" />Layers</button>
           {layersOpen && map && (
             <LayerPanel
@@ -1013,6 +950,7 @@ export function InteractiveMap({
       )}
 
       {newMapOpen && <NewMapModal worldId={worldId} busy={mutating} onClose={() => setNewMapOpen(false)} onCreate={createMap} />}
+      {shareOpen && map && <MapSharePanel worldId={worldId} map={map} onClose={() => setShareOpen(false)} />}
     </div>
   );
 }

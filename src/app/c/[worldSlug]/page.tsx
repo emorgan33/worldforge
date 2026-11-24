@@ -19,6 +19,8 @@ import { readerCreditsForAssets } from "@/lib/stock-credits";
 import { imageAssetId } from "@/lib/assets";
 import { ReaderImageCredits, ReaderAdjacentCredit } from "@/components/public/ReaderImageCredits";
 import { ReaderThemeBar } from "@/components/theme/ReaderThemeBar";
+import { parseMapSnapshot } from "@/lib/map-publication";
+import { Map as MapIcon } from "lucide-react";
 
 async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
   // Resolve the actor (supports PREVIEW mode via wf_preview cookie)
@@ -76,6 +78,19 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
   });
   const assetIds = new Set(assets.map(asset => asset.id));
   const projectedCategories = categories.map(category => ({ ...category, iconImage: publicImage(category.iconImage, assetIds) }));
+  // Published maps: only snapshots this player may read, projected from the
+  // published selection rather than the editable map record.
+  const { where: readableMapWhere } = await readableWhere(world.id, "maps", actor);
+  const mapPublications = await prisma.mapPublication.findMany({
+    where: { map: { ...readableMapWhere, worldId: world.id } },
+    select: { mapId: true, snapshot: true, revision: true, publishedAt: true },
+    orderBy: { publishedAt: "desc" },
+  });
+  const publishedMaps = mapPublications.flatMap(publication => {
+    const snapshot = parseMapSnapshot(publication.snapshot);
+    if (!snapshot) return [];
+    return [{ id: publication.mapId, title: snapshot.title, description: snapshot.description, revision: publication.revision, publishedAt: publication.publishedAt }];
+  });
   const appearance = parseAppearance(world.appearance);
   appearance.backgroundImage = publicImage(appearance.backgroundImage, assetIds) || "";
   const coverImage = publicImage(world.coverImage, assetIds);
@@ -141,6 +156,18 @@ async function PlayerWorldContent({ worldSlug }: { worldSlug: string }) {
             )}
           </section>
         </div>
+        {publishedMaps.length > 0 && <section aria-labelledby="player-maps-heading" className="space-y-4">
+          <h2 id="player-maps-heading" className="text-xl font-semibold">Maps</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {publishedMaps.map(published => (
+              <a key={published.id} href={`/c/${world.slug}/maps/${published.id}`} className="rounded-xl border border-app-border p-5 transition-colors hover:border-secondary-500">
+                <h3 className="flex items-center gap-2 font-semibold text-secondary-300"><MapIcon className="h-4 w-4" aria-hidden="true" />{published.title}</h3>
+                {published.description && <p className="mt-2 text-sm text-app-muted">{published.description}</p>}
+                <p className="mt-2 text-xs text-app-subtle">Revision {published.revision} · published {published.publishedAt.toLocaleDateString()}</p>
+              </a>
+            ))}
+          </div>
+        </section>}
         <ReaderImageCredits credits={credits} />
       </main>
     </WorldPresentation>

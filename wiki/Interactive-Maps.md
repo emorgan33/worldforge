@@ -1,7 +1,7 @@
 # Interactive Maps
 
-Maps are an **author-only GM cartography editor**. Publishing a world or sharing
-an article does not expose interactive maps to public or campaign readers.
+Maps are a GM cartography editor. A GM can publish a **read-only player view** of
+chosen map content; the public reader never shows maps.
 
 1. Open **Interactive maps**, then **New map** (or **Create your first map**).
 2. Enter a name and choose an image from the Image library; dimensions fill
@@ -28,8 +28,35 @@ after confirmation, so export/back up first.
 Failed drawing saves remain visible with **Retry**/**Discard**. Resolve them
 before changing maps or leaving; visible ink is not proof that it was saved.
 World export/import preserves map layers, pins, annotations, and drawing order.
+Published player views are not exported, so imported worlds start with sharing
+off.
+
+## Share a map with players
+
+Choose **Share with players** in the map toolbar. Nothing is selected at first:
+tick the layers, unlayered pins, and unlayered labels/drawings to reveal, plus
+individual items on selected layers. Items on an unticked layer are excluded even
+if ticked individually. **Preview as player** shows the candidate selection with
+the player viewer.
+
+- Players see the published snapshot at the campaign map page, linked from the
+  campaign home, until you publish again. Later edits, new pins, hidden layers,
+  and renames stay private.
+- **Publish to players** stores the selection and increments the revision;
+  **Stop sharing** removes it.
+- Publishing needs the map image (and any included layer images) to be a
+  WorldForge library image shared with all campaign players. The default
+  **Also share this map's images** option grants that; declining fails with a
+  message. Remote image URLs cannot be published because their bytes cannot be
+  gated.
+- Use the **Share** panel in the same dialog to choose which campaign players may
+  open the map at all. Revoking a player's access hides the map immediately.
+- Pin article links appear only when that player can read the linked article, and
+  revoking image access replaces the map with an unavailable notice.
 
 **Source owner:** `wiki/Interactive-Maps.md`; implementation:
-`docs/interactive-maps.md`, `src/components/map/InteractiveMap.tsx`, map APIs.
-**Verified against:** `v0.4.3` (`94c694c`), source/contract audit; see
+`docs/interactive-maps.md`, `src/components/map/InteractiveMap.tsx`,
+`src/components/map/MapViewer.tsx`, and map APIs.
+**Verified against:** `main` (`map publication revision`), source/contract audit
+plus the snapshot, viewer, API, and production reader checks; see
 [verification record](Wiki-Verification).
