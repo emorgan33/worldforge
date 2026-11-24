@@ -9,12 +9,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { worldSlug } = await params;
     const actor = await resolveActor();
     if (!actor.userId) {
-      return NextResponse.json({ error: "Sign in to search." }, { status: 401 });
+      return NextResponse.json({ error: "Sign in to search." }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
     }
 
     // Find world
     const world = await prisma.world.findFirst({
-      where: { slug: worldSlug },
+      where: { slug: worldSlug, deletedAt: null },
       select: { id: true, ownerId: true },
     });
     if (!world) {
@@ -55,10 +55,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({
       articles: page.map(article => presentSearchArticle(article, categories)),
       nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
-    });
+    }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error: unknown) {
-    if (error instanceof SearchInputError) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (error instanceof SearchInputError) return NextResponse.json({ error: error.message }, { status: error.status, headers: { "Cache-Control": "private, no-store" } });
     console.error("Player search failed:", error);
-    return NextResponse.json({ error: "Unable to search." }, { status: 500 });
+    return NextResponse.json({ error: "Unable to search." }, { status: 500, headers: { "Cache-Control": "private, no-store" } });
   }
 }

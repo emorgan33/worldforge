@@ -57,6 +57,11 @@ statblocks. Revocation is checked on subsequent requests, but data already
 downloaded, copied, screenshotted, or cached outside WorldForge cannot be
 recalled.
 
+The tested caller-by-surface matrix, including archived campaigns, revoked
+membership and preview scoping, is recorded in
+`docs/access-control-matrix.md` and enforced by
+`tests/access-matrix-api.test.ts`.
+
 Owner-issued player preview capabilities are scoped to one world and expire
 after 15 minutes. Invitation links are email-bound, one-use capabilities that
 expire after seven days. Treat invitation and preview URLs as credentials.
@@ -77,6 +82,8 @@ impact, and reproduction steps. Security fixes currently land on `main`; there
 are no long-term-support branches.
 
 **Source owner:** `wiki/Security-Model.md`; adapted from `SECURITY.md`,
-`docs/publishing-and-permissions.md`, `docs/player-accounts.md`, and current auth
-code.
-**Verified against:** WorldForge commit `fdff259` (October 31, 2026).
+`docs/publishing-and-permissions.md`, `docs/player-accounts.md`,
+`docs/access-control-matrix.md`, and current auth code.
+**Verified against:** `main` (post-notebook), source/contract audit plus the
+access-matrix API regression; see
+[verification record](Wiki-Verification).
