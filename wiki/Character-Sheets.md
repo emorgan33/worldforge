@@ -20,6 +20,11 @@ section during this editing session. Clearing a value or the last row is saved.
 | Proficiency/expertise, Inspiration, death saves | Training ranks, Hero Points, Dying/Wounded |
 | Spell levels 1–9 | Spell ranks 1–10, traditions, Focus Points |
 
+D&D 5e 2014 sheets use a parchment-style layout that groups identity, ability,
+defence, equipment, spellcasting, and personality areas like a paper sheet.
+Pathfinder 2e Remaster sheets keep their existing layout. The paper styling is
+part of the sheet, so it does not change with the interface theme.
+
 **This is a manual-entry sheet, not a character builder.** Only D&D ability
 modifiers calculate automatically. Changing class, level, training, or attributes
 does not calculate final skills, saves, AC, attacks, or spell DCs. Compendium

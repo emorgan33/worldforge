@@ -103,7 +103,8 @@ path and builds the patched driver automatically.
 - Confirm the running architecture matches the host
   (`docker compose exec worldforge node -p process.arch`); an ARM64 host must
   report `arm64`, not `x64` under emulation.
-- Sign in and open `/admin` if installation administration is used.
+- Sign in and open `/admin` if installation administration is used. Compare
+  **Running build** in the admin header with the target release.
 - Open representative worlds, articles, readers, and uploaded images.
 - Test one write and, when applicable, player access or public publication.
 - Confirm backup jobs still target both the database and asset directory.

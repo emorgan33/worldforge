@@ -99,3 +99,6 @@ after reruns of the recorded-digest failure described above; `0.4.9` is the
 verified multi-platform release (`sha256:8fefc0d9…`) that those reruns
 finalized. [v0.4.10](v0.4.10.md) is the first release to publish with the
 corrected step, so check its workflow before relying on an image.
+[v0.4.11](v0.4.11.md) publishes the interface themes, the D&D character-sheet
+layout, and the admin build label; verify its workflow and digest before
+announcing it.

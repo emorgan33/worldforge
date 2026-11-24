@@ -59,6 +59,11 @@ recovery links, change eligible roles/status, revoke sessions, inspect account
 details, and review the audit log. Protections prevent removing or disabling
 the last active administrator.
 
+The admin header shows **Running build** with the application version and short
+Git revision, or `revision unknown` when the build recorded none. Use it to
+confirm which release the public site is serving after an upgrade; it reflects
+the built artifact, not whatever checkout exists on the host.
+
 Administrative actions can invalidate sessions, setup links, invitations, or
 preview capabilities. Read the confirmation carefully and give affected users
 new credentials through a private channel when needed.
