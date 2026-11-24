@@ -1,8 +1,9 @@
 # Implementation plan: selectable application themes
 
-Status: P1–P4 done (#43 token layer, #44 switcher, #45 true black, P4
-Daylight audit on `feat/theme-daylight-audit`); P5–P8 not started. Palette
-values, in-product names, and the migration order below are open for review.
+Status: P1–P6 done (#43 token layer, #44 switcher, #45 true black, #46 Daylight
+audit, P5/P6 Pathfinder and D&D on `feat/theme-game-palettes`); P7–P8 not
+started. Palette values, in-product names, and the migration order below are
+open for review.
 
 Tracks [GitHub issue #38](https://github.com/emorgan33/worldforge/issues/38).
 
@@ -80,12 +81,19 @@ reader using that chrome theme see consistent paper, ink, and accent colors:
   muted `#635648`, border `#c0ad6a`, border-strong `#8a6a2f`, accent `#58180d`.
 
 Chrome needs derived tints for hover, disabled, raised, and focus states that the
-reader palettes do not define today. Those derivations belong in the shared
-palette module with contrast assertions, not hand-picked per component. The D&D
-reader border `#c0ad6a` is 1.8:1 on its paper, so it is decorative only; control
-outlines use the derived strong value. Both game themes place a light surface on
-a slightly darker canvas (Pathfinder white on `#ede3c7` is 1.3:1), so elevation
-must come from borders and shadows rather than surface contrast.
+reader palettes do not define today. Those derivations live in
+`src/lib/theme-palettes.ts`: one mix/contrast rule set builds every role from the
+reader paper, ink, accent and border, and the generated `globals.css` blocks are
+checked against the module so the two cannot drift. The D&D reader border
+`#c0ad6a` is 1.8:1 on its paper, so it is decorative only; control outlines use
+the derived strong value `#8a6a2f`. Both game themes place a light surface on a
+slightly darker canvas (Pathfinder white on `#ede3c7` is 1.3:1), so elevation
+comes from borders and shadows rather than surface contrast.
+
+D&D's reader background `#30231e` is the table the parchment sits on, not ink
+paper: `#181818` on `#30231e` is 1.2:1. The chrome therefore takes a paper shade
+tinted 8% toward that backdrop (`#dfd5c0`) as its canvas, while surface, ink and
+accent stay exactly on the reader values. The reader page keeps the dark backdrop.
 
 ## Existing implementation and implications
 
@@ -105,8 +113,11 @@ must come from borders and shadows rather than surface contrast.
 
 ### 1. One palette source, two axes
 
-Extract palettes into a shared module used by both the chrome themes and
+`src/lib/theme-palettes.ts` derives the two rule-system chrome palettes from
 `WORLD_THEMES`, so `pf2remaster` and the Pathfinder chrome theme cannot diverge.
+The derived values are checked into `globals.css` as `[data-theme]` blocks so the
+theme attribute still switches without a server round trip (the switcher flips
+it client-side); `tests/theme-palettes.test.ts` fails if the two copies differ.
 Chrome resolves its palette from `data-theme` on the root element; presentation
 keeps resolving from the world's stored appearance. Precedence:
 
@@ -268,7 +279,16 @@ surface):
 | Pathfinder muted `#515c63` on `#ffffff` | 6.9:1 |
 | D&D `#181818` on `#eee5ce` | 14.2:1 |
 | D&D muted `#635648` on `#eee5ce` | 5.7:1 |
+| D&D muted `#635648` on chrome canvas `#dfd5c0` | 4.9:1 |
 | D&D border-strong `#8a6a2f` on `#eee5ce` | 4.0:1 |
+| D&D border-strong `#8a6a2f` on chrome canvas `#dfd5c0` | 3.5:1 |
+| D&D white on accent `#58180d` | 13.5:1 |
+| D&D white on secondary `#8a6a2f` | 5.0:1 |
+| Pathfinder `#181818` on chrome canvas `#ede3c7` | 13.9:1 |
+| Pathfinder muted `#515c63` on chrome canvas `#ede3c7` | 5.4:1 |
+| Pathfinder border-strong `#644117` on chrome canvas `#ede3c7` | 7.1:1 |
+| Pathfinder white on accent `#002a16` | 15.6:1 |
+| Pathfinder white on secondary `#644117` | 9.1:1 |
 | Night watch `#f1f2f5` on `#111318` | 16.6:1 |
 | Night watch muted `#b1b7c2` on `#111318` | 9.2:1 |
 
@@ -299,15 +319,15 @@ pass and the evidence is reported.
 | P2 | `User.theme` migration, cookie projection, root-layout resolution, switcher in workspace and public chrome, "Match system" CSS mapping, invalid-value fallback | Unit tests for precedence, validation, and account-over-cookie behavior; Playwright tests for switch + reload with no flash, OS preference change under Match system, and the remote-change → page request → sign-out sequence |
 | P3 | True black palette and elevation rules | Contrast assertions; screenshots of workspace, editor, admin, player, reader chrome |
 | P4 | Daylight palette | Same as P3. **Implemented on `feat/theme-daylight-audit`**: audited `/`, `/admin/users`, `/player`, `/login`, `/w/*`, the article editor, the template dialog and the map editor with a per-text-node contrast probe (0 failures at 4.5:1), and verified Night watch computed colors are unchanged. |
-| P5 | Pathfinder palette derived from the shared source | Same as P3, plus a check that chrome and reader values match |
-| P6 | D&D palette derived from the shared source | Same as P3 |
+| P5 | Pathfinder palette derived from the shared source | Same as P3, plus a check that chrome and reader values match. **Implemented on `feat/theme-game-palettes`**: `tests/theme-palettes.test.ts` asserts the checked-in CSS equals the shared module and that surface/ink/muted/primary equal `WORLD_THEMES.pf2remaster`; contrast probe on workspace, admin list/detail, player, login, reader chrome, editor and template dialog reports 0 failures. |
+| P6 | D&D palette derived from the shared source | Same as P3. **Implemented on `feat/theme-game-palettes`**: same module and parity test against `WORLD_THEMES.dnd2014`, with the dark table tinted into the canvas; same contrast-probe routes report 0 failures. |
 | P7 | Coverage sweep: editor, character sheet, maps chrome, dialogs, tables, code, scrollbars, overlays, loading/empty/error, print | Manual checklist per theme on every route group; map annotation colors unchanged |
 | P8 | Update `docs/`, wiki, README screenshots, and the theme-selection help text | `pnpm docs:check`; screenshots captured from an isolated demo database |
 
 ## Acceptance criteria
 
 - The default appearance is unchanged for anyone who never opens the switcher.
-- All five themes are selectable from the author workspace, admin, player
+- All six themes are selectable from the author workspace, admin, player
   portal, and public reader chrome; the choice survives reload, new session, and
   a different device when signed in.
 - No theme flashes the wrong palette on first paint, including on public pages.
