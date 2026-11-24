@@ -13,6 +13,9 @@ test("theme choice applies immediately and survives a reload", async ({ page }) 
   const light = await page.locator("main").first().evaluate(el => getComputedStyle(el).backgroundColor);
   expect(light).toBe("rgb(246, 245, 243)");
 
+  // The attribute flips optimistically; wait for the save before reloading so
+  // the cookie the server reads is the one we just chose.
+  await expect(page.getByLabel("Interface theme")).toBeEnabled();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "daylight");
 });
