@@ -103,6 +103,51 @@
   color-scheme: light dark;
 }
 
+/*
+ * True black: an OLED palette. Surfaces sit on pure black so dark regions of the
+ * panel switch off; elevation comes from borders because surface steps are small.
+ * Text stays slightly below white to limit halation. Declared after the @theme
+ * block so these values win for the same element (:root) at equal specificity.
+ */
+[data-theme="true-black"] {
+  color-scheme: dark;
+
+  --color-app-canvas: #000000;
+  --color-app-surface: #0a0a0b;
+  --color-app-raised: #131316;
+  --color-app-control: #1b1b1f;
+  --color-app-control-strong: #24242a;
+  --color-app-tint: #3a3a42;
+
+  --color-app-border: #2a2a2f;
+  --color-app-border-strong: #63636b;
+  --color-app-border-emphasis: #6f6f78;
+  --color-app-border-emphasis-strong: #7a7a84;
+  --color-app-border-contrast: #9a9aa4;
+
+  --color-app-text-bright: #ffffff;
+  --color-app-text-strong: #f2f2f2;
+  --color-app-text: #e6e6e6;
+  --color-app-text-dim: #d4d4d8;
+  --color-app-muted: #a1a1aa;
+  --color-app-subtle: #8d8d96;
+  --color-app-subtle-dim: #75757e;
+  --color-app-faint: #5c5c66;
+  --color-app-on-accent: #0a0a0b;
+}
+
+/* .author-workspace declares its own --aw-* values, so the override has to
+   target that element; an ancestor declaration would lose to it. */
+[data-theme="true-black"] .author-workspace {
+  --aw-canvas: #000000;
+  --aw-sidebar: #0a0a0b;
+  --aw-panel: #131316;
+  --aw-control: #1b1b1f;
+  --aw-border: #2a2a2f;
+  --aw-text: #f2f2f2;
+  --aw-muted: #a1a1aa;
+}
+
 body {
   background: var(--color-app-canvas);
   color: var(--color-app-text);
