@@ -1,8 +1,10 @@
 # Image scan triage — 2026-11-24
 
 Recorded scans of locally built images. A fresh scan of commit `193a003`
-produced exactly the same package findings as the earlier `23bd697` image,
-confirming that the P2/P3 code changes introduce no new package inventory.
+produced exactly the same package findings as the earlier `23bd697` image. After
+the pnpm 11.29.0 upgrade, a scan of the final `3dfc6ad` image reports 0 fixable
+findings at any severity; the `glob`/`minimatch` entries were bundled only in
+the old pnpm CLI.
 `worldforge.deskt.theworkpc.com` still serves the `23bd697`-image built before
 this scan; apply the same dispositions to both.
 
