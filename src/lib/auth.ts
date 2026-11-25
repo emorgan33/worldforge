@@ -1,6 +1,6 @@
 import { unstable_rethrow } from "next/navigation";
 import { cookies } from "next/headers";
-import type { NextRequest } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "./db";
 import type { Prisma } from "@prisma/client";
 import { AccountEligibilityError, AccountLifecycleConflictError, requireActiveAccount, withAccountLifecycleLock } from "./account-lifecycle";
@@ -71,6 +71,44 @@ export async function revokeSession() {
   jar.delete("wf_preview");
 }
 
+
+export const AUTHOR_BODY_LIMITS = {
+  world: 6 * 1024 * 1024,
+  map: 12 * 1024 * 1024,
+  resource: 6 * 1024 * 1024,
+} as const;
+
+/**
+ * Read a JSON mutation body once with a hard cap so authorization checks cannot
+ * be made to buffer an unbounded payload. The buffered request is replayed to
+ * the handler, which may parse it again safely.
+ */
+async function readLimitedJsonRequest(request: NextRequest, limit: number) {
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > limit) throw new AccessError("Request body is too large.", 413);
+  if (!request.body) throw new AccessError("Invalid request.", 400);
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) { await reader.cancel(); throw new AccessError("Request body is too large.", 413); }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  let body: unknown;
+  try { body = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new AccessError("Invalid request.", 400); }
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new AccessError("Invalid request.", 400);
+  const replay = new NextRequest(request.url, { method: request.method, headers: request.headers, body: bytes });
+  return { body: body as Record<string, unknown>, replay };
+}
+
 type AuthorDeclaration =
   | { target: "account" }
   | { target: "world-param"; archived?: boolean }
@@ -96,6 +134,7 @@ export function withAuthor<C = unknown>(
       let authorizedWorldId: string | null = null;
       let authorizedResourceId: string | undefined;
       let authorizedFormData: FormData | undefined;
+      let replayRequest: NextRequest | null = null;
       if (declaration.target === "world-param") {
         const params = await (context as { params?: Promise<Record<string, string>> }).params;
         const worldId = params?.id;
@@ -114,9 +153,9 @@ export function withAuthor<C = unknown>(
         authorizedWorldId = worldId;
         await ownedWorld(worldId, user.id);
       } else if (declaration.target === "world-body") {
-        const body = await request.clone().json().catch(() => null);
-        if (!body || typeof body !== "object" || Array.isArray(body)) throw new AccessError("Invalid request.", 400);
-        const worldId = (body as Record<string, unknown>)[declaration.field];
+        const { body, replay } = await readLimitedJsonRequest(request, AUTHOR_BODY_LIMITS.world);
+        replayRequest = replay;
+        const worldId = body[declaration.field];
         authorizedWorldId = typeof worldId === "string" ? worldId : null;
         await ownedWorld(worldId, user.id);
       } else if (declaration.target === "world-form") {
@@ -131,9 +170,9 @@ export function withAuthor<C = unknown>(
         authorizedWorldId = typeof worldId === "string" ? worldId : null;
         await ownedWorld(worldId, user.id);
       } else if (declaration.target === "map-action-body") {
-        const body = await request.clone().json().catch(() => null);
-        if (!body || typeof body !== "object" || Array.isArray(body)) throw new AccessError("Invalid request.", 400);
-        const fields = body as Record<string, unknown>;
+        const { body, replay } = await readLimitedJsonRequest(request, AUTHOR_BODY_LIMITS.map);
+        replayRequest = replay;
+        const fields = body;
         const providedWorldId = fields[declaration.worldField];
         const mapId = fields[declaration.mapField];
         const mapWorldId = typeof mapId === "string" && mapId ? await resolveResourceWorld("maps", mapId) : null;
@@ -142,9 +181,9 @@ export function withAuthor<C = unknown>(
         authorizedWorldId = worldId;
         await ownedWorld(worldId, user.id);
       } else if (declaration.target === "resource-body") {
-        const body = await request.clone().json().catch(() => null);
-        if (!body || typeof body !== "object" || Array.isArray(body)) throw new AccessError("Invalid request.", 400);
-        const fields = body as Record<string, unknown>;
+        const { body, replay } = await readLimitedJsonRequest(request, AUTHOR_BODY_LIMITS.resource);
+        replayRequest = replay;
+        const fields = body;
         const worldId = await resolveResourceWorld(declaration.kind, typeof fields[declaration.field] === "string" ? fields[declaration.field] as string : "");
         authorizedWorldId = worldId;
         if (typeof fields.worldId === "string" && fields.worldId !== worldId) throw new AccessError("Not found.");
@@ -159,7 +198,7 @@ export function withAuthor<C = unknown>(
         authorizedWorldId = worldId;
         await ownedWorld(worldId, user.id);
       }
-      const response = await handler(request, context, { user, ...(authorizedWorldId ? { worldId: authorizedWorldId } : {}), ...(authorizedResourceId ? { resourceId: authorizedResourceId } : {}), ...(authorizedFormData ? { formData: authorizedFormData } : {}) });
+      const response = await handler(replayRequest ?? request, context, { user, ...(authorizedWorldId ? { worldId: authorizedWorldId } : {}), ...(authorizedResourceId ? { resourceId: authorizedResourceId } : {}), ...(authorizedFormData ? { formData: authorizedFormData } : {}) });
       response.headers.set("Cache-Control", "private, no-store");
       return response;
     } catch (error) {

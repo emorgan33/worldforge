@@ -39,6 +39,14 @@ browser-visible HTTPS URL and terminate TLS at the reverse proxy. WorldForge
 sets CSP, clickjacking, MIME-sniffing, and referrer headers; HSTS is enabled for
 an HTTPS origin.
 
+JSON mutation bodies are read once with a hard cap before authorization parses
+them: 6 MB for world and resource bodies (including articles, categories,
+statblocks, secrets, variables, and world styling) and 12 MB for map actions.
+Larger requests receive `413` without buffering the full payload, including
+chunked requests without `Content-Length`. World imports are separately streamed
+up to 60 MB; image uploads are limited to 10 MB and 40 million decoded pixels;
+custom CSS is limited to 20,000 characters.
+
 Same-origin checks do not replace authorization. Author routes resolve the
 signed-in account and owning world or resource on the server. A client-supplied
 world ID cannot grant access to another owner's records.
