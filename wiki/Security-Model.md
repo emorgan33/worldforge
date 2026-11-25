@@ -37,7 +37,14 @@ Mutation requests require an `Origin` that exactly matches
 `WORLDFORGE_ORIGIN`. A mismatch returns 403. Set the origin to the canonical
 browser-visible HTTPS URL and terminate TLS at the reverse proxy. WorldForge
 sets CSP, clickjacking, MIME-sniffing, and referrer headers; HSTS is enabled for
-an HTTPS origin.
+an HTTPS origin. The CSP disables inline event-handler attributes
+(`script-src-attr 'none'`), frames, media, and plugins; inline scripts and styles
+remain allowed because Next.js and reader custom CSS require them.
+
+Image decoding is limited to static PNG, JPEG, or WebP, at most 10 MB and 40
+million pixels; animated images and other formats are rejected before
+processing. Imported world assets go through the same normalization, with a
+14 million-character per-asset base64 cap inside the 60 MB bundle.
 
 Author routes that determine ownership from a JSON body (`world-body`,
 `resource-body`, and map creation actions) stream the body once with a hard cap

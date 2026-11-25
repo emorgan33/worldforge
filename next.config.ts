@@ -32,9 +32,13 @@ const contentSecurityPolicy = [
   "frame-ancestors 'none'",
   "object-src 'none'",
   `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
+  "script-src-attr 'none'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' http: https: data: blob:",
   "font-src 'self' data:",
+  "media-src 'none'",
+  "frame-src 'none'",
+  "manifest-src 'self'",
   `connect-src 'self'${process.env.NODE_ENV === "development" ? " ws: wss:" : ""}`,
 ].join("; ");
 

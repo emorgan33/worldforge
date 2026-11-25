@@ -320,3 +320,16 @@ test("published maps reach players without unpublished content", { skip: !origin
   const anonymousHtml = await anonymous.text();
   assert.doesNotMatch(anonymousHtml, /Map reader world atlas/, "anonymous readers must not receive the published map");
 });
+
+
+test("security headers disable inline script attributes, frames, and plugins", { skip: !origin }, async () => {
+  if (!origin) return;
+  const response = await fetch(`${origin}/login`);
+  assert.equal(response.status, 200);
+  const csp = response.headers.get("content-security-policy") ?? "";
+  for (const directive of ["script-src-attr 'none'", "frame-src 'none'", "media-src 'none'", "manifest-src 'self'", "object-src 'none'", "frame-ancestors 'none'"]) {
+    assert.ok(csp.includes(directive), `CSP must include ${directive}`);
+  }
+  assert.equal(response.headers.get("x-frame-options"), "DENY");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+});
