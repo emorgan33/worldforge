@@ -1,12 +1,13 @@
 import { resolveActor, sameOrigin, AccessError } from "@/lib/access";
 import { prisma } from "@/lib/db";
 import { bookmarkableWorld, isBookmarkKind, playerBookmarks } from "@/lib/player-bookmarks";
+import { logServerError } from "@/lib/logging";
 
 const noStore = { "Cache-Control": "private, no-store" };
 
 function failure(error: unknown) {
   if (error instanceof AccessError) return Response.json({ error: error.message }, { status: error.status, headers: noStore });
-  console.error("Bookmark request failed:", error);
+  logServerError("Bookmark request failed", error);
   return Response.json({ error: "Unable to update saved items." }, { status: 500, headers: noStore });
 }
 

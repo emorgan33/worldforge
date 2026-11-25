@@ -93,6 +93,11 @@ access, encrypt disks or backup media where appropriate, and protect backups as
 carefully as the live installation. Browser recovery drafts and previously
 downloaded files remain on client devices after server logout.
 
+Server logs record operation labels and error messages, not request bodies,
+article or note content, passwords, or session tokens; shared helpers avoid
+serializing arbitrary error objects. Setup links are printed only by the explicit
+`pnpm auth:setup` CLI, so protect terminal output and shell history.
+
 ## Reporting vulnerabilities
 
 Do not open a public issue. Use the repository's **Security → Report a

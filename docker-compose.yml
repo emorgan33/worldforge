@@ -9,6 +9,11 @@ services:
         WORLDFORGE_BUILD_REVISION: "${WORLDFORGE_BUILD_REVISION:-unknown}"
     image: worldforge:local
     restart: unless-stopped
+    # The app needs no Linux capabilities; SQLite, Node and migrations run as UID 10001.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       # Public host port is configurable; the container always listens on 3033.
       - "${WORLDFORGE_HOST_BIND:-127.0.0.1}:${WORLDFORGE_HOST_PORT:-3033}:3033"

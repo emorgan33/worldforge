@@ -2,6 +2,7 @@ import { resolveActor, sameOrigin, AccessError } from "@/lib/access";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { noteFields, playerNotes, resolveNoteTarget, NOTE_LIMIT } from "@/lib/player-notes";
+import { logServerError } from "@/lib/logging";
 
 class NotebookFullError extends Error {}
 
@@ -9,7 +10,7 @@ const noStore = { "Cache-Control": "private, no-store" };
 
 function failure(error: unknown) {
   if (error instanceof AccessError) return Response.json({ error: error.message }, { status: error.status, headers: noStore });
-  console.error("Notebook request failed:", error);
+  logServerError("Notebook request failed", error);
   return Response.json({ error: "Unable to update the notebook." }, { status: 500, headers: noStore });
 }
 

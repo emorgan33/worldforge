@@ -57,7 +57,11 @@ Before relying on an archive:
 1. Extract it in a temporary directory.
 2. Run `sqlite3 worldforge.db "PRAGMA integrity_check;"` and require `ok`.
 3. Confirm the manifest and assets directory are present.
-4. Periodically rehearse a restore on an isolated installation.
+4. Periodically rehearse a restore on an isolated installation. The repository
+   includes `scripts/rehearse-restore.sh`, which applies the documented restore
+   command to a disposable Docker volume and checks integrity, migrations,
+   ownership, permissions, and the asset count without touching the live
+   service.
 
 An archive existing is not proof that it can be restored.
 

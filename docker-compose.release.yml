@@ -2,6 +2,11 @@ services:
   worldforge:
     image: ${WORLDFORGE_IMAGE:?Set WORLDFORGE_IMAGE to a published version or digest}
     restart: unless-stopped
+    # The app needs no Linux capabilities; SQLite, Node and migrations run as UID 10001.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "${WORLDFORGE_HOST_BIND:-127.0.0.1}:${WORLDFORGE_HOST_PORT:-3033}:3033"
     environment:

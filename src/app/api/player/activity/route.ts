@@ -1,5 +1,6 @@
 import { resolveActor } from "@/lib/access";
 import { playerActivityFeed } from "@/lib/player-activity";
+import { logServerError } from "@/lib/logging";
 
 export async function GET() {
   const actor = await resolveActor();
@@ -8,7 +9,7 @@ export async function GET() {
     const items = await playerActivityFeed(actor);
     return Response.json({ items }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
-    console.error("Player activity failed:", error);
+    logServerError("Player activity failed", error);
     return Response.json({ error: "Unable to load what's new." }, { status: 500, headers: { "Cache-Control": "private, no-store" } });
   }
 }

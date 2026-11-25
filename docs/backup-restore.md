@@ -321,6 +321,21 @@ restriction state.
 - Audit events are preserved as historical records; actors unavailable on this installation become anonymous.
 - The export retains audit events with nullable resource references for deleted resources
 
+### Rehearse a restore
+
+`scripts/rehearse-restore.sh` applies the documented restore command to a
+disposable Docker volume, then verifies the SQLite integrity, `_prisma_migrations`
+rows, UID/GID `10001` ownership, `0600`/`0700` permissions, and that every
+archived asset was restored. The live service and volume are not touched.
+
+```bash
+bash scripts/rehearse-restore.sh backups/worldforge-TIMESTAMP.tar.gz worldforge:local
+```
+
+Run it against a recent archive after changing the image, entrypoint, or storage
+layout. It proves the archive, restore command, and image work together; it does
+not start the application against the restored data.
+
 ### Backup considerations
 
 The `AccessAuditEvent` table is append-only and grows over time. Consider planning for audit log rotation/archival for long-running campaigns.

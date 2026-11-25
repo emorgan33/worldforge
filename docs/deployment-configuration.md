@@ -206,7 +206,11 @@ Host header and remove untrusted forwarding headers. Login throttling uses only
 the dedicated, proxy-overwritten client address header in this mode.
 Keep the app's internal port private when using a reverse proxy.
 
-Compose stores the database and assets under the same `/data` volume. Back up
+Both source and release Compose files drop all Linux capabilities and set
+`no-new-privileges`; the server runs as UID/GID `10001` and needs no privileged
+operations at runtime. Startup migrations and the recovery helper run as that
+same unprivileged user (or root only for the documented backup helper). Compose
+stores the database and assets under the same `/data` volume. Back up
 and restore those two paths together as documented in
 [Backup and Restore](backup-restore.md). The runtime image uses UID/GID 10001 for both
 startup migrations and the server. A new named volume inherits ownership from

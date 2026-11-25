@@ -7,6 +7,7 @@ import { AccountEligibilityError, AccountLifecycleConflictError, requireActiveAc
 import { newToken, tokenHash } from "./passwords";
 import { SESSION_COOKIE, SESSION_SECONDS } from "./auth-constants";
 import { AccessError, resolveResourceWorld, sameOrigin, sessionUser, type ResourceKind } from "./authorization-core";
+import { logServerError } from "./logging";
 export { AccessError, sameOrigin, sessionUser } from "./authorization-core";
 
 // EXACT original - no parameters, just cookies()
@@ -203,7 +204,7 @@ export function withAuthor<C = unknown>(
       return response;
     } catch (error) {
       unstable_rethrow(error);
-      if (!(error instanceof AccessError)) console.error("Author request failed", error);
+      if (!(error instanceof AccessError)) logServerError("Author request failed", error);
       if (error instanceof AccountLifecycleConflictError) return Response.json({ error: error.message }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "2" } });
       return Response.json({ error: error instanceof AccessError ? error.message : "Unable to complete this request." }, { status: error instanceof AccessError ? error.status : 500, headers: { "Cache-Control": "no-store" } });
     }

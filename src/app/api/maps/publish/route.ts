@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { imageAssetId } from "@/lib/assets";
 import { recordAuditEvent } from "@/lib/audit";
 import { recordPlayerActivity } from "@/lib/player-activity";
+import { logServerError } from "@/lib/logging";
 import {
   buildMapSnapshot,
   normalizeSelection,
@@ -20,7 +21,7 @@ class PublishError extends Error {
 function failure(error: unknown) {
   if (error instanceof PublishError) return NextResponse.json({ error: error.message, issues: error.issues }, { status: error.status });
   if (error instanceof AccessError) return NextResponse.json({ error: error.message }, { status: error.status });
-  console.error("Map publication failed:", error);
+  logServerError("Map publication failed", error);
   return NextResponse.json({ error: "Unable to update map sharing." }, { status: 500 });
 }
 
