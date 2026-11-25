@@ -216,7 +216,8 @@ test("late article detail responses cannot replace the next world's workspace", 
   const { page, worldB } = workspace;
   let heldDetail: Route | undefined;
   await page.route(url => url.pathname.includes("/api/articles/") && url.pathname !== "/api/articles/search", route => { heldDetail = route; });
-  await page.getByRole("button", { name: "Lore A Draft", exact: true }).click();
+  await page.getByRole("button", { name: "Articles", exact: true }).click();
+  await page.getByRole("region", { name: "World contents" }).getByRole("button", { name: "Lore A Draft", exact: true }).click();
   await expect.poll(() => heldDetail).toBeTruthy();
 
   await selectWorld(page, worldB.title);

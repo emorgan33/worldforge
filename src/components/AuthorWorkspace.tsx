@@ -30,9 +30,20 @@ import { fetchWorldSnapshot } from "@/lib/workspace-snapshot";
 import { fetchWorkspaceArticleList, loadWorkspaceArticle, saveWorkspaceArticle } from "@/lib/workspace-articles";
 import { WorkspaceHistoryCoordinator } from "@/lib/workspace-history";
 import { saveWorkspaceMapMutation, saveWorkspaceVariable } from "@/lib/workspace-features";
-import { Globe, LogOut, Menu, Users, X } from "lucide-react";
+import { BookOpenText, Globe, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Search, Users, X } from "lucide-react";
 import { ThemeSwitcher } from "@/components/theme/ThemeSwitcher";
 import type { ThemeId } from "@/lib/theme";
+import { ArticleTemplatePicker } from "@/components/ArticleTemplatePicker";
+import { WorldContentsExplorer } from "@/components/WorldContentsExplorer";
+import { isArticleView, resolveExplorerVisibility } from "@/lib/explorer-visibility";
+
+const EXPLORER_PINNED_KEY = "worldforge:world-contents-pinned";
+const EXPLORER_COLLAPSED_KEY = "worldforge:world-contents-collapsed";
+
+function readExplorerPreference(key: string): boolean {
+  try { return typeof window !== "undefined" && window.localStorage.getItem(key) === "true"; }
+  catch { return false; }
+}
 
 export default function WorldForgeApp({ theme }: { theme: ThemeId }) {
   const router = useRouter();
@@ -40,9 +51,16 @@ export default function WorldForgeApp({ theme }: { theme: ThemeId }) {
   const searchParams = useSearchParams();
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [mobileExplorerOpen, setMobileExplorerOpen] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [explorerPinned, setExplorerPinned] = useState(() => readExplorerPreference(EXPLORER_PINNED_KEY));
+  const [explorerCollapsed, setExplorerCollapsed] = useState(() => readExplorerPreference(EXPLORER_COLLAPSED_KEY));
+  const [explorerForcedOpen, setExplorerForcedOpen] = useState(false);
+  const [wideLayout, setWideLayout] = useState(false);
   const [worldSettingsRequest, setWorldSettingsRequest] = useState(0);
   const mainWorkspaceRef = useRef<HTMLElement>(null);
   const mobileNavigationTrigger = useRef<HTMLButtonElement>(null);
+  const explorerTrigger = useRef<HTMLButtonElement>(null);
   const scrollWorkspaceTo = useCallback((target: HTMLElement) => {
     const pane = mainWorkspaceRef.current;
     if (!pane) return;
@@ -53,6 +71,11 @@ export default function WorldForgeApp({ theme }: { theme: ThemeId }) {
     setMobileNavigationOpen(false);
     requestAnimationFrame(() => mobileNavigationTrigger.current?.focus());
   };
+  const closeMobileExplorer = useCallback(() => {
+    setMobileExplorerOpen(false);
+    requestAnimationFrame(() => explorerTrigger.current?.focus());
+  }, []);
+  const closeTemplatePicker = useCallback(() => setTemplatePickerOpen(false), []);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [actorId, setActorId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -100,6 +123,43 @@ export default function WorldForgeApp({ theme }: { theme: ThemeId }) {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [mobileNavigationOpen]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(EXPLORER_PINNED_KEY, String(explorerPinned));
+      window.localStorage.setItem(EXPLORER_COLLAPSED_KEY, String(explorerCollapsed));
+    } catch { /* Private browsing may block storage; preferences are best-effort. */ }
+  }, [explorerPinned, explorerCollapsed]);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1280px)");
+    const onChange = () => {
+      setWideLayout(query.matches);
+      if (query.matches) setMobileExplorerOpen(false);
+    };
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileExplorerOpen || wideLayout) return;
+    document.querySelector<HTMLButtonElement>("#world-contents-close")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMobileExplorer();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...document.querySelectorAll<HTMLElement>("#world-contents-explorer button:not([disabled]), #world-contents-explorer a[href], #world-contents-explorer input:not([disabled]), #world-contents-explorer summary")].filter(element => element.getClientRects().length > 0);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mobileExplorerOpen, wideLayout, closeMobileExplorer]);
 
   const [activeView, setActiveView] = useState<
     "home" | "article" | "editor" | "map" | "timeline" | "variables" | "gm" | "blocks" | "manager" | "assets" | "sessions"
@@ -262,6 +322,7 @@ export default function WorldForgeApp({ theme }: { theme: ThemeId }) {
       setWorld(null);
       setArticles([]); setCollections([]); setMaps([]); setTimelines([]); setSecrets([]); setRpgBlocks([]); setSessions([]);
       setSelectedArticleId(null); setCurrentArticle(null); setSelectedCategoryId(null);
+      setExplorerForcedOpen(false); setMobileExplorerOpen(false); setTemplatePickerOpen(false);
       setWorldUnavailable(true);
       setWorldError("");
       setIsLoading(false);
@@ -283,6 +344,7 @@ export default function WorldForgeApp({ theme }: { theme: ThemeId }) {
       // per-world UI state, then write only this epoch's data.
       setSelectedArticleId(null); setCurrentArticle(null); setSelectedCategoryId(null);
       setEditorCategoryId(null); setEditorDirty(false);
+      setExplorerForcedOpen(false); setMobileExplorerOpen(false); setTemplatePickerOpen(false);
       setGuards(new Map());
       worldIdRef.current = target.id;
       setWorld(target);
@@ -731,6 +793,18 @@ export default function WorldForgeApp({ theme }: { theme: ThemeId }) {
   }, []);
 
   const isTransitioning = isLoading && !!world;
+  const explorerOpen = resolveExplorerVisibility({ view: activeView, pinned: explorerPinned, collapsed: explorerCollapsed, forcedOpen: explorerForcedOpen });
+  const toggleExplorerPin = () => {
+    const next = !explorerPinned;
+    setExplorerPinned(next);
+    if (next) setExplorerCollapsed(false);
+  };
+  const collapseExplorer = () => { setExplorerCollapsed(true); setExplorerForcedOpen(false); };
+  const toggleExplorerFromToolbar = () => {
+    if (explorerOpen) collapseExplorer();
+    else { setExplorerCollapsed(false); setExplorerForcedOpen(true); }
+  };
+  const openMobileExplorer = () => { setMobileNavigationOpen(false); setMobileExplorerOpen(true); };
   const savesPaused = isTransitioning || [...guards].some(([id, registration]) => id.startsWith("world-management:") && registration.busy);
   const mobileViewLabel = activeView === "home" ? "Campaign home"
     : activeView === "article" ? currentArticle?.title || "Article"
@@ -759,37 +833,35 @@ export default function WorldForgeApp({ theme }: { theme: ThemeId }) {
       <CommandSearch key={searchOpen ? "open" : "closed"} open={searchOpen} onOpenChange={setSearchOpen} worldId={world?.id} categories={world?.categories || []} onSelectArticle={handleSelectArticle} commands={[
         ...(world?.categories || []).map(category => ({ id: `category-${category.id}`, title: category.name, description: `Category · ${categoryAncestors(world?.categories || [], category.id).map(item => item.name).join(" / ")}`, run: () => selectCategory(category.id) })),
         { id: "new-article", title: "New article", description: "Create an article", run: () => handleNewArticle() },
-        ...([ ["home", "Campaign home"], ["manager", "Articles & Categories"], ["assets", "Image library"], ["blocks", "RPG compendium"], ["map", "Maps"], ["timeline", "Timelines"], ["sessions", "Sessions"], ["variables", "Variables"], ["gm", "GM Screen & Secrets"] ] as const).filter(([view]) => view !== "timeline" || timelines.length > 0).map(([view, title]): SearchCommand => ({ id: `tool-${view}`, title, description: "Workspace tool", run: () => { if (view === "blocks") openCompendium(); else if (canNavigate()) { clearConfirmedLeave(); setActiveView(view); } } })),
+        ...([ ["home", "Campaign home"], ["manager", "Articles & Categories"], ["assets", "Image library"], ["blocks", "RPG compendium"], ["map", "Maps"], ["timeline", "Timelines"], ["sessions", "Sessions"], ["variables", "Variables"], ["gm", "GM Screen & Secrets"] ] as const).filter(([view]) => view !== "timeline" || timelines.length > 0).map(([view, title]): SearchCommand => ({ id: `tool-${view}`, title, description: "Workspace tool", run: () => { if (view === "blocks") openCompendium(); else if (canNavigate()) { clearConfirmedLeave(); setActiveView(view); } if (!isArticleView(view)) setExplorerForcedOpen(false); } })),
       ]} />
-      {/* Mobile shell controls stay above either the navigation or workspace. */}
-      <header inert={mobileNavigationOpen || undefined} className={`fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-app-border bg-app-canvas/95 px-3 backdrop-blur md:z-50 md:h-16 md:justify-end md:px-5 ${sidebarCollapsed ? "md:left-[68px]" : "md:left-[280px]"}`}>
-        <button ref={mobileNavigationTrigger} type="button" aria-label={mobileNavigationOpen ? "Close campaign navigation" : "Open campaign navigation"} aria-expanded={mobileNavigationOpen} aria-controls="campaign-navigation" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-app-border-strong bg-app-surface text-app-text-strong hover:border-app-border-emphasis-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 md:hidden" onClick={() => setMobileNavigationOpen(open => !open)}>
+      {/* Mobile shell controls stay above either the navigation, explorer or workspace. */}
+      <header inert={mobileNavigationOpen || mobileExplorerOpen || templatePickerOpen || undefined} className={`fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-app-border bg-app-canvas/95 px-3 backdrop-blur md:z-50 md:h-16 md:justify-end md:px-5 ${sidebarCollapsed ? "md:left-[68px]" : "md:left-[280px]"}`}>
+        <button ref={mobileNavigationTrigger} type="button" aria-label={mobileNavigationOpen ? "Close campaign navigation" : "Open campaign navigation"} aria-expanded={mobileNavigationOpen} aria-controls="campaign-navigation" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-app-border-strong bg-app-surface text-app-text-strong hover:border-app-border-emphasis-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 md:hidden" onClick={() => { setMobileExplorerOpen(false); setMobileNavigationOpen(open => !open); }}>
           {mobileNavigationOpen ? <X aria-hidden="true" className="h-5 w-5" /> : <Menu aria-hidden="true" className="h-5 w-5" />}
         </button>
-        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-app-text md:hidden" aria-live="polite">{mobileNavigationOpen ? "Campaign navigation" : mobileViewLabel}</p>
+        <button ref={explorerTrigger} type="button" aria-label={mobileExplorerOpen ? "Close world contents" : "Browse world"} aria-expanded={mobileExplorerOpen} aria-controls="world-contents-explorer" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[var(--aw-sidebar-control-border)] bg-app-surface text-app-text hover:border-highlight-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 xl:hidden" onClick={openMobileExplorer}>
+          {mobileExplorerOpen ? <X aria-hidden="true" className="h-5 w-5" /> : <BookOpenText aria-hidden="true" className="h-[18px] w-[18px]" />}
+        </button>
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-app-text md:hidden" aria-live="polite">{mobileNavigationOpen ? "Campaign navigation" : mobileExplorerOpen ? "World contents" : mobileViewLabel}</p>
+        <button type="button" aria-label="Search this world" title="Search this world (⌘K)" onClick={() => setSearchOpen(true)} className="hidden h-10 shrink-0 items-center gap-2 rounded-lg border border-[var(--aw-sidebar-control-border)] bg-app-surface px-3 text-sm text-[var(--aw-sidebar-muted)] hover:border-highlight-500 hover:text-app-text-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 sm:inline-flex"><Search aria-hidden="true" className="h-4 w-4" /><span>Search this world</span><kbd className="hidden text-xs text-[var(--aw-sidebar-muted)] lg:inline">⌘ K</kbd></button>
+        <button type="button" aria-label="New article" title="New article" onClick={() => setTemplatePickerOpen(true)} className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[var(--aw-accent)] text-[var(--aw-on-accent)] hover:bg-[var(--aw-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-200 md:h-10 md:w-auto md:px-3"><Plus aria-hidden="true" className="h-4 w-4" /><span className="hidden text-sm font-bold md:inline">New article</span></button>
+        <button type="button" aria-label={explorerOpen ? "Hide world contents" : "Show world contents"} title={explorerOpen ? "Hide world contents" : "Show world contents"} aria-expanded={explorerOpen} aria-controls="world-contents-explorer" onClick={toggleExplorerFromToolbar} className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--aw-sidebar-control-border)] bg-app-surface text-app-text hover:border-highlight-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 xl:inline-flex">{explorerOpen ? <PanelLeftClose aria-hidden="true" className="h-4 w-4" /> : <PanelLeftOpen aria-hidden="true" className="h-4 w-4" />}</button>
         <ThemeSwitcher current={theme} className="shrink-0" />
-        <button type="button" aria-label="Player view" title="Player view" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-app-border-strong bg-app-surface text-app-text hover:border-app-border-emphasis-strong hover:text-app-text-bright focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 md:h-10 md:w-auto md:px-3" onClick={() => { if (!canNavigate()) return; clearConfirmedLeave(); router.push("/player"); }}><Users aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Player view</span></button>
-        <button type="button" aria-label="Sign out" title="Sign out" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-app-border-strong bg-app-surface text-app-text hover:border-app-border-emphasis-strong hover:text-app-text-bright focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 md:h-10 md:w-auto md:px-3" onClick={async () => { if (!canNavigate()) return; clearConfirmedLeave(); const response = await fetch("/api/auth/logout", { method: "POST" }); if (response.ok) { router.replace("/login"); router.refresh(); } }}><LogOut aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Sign out</span></button>
+        <button type="button" aria-label="Player view" title="Player view" className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-app-border-strong bg-app-surface text-app-text hover:border-app-border-emphasis-strong hover:text-app-text-bright focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 sm:inline-flex md:h-10 md:w-auto md:px-3" onClick={() => { if (!canNavigate()) return; clearConfirmedLeave(); router.push("/player"); }}><Users aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Player view</span></button>
+        <button type="button" aria-label="Sign out" title="Sign out" className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-app-border-strong bg-app-surface text-app-text hover:border-app-border-emphasis-strong hover:text-app-text-bright focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 sm:inline-flex md:h-10 md:w-auto md:px-3" onClick={async () => { if (!canNavigate()) return; clearConfirmedLeave(); const response = await fetch("/api/auth/logout", { method: "POST" }); if (response.ok) { router.replace("/login"); router.refresh(); } }}><LogOut aria-hidden="true" className="h-4 w-4 md:hidden" /><span className="sr-only md:not-sr-only md:text-sm">Sign out</span></button>
       </header>
-      <div id="campaign-navigation" className={`${mobileNavigationOpen ? "fixed inset-0 z-[60] block md:static md:z-auto" : "hidden md:block"} h-full w-full shrink-0 ${sidebarCollapsed ? "md:w-[68px]" : "md:w-[280px]"}`}>
+      <div id="campaign-navigation" inert={templatePickerOpen || (mobileExplorerOpen && !wideLayout) || undefined} className={`${mobileNavigationOpen ? "fixed inset-0 z-[60] block md:static md:z-auto" : "hidden md:block"} h-full w-full shrink-0 ${sidebarCollapsed ? "md:w-[68px]" : "md:w-[280px]"}`}>
       {mobileNavigationOpen && <button type="button" aria-hidden="true" tabIndex={-1} className="absolute inset-0 bg-app-scrim md:hidden" onClick={closeMobileNavigation} />}
       <div className={`relative z-10 h-full ${mobileNavigationOpen ? "w-[min(332px,calc(100vw-58px))]" : "w-full"}`}>
       <Sidebar
         onOpenSearch={() => { setMobileNavigationOpen(false); setSearchOpen(true); }}
+        onPlayerView={() => { if (!canNavigate()) return; clearConfirmedLeave(); closeMobileNavigation(); router.push("/player"); }}
+        onSignOut={async () => { if (!canNavigate()) return; clearConfirmedLeave(); closeMobileNavigation(); const response = await fetch("/api/auth/logout", { method: "POST" }); if (response.ok) { router.replace("/login"); router.refresh(); } }}
         worldTitle={world?.title || "WorldForge"}
         system={world?.system || "DND_5E"}
-        articles={articles}
-        categories={world?.categories || []}
-        selectedCategoryId={selectedCategoryId}
-        onSelectCategory={id => { if (selectCategory(id)) closeMobileNavigation(); }}
-        onMove={handleTreeMove}
-        organizationBusy={organizationBusy || activeView === "editor" || (isLoading && !!world)}
-        organizationError={organizationError}
         activeView={activeView}
-        selectedArticleId={selectedArticleId}
-        onSelectArticle={id => { if (handleSelectArticle(id)) closeMobileNavigation(); }}
-        onNavigateView={(view) => { const accepted = view === "blocks" ? openCompendium() : canNavigate(); if (view !== "blocks" && accepted) { clearConfirmedLeave(); setActiveView(view); } if (accepted) closeMobileNavigation(); }}
-        onNewArticle={template => { if (handleNewArticle(template)) closeMobileNavigation(); }}
+        onNavigateView={(view) => { const accepted = view === "blocks" ? openCompendium() : canNavigate(); if (view !== "blocks" && accepted) { clearConfirmedLeave(); setActiveView(view); } if (accepted) { if (!isArticleView(view)) setExplorerForcedOpen(false); closeMobileNavigation(); } }}
         worlds={worlds}
         currentWorldId={world?.id ?? null}
         worldSwitchDisabled={(isLoading && !world) || creationBusy}
@@ -809,8 +881,33 @@ export default function WorldForgeApp({ theme }: { theme: ThemeId }) {
       </div>
       </div>
 
+      {mobileExplorerOpen && <button type="button" aria-hidden="true" tabIndex={-1} className="fixed inset-0 z-[65] bg-app-scrim xl:hidden" onClick={closeMobileExplorer} />}
+      <div id="world-contents-explorer" inert={templatePickerOpen || undefined} className={`${mobileExplorerOpen ? "flex" : "hidden"} ${explorerOpen ? "xl:flex" : "xl:hidden"} fixed inset-y-0 left-0 z-[70] w-[min(332px,calc(100vw-40px))] xl:static xl:z-auto xl:mt-16 xl:h-[calc(100dvh-4rem)] xl:w-[260px] xl:shrink-0`}>
+        <div className="relative z-10 h-full w-full">
+          <WorldContentsExplorer
+            articles={articles}
+            categories={world?.categories || []}
+            selectedArticleId={activeView === "article" || activeView === "editor" ? selectedArticleId : null}
+            selectedCategoryId={activeView === "manager" ? selectedCategoryId : undefined}
+            onSelectArticle={id => { if (handleSelectArticle(id)) closeMobileExplorer(); }}
+            onSelectCategory={id => { if (selectCategory(id)) closeMobileExplorer(); }}
+            onMove={handleTreeMove}
+            organizationBusy={organizationBusy || activeView === "editor" || (isLoading && !!world)}
+            organizationError={organizationError}
+            pinned={explorerPinned}
+            onTogglePin={toggleExplorerPin}
+            onClose={mobileExplorerOpen && !wideLayout ? closeMobileExplorer : collapseExplorer}
+            onOpenSearch={() => { setMobileExplorerOpen(false); setSearchOpen(true); }}
+            drawer={mobileExplorerOpen && !wideLayout}
+            visible={explorerOpen || mobileExplorerOpen}
+          />
+        </div>
+      </div>
+
+      <ArticleTemplatePicker open={templatePickerOpen} onClose={closeTemplatePicker} onSelect={template => { if (handleNewArticle(template)) closeMobileExplorer(); }} />
+
       {/* Main Content Workspace */}
-      <main ref={mainWorkspaceRef} inert={mobileNavigationOpen || isTransitioning || undefined} aria-hidden={mobileNavigationOpen || undefined} className="mt-14 h-[calc(100dvh-3.5rem)] min-w-0 flex-1 overscroll-contain overflow-y-auto bg-[var(--aw-canvas)] p-4 md:mt-16 md:h-[calc(100dvh-4rem)] md:p-8 lg:p-10">
+      <main ref={mainWorkspaceRef} inert={mobileNavigationOpen || mobileExplorerOpen || templatePickerOpen || isTransitioning || undefined} aria-hidden={mobileNavigationOpen || mobileExplorerOpen || undefined} className="mt-14 h-[calc(100dvh-3.5rem)] min-w-0 flex-1 overscroll-contain overflow-y-auto bg-[var(--aw-canvas)] p-4 md:mt-16 md:h-[calc(100dvh-4rem)] md:p-8 lg:p-10">
         <div className="max-w-6xl mx-auto">
           {worldUnavailable && <section aria-live="polite" className="mb-6 rounded-xl border border-primary-800 bg-primary-950/30 p-6">
             <h2 className="text-lg font-semibold text-primary-200">This world isn’t available</h2>
@@ -821,6 +918,7 @@ export default function WorldForgeApp({ theme }: { theme: ThemeId }) {
             {world && <button type="button" onClick={returnToCurrentWorld} className="ml-3 underline">Return to {world.title}</button>}
             <button type="button" onClick={() => void retryLoad()} className="ml-3 underline">Try again</button>
           </p>}
+          {organizationError && !explorerOpen && <p role="alert" className="mb-6 rounded-xl border border-danger-900 bg-danger-950/40 p-4 text-sm text-danger-200">{organizationError}</p>}
           {!world && !worldUnavailable && !worldError && worlds.length === 0 && <section aria-live="polite" className="mx-auto max-w-xl rounded-2xl border border-app-border bg-app-surface/60 p-8 text-center">
             <p className="text-xs uppercase tracking-widest text-primary-400">Private campaign</p>
             <h2 className="mt-2 font-serif text-3xl text-primary-100">Create your first world</h2>

@@ -33,6 +33,7 @@ test("production login issues a session accepted by authenticated APIs", { skip:
   const cookie = login.headers.get("set-cookie")?.split(";")[0];
   assert.ok(cookie?.startsWith(`${SESSION_COOKIE}=`), "login must set the session cookie");
   const cookieHeader = cookie!;
+  const cookieValue = cookie!.split("=")[1];
 
   const themeChange = await fetch(`${origin}/api/preferences/theme`, {
     method: "POST",
@@ -55,7 +56,7 @@ test("production login issues a session accepted by authenticated APIs", { skip:
   const browser = await chromium.launch({ headless: true });
   context.after(async () => browser.close());
   const workspace = await browser.newPage();
-  await workspace.context().addCookies([{ name: SESSION_COOKIE, value: cookie.split("=")[1], url: origin, httpOnly: true, sameSite: "Lax" }]);
+  await workspace.context().addCookies([{ name: SESSION_COOKIE, value: cookieValue, url: origin, httpOnly: true, sameSite: "Lax" }]);
   await workspace.goto(`${origin}/`);
   await workspace.waitForSelector(".author-workspace", { timeout: 20000 });
   const shellColor = await workspace.evaluate(() => {
@@ -69,9 +70,9 @@ test("production login issues a session accepted by authenticated APIs", { skip:
     probe.height = 1;
     const context = probe.getContext("2d");
     const aside = document.querySelector("aside");
-    const accent = Array.from(document.querySelectorAll("button")).find(button => button.textContent?.trim() === "New article");
+    const accent = Array.from(document.querySelectorAll("button")).find(button => button.getAttribute("aria-label") === "New article");
     const navLabel = Array.from(aside?.querySelectorAll("nav button span") ?? []).find(span => span.textContent === "Articles");
-    const search = aside?.querySelector('button[aria-label="Search this world"]');
+    const search = document.querySelector('header button[aria-label="Search this world"]');
     const entries: Array<[string, Element | null | undefined, "backgroundColor" | "color" | "borderTopColor"]> = [
       ["background", aside, "backgroundColor"],
       ["accent", accent, "backgroundColor"],
@@ -219,7 +220,7 @@ test("reader pages render instead of the prerender error page", { skip: !origin 
     [`/w/${world.slug}`, "Reader smoke world"],
     [`/w/${world.slug}/a/${article.slug}`, "Reader smoke article"],
   ] as const) {
-    const response = await fetch(`${origin}${path}`, { headers });
+    const response: Response = await fetch(`${origin}${path}`, { headers });
     const html = await response.text();
     assert.equal(response.status, 200, `${path} returned ${response.status}`);
     assert.doesNotMatch(html, /__next_error__/, `${path} rendered Next's prerender error page`);
@@ -229,7 +230,7 @@ test("reader pages render instead of the prerender error page", { skip: !origin 
   // Authenticated surfaces that also query the database must not fall back to
   // the prerender error page either.
   for (const path of ["/", "/player"]) {
-    const response = await fetch(`${origin}${path}`, { headers: { Cookie: `${SESSION_COOKIE}=${ownerToken}` }, redirect: "manual" });
+    const response: Response = await fetch(`${origin}${path}`, { headers: { Cookie: `${SESSION_COOKIE}=${ownerToken}` }, redirect: "manual" });
     const html = await response.text();
     assert.equal(response.status, 200, `${path} returned ${response.status}`);
     assert.doesNotMatch(html, /__next_error__/, `${path} rendered Next's prerender error page`);
@@ -237,7 +238,7 @@ test("reader pages render instead of the prerender error page", { skip: !origin 
   }
 
   for (const path of [`/w/${world.slug}`, `/w/${world.slug}/a/${article.slug}`]) {
-    const response = await fetch(`${origin}${path}`);
+    const response: Response = await fetch(`${origin}${path}`);
     const html = await response.text();
     assert.equal(response.status, 200, `${path} returned ${response.status} anonymously`);
     assert.doesNotMatch(html, /__next_error__/, `${path} rendered Next's prerender error page anonymously`);
@@ -245,7 +246,7 @@ test("reader pages render instead of the prerender error page", { skip: !origin 
   }
 
   for (const theme of ["night-watch", "daylight"]) {
-    const response = await fetch(`${origin}/w/${world.slug}`, { headers: { Cookie: `wf_theme=${theme}` } });
+    const response: Response = await fetch(`${origin}/w/${world.slug}`, { headers: { Cookie: `wf_theme=${theme}` } });
     const html = await response.text();
     assert.equal(response.status, 200, `/w/${world.slug} returned ${response.status} for ${theme}`);
     assert.match(html, new RegExp(`data-theme="${theme}"`), `${theme} must be applied to <html>`);

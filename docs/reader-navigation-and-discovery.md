@@ -8,7 +8,9 @@ Public readers and authenticated campaign readers share a category tree, breadcr
 - On narrow screens, **Browse articles** opens the same tree in a compact disclosure control above the page content.
 - The tree links to the world home and articles, follows category/article order, and lets readers expand or collapse category branches. The current page is marked with `aria-current="page"`.
 - Article breadcrumbs show the world, the current article's category ancestors, and the article title.
-- The author workspace has its own responsive navigation: a collapsible sidebar on desktop and a drawer on mobile. Its World contents section remains scrollable while hiding the scrollbar.
+- The author workspace separates app navigation from content browsing. A stable far-left rail holds world switching and workspace destinations; World contents lives in an adjacent, collapsible explorer (or a **Browse world** drawer on narrow screens). The explorer remains scrollable while hiding its scrollbar.
+- The explorer opens contextually in Articles (including reading, editing, and category management). **Pin world contents** keeps it open across other tools, and **Collapse world contents** hides it until **Show world contents** is used. An explicit collapse wins over pinning and article selection; the pin/collapse preference persists in the browser. Expanded branches, selection, and tree scroll position survive hiding and reopening. Search and New article stay in the workspace toolbar whether the explorer is open or closed.
+- On narrow screens the rail opens as a drawer and the explorer opens as a separate focus-managed drawer. Escape closes it and restores focus to **Browse world**; accepting an article or category selection closes it, while declining a discard leaves it open. Search is also available from both drawers.
 
 ## Search and access boundaries
 
@@ -96,8 +98,8 @@ Pages project credits only for artwork actually used by readable covers, portrai
 - Public reader data: `src/lib/public-world.ts` and `src/app/w/[worldSlug]/`.
 - Campaign reader data: `src/app/c/[worldSlug]/`.
 - Database-backed pages render at request time through one shared boundary: `requireRequestTime()` in `src/lib/request-time.ts`. `publicWorld()` and `resolvePageActor()` (used by both `/c/` pages) call it before querying, and the workspace, player portal, and admin layout call it at their entry points. better-sqlite3 executes synchronously, so without the boundary the partial-prerender shell runs the queries and Next aborts the route on the `new Date()` in Prisma's clock read (#39). Do not call it from Route Handlers, which have no render scope. Regression coverage is the reader case in `tests/production-auth-smoke.test.ts`, which runs against `next start`; `next dev` does not reproduce the failure.
-- Author workspace navigation: `src/components/AuthorWorkspace.tsx` and `src/components/Sidebar.tsx`.
-- Focused regressions: `tests/reader-navigation.test.tsx`, `tests/stock-credits.test.ts`.
+- Author workspace navigation: `src/components/AuthorWorkspace.tsx`, `src/components/Sidebar.tsx` (rail), `src/components/WorldContentsExplorer.tsx` (tree), and `src/lib/explorer-visibility.ts` (visibility rules). The article template picker lives in `src/components/ArticleTemplatePicker.tsx`.
+- Focused regressions: `tests/reader-navigation.test.tsx`, `tests/explorer-visibility.test.ts`, `tests/browser/sidebar-world-contents.spec.ts`, `tests/stock-credits.test.ts`.
 - Server-backed credit/authorization check: `tests/reader-credits-api.test.tsx` (skips without `WORLDFORGE_TEST_ORIGIN`).
 
 Run the focused reader checks with:

@@ -25,7 +25,8 @@ const test = base.extend<{ article: { page: Page; db: PrismaClient; ownerId: str
       await context.addCookies([{ name: SESSION_COOKIE, value: token, url: baseURL!, httpOnly: true, sameSite: "Lax" }]);
       const open = async (target: Page, articleTitle = "Original lore") => {
         await target.goto(`/?world=${world.id}`);
-        await target.getByRole("button", { name: `${articleTitle} Draft`, exact: true }).click();
+        await target.getByRole("button", { name: "Articles", exact: true }).click();
+        await target.getByRole("region", { name: "World contents" }).getByRole("button", { name: `${articleTitle} Draft`, exact: true }).click();
         await target.getByRole("button", { name: "Edit Article", exact: true }).click();
         await expect(title(target)).toBeVisible();
       };
@@ -146,7 +147,8 @@ test("two editors cannot overwrite each other; conflicts keep recovery and can s
   expect(draft.data.expectedVersion).toBe(1);
   expect(draft.data.title).toBe("Second editor local draft");
   await second.reload();
-  await second.getByRole("button", { name: "First editor wins Draft", exact: true }).click();
+  await second.getByRole("button", { name: "Articles", exact: true }).click();
+  await second.getByRole("region", { name: "World contents" }).getByRole("button", { name: "First editor wins Draft", exact: true }).click();
   await second.getByRole("button", { name: "Edit Article", exact: true }).click();
   await expect(second.getByRole("main").getByRole("alert")).toContainText("Second editor local draft");
   await second.getByRole("button", { name: "Restore draft" }).click();

@@ -9,6 +9,8 @@ import { ReaderMobileBrowse } from "../src/components/public/ReaderMobileBrowse"
 import { ReaderSearch } from "../src/components/public/ReaderSearch";
 import { ReaderImageCredits, ReaderAdjacentCredit } from "../src/components/public/ReaderImageCredits";
 import { Sidebar } from "../src/components/Sidebar";
+import { WorldContentsExplorer } from "../src/components/WorldContentsExplorer";
+import type { ArticleListItem } from "../src/types";
 
 const publicArticles = [
   { id: "art-1", slug: "gate-of-dawn", title: "Gate of Dawn", template: "LANDMARK", excerpt: "An ancient portal carved in white stone.", categoryId: "cat-places" },
@@ -181,24 +183,13 @@ test("mobile browse disclosure exposes campaign navigation without duplicate sec
   assert.equal(new Set(articleHeadingIds).size, articleHeadingIds.length);
 });
 
-test("mobile author navigation gives World contents the remaining drawer space", () => {
+test("mobile author rail keeps destinations separate from World contents", () => {
   const html = renderToStaticMarkup(
     <Sidebar
-      onOpenSearch={() => {}}
       worldTitle="Elmsworth"
       system="DND_5E"
-      articles={[]}
-      categories={[{ id: "cat", worldId: "world", name: "Places", parentId: null, order: 0 }]}
-      selectedCategoryId={null}
-      onSelectCategory={() => {}}
-      onMove={async () => {}}
-      organizationBusy={false}
-      organizationError=""
-      activeView="home"
-      selectedArticleId={null}
-      onSelectArticle={() => {}}
+      activeView="article"
       onNavigateView={() => {}}
-      onNewArticle={() => {}}
       mobile
     />
   );
@@ -209,10 +200,59 @@ test("mobile author navigation gives World contents the remaining drawer space",
   for (const destination of ["Home", "Articles", "Maps", "Timelines", "Sessions", "Compendium", "DM tools"]) {
     assert(html.includes(`aria-label="${destination}"`));
   }
-  assert(html.includes('aria-label="World contents" class="sidebar-lore-scroll flex min-h-[12rem] flex-1 flex-col overflow-hidden border-b'));
-  assert(html.includes("sidebar-lore-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto"));
+  assert(html.includes('aria-label="Articles" aria-current="page"'));
+  assert.equal(html.includes("World contents"), false, "the tree now lives in the separate explorer");
+  assert(html.includes(">More tools</summary>"), "utilities remain in the rail");
+});
+
+test("World contents explorer shows empty worlds and actionable organization errors", () => {
+  const html = renderToStaticMarkup(
+    <WorldContentsExplorer
+      articles={[]}
+      categories={[]}
+      onSelectArticle={() => {}}
+      onSelectCategory={() => {}}
+      onMove={async () => {}}
+      organizationBusy={false}
+      organizationError="Could not move that article."
+      pinned
+      onTogglePin={() => {}}
+      onClose={() => {}}
+    />
+  );
+
+  assert(html.includes('role="alert"'));
+  assert(html.includes("Could not move that article."));
+  assert(html.includes("Create a category or article to organize your lore."));
+  assert(html.includes('aria-label="Unpin world contents"'));
+  assert(html.includes('aria-pressed="true"'));
+});
+
+test("World contents explorer exposes pin, collapse and accessible selection", () => {
+  const html = renderToStaticMarkup(
+    <WorldContentsExplorer
+      articles={[{ id: "a", worldId: "world", slug: "a", title: "The beacon", template: "GENERIC", state: "DRAFT", isPinned: false, order: 0, createdAt: "", updatedAt: "", wordCount: 0 } as ArticleListItem]}
+      categories={[{ id: "cat", worldId: "world", name: "Places", parentId: null, order: 0 }]}
+      selectedArticleId="a"
+      selectedCategoryId="cat"
+      onSelectArticle={() => {}}
+      onSelectCategory={() => {}}
+      onMove={async () => {}}
+      organizationBusy={false}
+      organizationError=""
+      pinned={false}
+      onTogglePin={() => {}}
+      onClose={() => {}}
+      drawer
+    />
+  );
+
+  assert(html.includes('aria-label="World contents" role="dialog" aria-modal="true"'));
+  assert(html.includes('aria-label="Pin world contents"'));
+  assert(html.includes('aria-label="Close world contents"'));
   assert(html.includes('aria-label="Collapse Places"'));
-  assert(html.includes("flex h-11 w-11 shrink-0 items-center justify-center"));
+  assert(html.includes('aria-current="page"'), "the selected article is identifiable to assistive technology");
+  assert(html.includes("1 article"));
 });
 
 test("ReaderSearch renders accessible input and search controls", () => {
