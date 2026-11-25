@@ -1,18 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown, Globe } from "lucide-react";
 import type { WorldSummary } from "@/components/WorldHome";
 import { RPG_SYSTEMS } from "@/lib/rpg";
 import { WorldManagement } from "@/components/worlds/WorldManagement";
 
-export function WorldSwitcher({ worlds, currentWorldId, actorId, disabled = false, compact = false, brand = false, mobileCard = false, onSelect, onNewWorld, onRefresh, onManage, onBeforeManageAction }: {
+export function WorldSwitcher({ worlds, currentWorldId, actorId, disabled = false, compact = false, onSelect, onNewWorld, onRefresh, onManage, onBeforeManageAction }: {
   worlds: WorldSummary[];
   currentWorldId: string | null;
   actorId: string | null;
   disabled?: boolean;
   compact?: boolean;
-  brand?: boolean;
-  mobileCard?: boolean;
   onSelect: (id: string) => void;
   onNewWorld: () => void;
   onRefresh?: () => Promise<void> | void;
@@ -51,18 +50,13 @@ export function WorldSwitcher({ worlds, currentWorldId, actorId, disabled = fals
   }
 
   return <div ref={root} className="relative">
-    <button ref={trigger} type="button" disabled={disabled} aria-label={compact || brand || mobileCard ? `Switch world${current ? `, current world ${current.title}` : ""}` : undefined} title={compact ? "Switch world" : undefined} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(value => !value)} className={`flex max-w-full items-center gap-2 rounded-lg text-left text-sm text-app-text-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-highlight-300 disabled:opacity-50 ${compact ? "h-10 w-10 justify-center border border-[var(--aw-sidebar-control-border)] bg-[var(--aw-sidebar)] p-0" : brand ? "w-full gap-3 border-0 bg-transparent p-0 hover:bg-transparent" : mobileCard ? "h-[50px] w-full gap-3 border border-[var(--aw-sidebar-control-border)] bg-[var(--aw-sidebar-control)] px-3 py-2 hover:border-highlight-500" : "min-h-11 border border-app-border-strong bg-app-surface px-3 py-2 hover:border-highlight-500"}`}>
-      {compact ? <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-[var(--aw-accent-soft)] text-base font-bold text-[var(--aw-accent)]">W</span> : brand ? <>
-        <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-[var(--aw-accent-soft)] text-[19px] font-bold text-[var(--aw-accent)]">W</span>
-        <span className="min-w-0 text-left"><span className="block text-[11px] font-bold tracking-wide text-[var(--aw-text)]">WORLDFORGE</span><span className="block truncate text-xs font-semibold tracking-wide text-[var(--aw-sidebar-muted)]">{current?.title ?? "Choose a world"}</span></span>
-      </> : mobileCard ? <>
-        <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[var(--aw-accent-soft)] text-[15px] font-bold text-[var(--aw-accent)]">W</span>
-        <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{current?.title ?? "Choose a world"}</span>{current && <span className="block truncate text-[10px] text-app-muted">{RPG_SYSTEMS.find(option => option.id === current.system)?.short ?? current.system} · Switch world</span>}</span><span aria-hidden="true" className="text-app-muted">▾</span>
-      </> : <>
-      <span className="min-w-0"><span className="block truncate font-semibold">{current?.title ?? "Choose a world"}</span>{current && <span className="block text-xs text-app-muted">{RPG_SYSTEMS.find(option => option.id === current.system)?.short ?? current.system}</span>}</span><span aria-hidden="true" className="text-app-muted">▾</span>
+    <button ref={trigger} type="button" disabled={disabled} aria-label={`Switch world${current ? `, current world ${current.title}` : ""}`} title={compact ? "Switch world" : undefined} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(value => !value)} className={`flex min-h-11 max-w-full items-center gap-2 rounded-lg border border-[var(--aw-sidebar-control-border)] text-left text-sm text-app-text-strong hover:border-highlight-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-highlight-300 disabled:opacity-50 ${compact ? "w-11 justify-center bg-[var(--aw-sidebar)]" : "w-full bg-[var(--aw-sidebar-control)] px-3 py-2"}`}>
+      {compact ? <Globe aria-hidden="true" className="h-5 w-5" /> : <>
+        <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{current?.title ?? "Choose a world"}</span>{current && <span className="block truncate text-xs text-app-muted">{RPG_SYSTEMS.find(option => option.id === current.system)?.short ?? current.system} · Switch world</span>}</span>
+        <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-app-muted" />
       </>}
     </button>
-    {open && <div role="listbox" aria-label="Your worlds" onKeyDown={onListKeyDown} className={`absolute left-0 top-full z-50 mt-2 max-h-[min(70vh,32rem)] ${mobileCard ? "w-full max-w-full" : "w-[min(22rem,90vw)]"} overflow-auto rounded-xl border border-app-border-strong bg-app-canvas p-2 text-app-text-strong shadow-2xl`}>
+    {open && <div role="listbox" aria-label="Your worlds" onKeyDown={onListKeyDown} className={`z-[55] max-h-[min(65dvh,32rem)] overflow-auto rounded-xl border border-app-border-strong bg-app-canvas p-2 text-app-text-strong shadow-2xl ${compact ? "fixed left-[68px] top-16 w-[min(22rem,calc(100vw-68px))]" : "absolute left-0 top-full mt-2 w-full"}`}>
       {worlds.length > 5 && <label className="block px-2 pb-2 text-xs text-app-muted">Search worlds<input ref={search} type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Find a world" className="mt-1 min-h-11 w-full rounded-lg border border-app-border-strong bg-app-surface px-3 py-2 text-sm text-app-text-strong placeholder:text-app-subtle focus:border-highlight-400 focus:outline-none focus:ring-2 focus:ring-highlight-400/30" /></label>}
       {filtered.length ? filtered.map(world => {
         const duplicate = (duplicateTitles.get(world.title.toLocaleLowerCase()) ?? 0) > 1;

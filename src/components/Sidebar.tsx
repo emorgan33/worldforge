@@ -99,122 +99,32 @@ export function Sidebar({
   onCloseMobile,
 }: SidebarProps) {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const compact = collapsed && !mobile;
 
   return (
     <aside role={mobile ? "dialog" : undefined} aria-modal={mobile || undefined} aria-label={mobile ? "World menu" : undefined} className={`relative flex h-full w-full select-none flex-col overflow-y-auto border-r border-[var(--aw-sidebar-border)] bg-[var(--aw-sidebar)] text-[var(--aw-text)] ${collapsed && !mobile ? "md:items-center" : ""}`}>
-      {mobile && <div className="flex h-[65px] shrink-0 items-center justify-between border-b border-[var(--aw-sidebar-border)] bg-[var(--aw-sidebar)] px-5"><span className="text-xs font-bold">WORLD MENU</span><button type="button" onClick={onCloseMobile} aria-label="Close campaign navigation" className="flex h-11 w-11 items-center justify-center rounded-lg text-app-text-dim hover:bg-app-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"><X className="h-5 w-5" /></button></div>}
-      <div className={`flex shrink-0 items-start gap-3 bg-[var(--aw-sidebar)] ${collapsed && !mobile ? "md:h-auto md:flex-col md:gap-2 md:px-2 md:py-3" : "px-4 py-2"}`}>
-        {/* Expanded desktop header (hidden when collapsed) */}
-        <div className={`${collapsed && !mobile ? "hidden" : "flex-1 min-w-0"}`}>
-          {onSelectWorld ? (
-            <>
-              {/* Expanded with world switching: logo ABOVE WorldSwitcher */}
-              {!mobile && (
-                <div className="flex flex-col items-start w-full">
-                  {/* Logo + WorldForge text at top */}
-                  <div className="flex items-center gap-2 w-full mb-2">
-                    <Logo variant="symbol-small" ariaLabel="" className="h-7 w-auto flex-shrink-0" />
-                    <span className="font-serif text-base font-bold text-[var(--aw-text)] truncate">WorldForge</span>
-                  </div>
-                  {/* WorldSwitcher as separate control beneath */}
-                  <div className="w-full">
-                    <WorldSwitcher
-                      brand={false}
-                      mobileCard={false}
-                      worlds={worlds}
-                      currentWorldId={currentWorldId}
-                      actorId={actorId ?? null}
-                      disabled={worldSwitchDisabled}
-                      onSelect={onSelectWorld}
-                      onNewWorld={() => onNewWorld?.()}
-                      onRefresh={onRefreshWorlds}
-                      onManage={onManageWorld}
-                      onBeforeManageAction={onBeforeManageAction}
-                    />
-                  </div>
-                </div>
-              )}
-              {/* Expanded without world switching: logo + world title + system */}
-              {!onSelectWorld && !mobile && (
-                <>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Logo variant="symbol-small" ariaLabel="" className="h-7 w-auto flex-shrink-0" />
-                    <span className="font-serif text-base font-bold text-[var(--aw-text)] truncate">WorldForge</span>
-                  </div>
-                  <h2 className="truncate text-sm font-extrabold tracking-tight">{worldTitle}</h2>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--aw-sidebar-muted)]">{systemProfile(system).short}{system === "PF_2E" ? " · Remaster" : ""}</span>
-                </>
-              )}
-              {/* Mobile expanded: logo + world switcher */}
-              {mobile && onSelectWorld && (
-                <div className="flex flex-col items-start w-full py-2">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Logo variant="symbol-small" ariaLabel="" className="h-6 w-auto flex-shrink-0" />
-                    <span className="font-serif text-base font-bold text-[var(--aw-text)]">WorldForge</span>
-                  </div>
-                  <WorldSwitcher
-                    mobileCard={true}
-                    worlds={worlds}
-                    currentWorldId={currentWorldId}
-                    actorId={actorId ?? null}
-                    disabled={worldSwitchDisabled}
-                    onSelect={onSelectWorld}
-                    onNewWorld={() => onNewWorld?.()}
-                    onRefresh={onRefreshWorlds}
-                    onManage={onManageWorld}
-                    onBeforeManageAction={onBeforeManageAction}
-                  />
-                </div>
-              )}
-              {/* Mobile expanded without world switching: just world title */}
-              {mobile && !onSelectWorld && <h2 className="truncate text-sm font-extrabold tracking-tight">{worldTitle}</h2>}
-            </>
-          ) : (
-            <>
-              {/* Expanded without world switching: logo + world title + system */}
-              {!mobile && (
-                <>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Logo variant="symbol-small" ariaLabel="" className="h-7 w-auto flex-shrink-0" />
-                    <span className="font-serif text-base font-bold text-[var(--aw-text)] truncate">WorldForge</span>
-                  </div>
-                  <h2 className="truncate text-sm font-extrabold tracking-tight">{worldTitle}</h2>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--aw-sidebar-muted)]">{systemProfile(system).short}{system === "PF_2E" ? " · Remaster" : ""}</span>
-                </>
-              )}
-              {/* Mobile expanded without world switching: just world title */}
-              {mobile && <h2 className="truncate text-sm font-extrabold tracking-tight">{worldTitle}</h2>}
-            </>
+      <div className={`flex min-w-0 shrink-0 flex-col gap-3 ${compact ? "items-center px-2 py-3" : "px-4 py-3"}`}>
+        <div className={`flex min-w-0 items-center gap-3 ${compact ? "flex-col" : ""}`}>
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <Logo variant="symbol-small" ariaLabel={compact ? "WorldForge" : ""} className="h-9 w-auto shrink-0" />
+            {!compact && <span className="truncate font-serif text-xl font-bold">WorldForge</span>}
+          </div>
+          {mobile ? (
+            <button type="button" onClick={onCloseMobile} aria-label="Close campaign navigation" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-app-text-dim hover:bg-app-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"><X aria-hidden="true" className="h-5 w-5" /></button>
+          ) : onToggleCollapsed && (
+            <button type="button" onClick={onToggleCollapsed} aria-label={compact ? "Expand navigation" : "Collapse navigation"} title={compact ? "Expand navigation" : "Collapse navigation"} aria-expanded={!compact} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-app-text-dim hover:bg-app-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300">{compact ? <ChevronRight aria-hidden="true" className="h-4 w-4" /> : <ChevronLeft aria-hidden="true" className="h-4 w-4" />}</button>
           )}
         </div>
-
-        {/* Collapsed desktop header (visible only when collapsed) */}
-        {collapsed && !mobile && (
-          <div className="flex flex-col items-center w-full py-2 md:block hidden">
-            {onSelectWorld ? (
-              <>
-                <Logo variant="symbol-small" ariaLabel="WorldForge" className="h-8 w-auto" />
-                <WorldSwitcher
-                  compact
-                  worlds={worlds}
-                  currentWorldId={currentWorldId}
-                  actorId={actorId ?? null}
-                  disabled={worldSwitchDisabled}
-                  onSelect={onSelectWorld}
-                  onNewWorld={() => onNewWorld?.()}
-                  onRefresh={onRefreshWorlds}
-                  onManage={onManageWorld}
-                  onBeforeManageAction={onBeforeManageAction}
-                />
-              </>
-            ) : (
-              <Logo variant="symbol-small" ariaLabel="WorldForge" className="h-8 w-auto" />
-            )}
+        {onSelectWorld ? (
+          <WorldSwitcher compact={compact} worlds={worlds} currentWorldId={currentWorldId} actorId={actorId ?? null}
+            disabled={worldSwitchDisabled} onSelect={onSelectWorld} onNewWorld={() => onNewWorld?.()}
+            onRefresh={onRefreshWorlds} onManage={onManageWorld} onBeforeManageAction={onBeforeManageAction} />
+        ) : !compact && (
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-extrabold tracking-tight">{worldTitle}</h2>
+            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--aw-sidebar-muted)]">{systemProfile(system).short}{system === "PF_2E" ? " · Remaster" : ""}</span>
           </div>
         )}
-
-        <div className={`${collapsed && !mobile ? "hidden md:block" : "hidden"} flex-1`} />
-        {!mobile && onToggleCollapsed && <button type="button" onClick={onToggleCollapsed} aria-label={collapsed ? "Expand navigation" : "Collapse navigation"} title={collapsed ? "Expand navigation" : "Collapse navigation"} aria-expanded={!collapsed} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-app-text-dim hover:bg-app-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300">{collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}</button>}
       </div>
       {mobile && <div className="shrink-0 px-4 pt-4"><button type="button" onClick={onOpenSearch} aria-label="Search this world" className="flex h-11 w-full items-center gap-3 rounded-lg border border-[var(--aw-sidebar-control-border)] bg-[var(--aw-sidebar)] px-3 text-left text-sm text-[var(--aw-sidebar-muted)] hover:border-highlight-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"><Search className="h-4 w-4" /><span>Search this world</span></button></div>}
       {!mobile && <button type="button" onClick={onOpenSearch} aria-label="Search this world" title="Search this world" className={`group relative mx-3 mt-2 flex min-h-11 items-center gap-3 rounded-lg border border-[var(--aw-sidebar-control-border)] bg-[var(--aw-sidebar)] px-3 text-sm text-[var(--aw-sidebar-muted)] hover:border-highlight-500 hover:text-app-text-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300 ${collapsed ? "md:hidden" : ""}`}><Search className="h-4 w-4 shrink-0" /><span>Search this world</span><kbd className="ml-auto text-xs text-[var(--aw-sidebar-muted)]">⌘ K</kbd></button>}
