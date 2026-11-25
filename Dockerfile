@@ -22,6 +22,7 @@ RUN printf '%s\n' \
     && apt-get update -y \
     && apt-get install -y --no-install-recommends \
       sqlite3 libsqlite3-0 ncurses-bin libtinfo6 zlib1g \
+    && apt-get install -y --no-install-recommends libzstd1=1.5.7+dfsg-1+deb13u1 \
     && chmod u-s /usr/bin/mount /usr/bin/umount \
     && apt-get purge -y --auto-remove curl gnupg \
     && rm -rf /var/lib/apt/lists/*

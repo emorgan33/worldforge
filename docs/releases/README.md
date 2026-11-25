@@ -131,6 +131,12 @@ reports 0 fixable findings; residual unfixed findings are recorded in
 [v0.4.13](v0.4.13.md) moves World contents out of the workspace rail into a
 contextual, pinnable explorer with a focus-managed mobile drawer and a
 keyboard-accessible template picker. It contains no migrations or configuration
-changes and leaves reader navigation untouched. Check its **Release Docker
-image** workflow before relying on a published image version; no digest is
-claimed here until that workflow records one.
+changes and leaves reader navigation untouched. Its **Release Docker image**
+workflow failed the fixable HIGH/CRITICAL gate before publishing, so no image
+version or digest should be attributed to it.
+
+[v0.4.14](v0.4.14.md) is the packaging-only correction: the image installs the
+Debian security `libzstd1` fix for CVE-2026-124851, restoring a passing scan
+gate. It carries the v0.4.13 application changes. Check the v0.4.14 **Release
+Docker image** workflow and its release-note image block before relying on a
+published image version.

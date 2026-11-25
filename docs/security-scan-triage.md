@@ -63,3 +63,24 @@ the unfixed ones.
 3. Re-evaluate vendor backports when dhi.io publishes newer Debian packages.
 4. Keep the full JSON report with release evidence for 30 days, matching the CI
    artifact policy; never attach it to public issues.
+
+## v0.4.14 packaging correction (2026-11-25)
+
+The v0.4.13 release workflow failed its image gate on one fixable HIGH finding:
+`CVE-2026-124851` in `libzstd1` `1.5.7+dfsg-1`, with Debian security fix
+`1.5.7+dfsg-1+deb13u1`. The dhi.io repository offered a higher `+dhi0`
+candidate, but that version was not the scanner-listed fix. v0.4.14 pins the
+Debian security version explicitly in the Dockerfile; no new vendor disposition
+is claimed for `libzstd1`.
+
+A local rebuild was checked with the same scripts as CI:
+
+```
+bash scripts/verify-vendor-patches.sh worldforge:local /tmp/.../vendor-0414.json
+bash scripts/scan-image.sh worldforge:local /tmp/.../scan-0414.json /tmp/.../vendor-0414.json
+```
+
+The result was `fixableHighCritical: 0`, `vendorResolvedHighCritical: 12`, and
+counts of 55 HIGH, 84 MEDIUM, 81 LOW, 18 UNKNOWN for `linux/amd64`; the HIGH
+count fell by one from the v0.4.13 scan. The release workflow repeats the check
+on both architectures before publishing.
