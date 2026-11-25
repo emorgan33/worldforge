@@ -208,7 +208,7 @@ export function Sidebar({
                 />
               </>
             ) : (
-              <Logo variant="symbol-small" ariaLabel="" className="h-8 w-auto" />
+              <Logo variant="symbol-small" ariaLabel="WorldForge" className="h-8 w-auto" />
             )}
           </div>
         )}
