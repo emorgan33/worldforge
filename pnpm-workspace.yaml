@@ -7,5 +7,9 @@ overrides:
   "@prisma/config>effect": "3.22.1"
   "@typescript-eslint/typescript-estree>minimatch": "^11.0.1"
 onlyBuiltDependencies:
+  - "@prisma/client"
+  - "@prisma/engines"
   - better-sqlite3
+  - esbuild
+  - prisma
 verifyDepsBeforeRun: false
