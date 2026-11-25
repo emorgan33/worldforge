@@ -16,8 +16,9 @@ this scan; apply the same dispositions to both.
 - Raw reports and vendor evidence were kept outside the repository under
   `/tmp/user/1000/opencode/p3-scan/` (23bd697),
   `/tmp/user/1000/opencode/p3-scan-193a003/` (report SHA-256 prefix
-  `89de9202ac70c7c2`), and `/tmp/user/1000/opencode/p3-scan-pnpm11/` (pnpm
-  11.29.0 rebuild); do not commit reports containing host or package metadata.
+  `89de9202ac70c7c2`), `/tmp/user/1000/opencode/p3-scan-pnpm11/` (pnpm 11.29.0
+  rebuild), and `/tmp/user/1000/opencode/p3-scan-final/` (final `3dfc6ad`
+  image); do not commit reports containing host or package metadata.
 
 ## Counts
 
