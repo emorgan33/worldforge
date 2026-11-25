@@ -113,7 +113,7 @@ export function Sidebar({
                 <div className="flex flex-col items-start w-full">
                   {/* Logo + WorldForge text at top */}
                   <div className="flex items-center gap-2 w-full mb-2">
-                    <Logo variant="symbol-small" ariaLabel="WorldForge" className="h-7 w-auto flex-shrink-0" />
+                    <Logo variant="symbol-small" ariaLabel="" className="h-7 w-auto flex-shrink-0" />
                     <span className="font-serif text-base font-bold text-[var(--aw-text)] truncate">WorldForge</span>
                   </div>
                   {/* WorldSwitcher as separate control beneath */}
@@ -138,7 +138,7 @@ export function Sidebar({
               {!onSelectWorld && !mobile && (
                 <>
                   <div className="flex items-center gap-2 mb-1">
-                    <Logo variant="symbol-small" ariaLabel="WorldForge" className="h-7 w-auto flex-shrink-0" />
+                    <Logo variant="symbol-small" ariaLabel="" className="h-7 w-auto flex-shrink-0" />
                     <span className="font-serif text-base font-bold text-[var(--aw-text)] truncate">WorldForge</span>
                   </div>
                   <h2 className="truncate text-sm font-extrabold tracking-tight">{worldTitle}</h2>
@@ -149,7 +149,7 @@ export function Sidebar({
               {mobile && onSelectWorld && (
                 <div className="flex flex-col items-start w-full py-2">
                   <div className="flex items-center gap-2 mb-2">
-                    <Logo variant="symbol-small" ariaLabel="WorldForge" className="h-6 w-auto flex-shrink-0" />
+                    <Logo variant="symbol-small" ariaLabel="" className="h-6 w-auto flex-shrink-0" />
                     <span className="font-serif text-base font-bold text-[var(--aw-text)]">WorldForge</span>
                   </div>
                   <WorldSwitcher
@@ -175,7 +175,7 @@ export function Sidebar({
               {!mobile && (
                 <>
                   <div className="flex items-center gap-2 mb-1">
-                    <Logo variant="symbol-small" ariaLabel="WorldForge" className="h-7 w-auto flex-shrink-0" />
+                    <Logo variant="symbol-small" ariaLabel="" className="h-7 w-auto flex-shrink-0" />
                     <span className="font-serif text-base font-bold text-[var(--aw-text)] truncate">WorldForge</span>
                   </div>
                   <h2 className="truncate text-sm font-extrabold tracking-tight">{worldTitle}</h2>
@@ -208,7 +208,7 @@ export function Sidebar({
                 />
               </>
             ) : (
-              <Logo variant="symbol-small" ariaLabel="WorldForge" className="h-8 w-auto" />
+              <Logo variant="symbol-small" ariaLabel="" className="h-8 w-auto" />
             )}
           </div>
         )}
