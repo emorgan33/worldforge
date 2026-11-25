@@ -1,17 +1,21 @@
 # Image scan triage — 2026-11-24
 
-Recorded scan of the locally built `worldforge:local` image serving
-`worldforge.deskt.theworkpc.com`. The image was built from commit `23bd697`
-(the code changes after it do not change the base packages).
+Recorded scans of locally built images. A fresh scan of commit `193a003`
+produced exactly the same package findings as the earlier `23bd697` image,
+confirming that the P2/P3 code changes introduce no new package inventory.
+`worldforge.deskt.theworkpc.com` still serves the `23bd697`-image built before
+this scan; apply the same dispositions to both.
 
 - Scanner: Trivy `0.76.2` (pinned in CI and documented in
   [container-security.md](container-security.md)).
 - Vendor evidence: `scripts/verify-vendor-patches.sh` verified 13
   vendor/backport dispositions for `amd64`.
 - Commands: `scripts/verify-vendor-patches.sh` then `scripts/scan-image.sh`.
-- Raw report and vendor evidence were kept outside the repository under
-  `/tmp/user/1000/opencode/p3-scan/`; do not commit reports containing host or
-  package metadata.
+- Raw reports and vendor evidence were kept outside the repository under
+  `/tmp/user/1000/opencode/p3-scan/` (23bd697) and
+  `/tmp/user/1000/opencode/p3-scan-193a003/` (fresh, report SHA-256 prefix
+  `89de9202ac70c7c2`); do not commit reports containing host or package
+  metadata.
 
 ## Counts
 
