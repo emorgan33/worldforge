@@ -24,10 +24,12 @@ interface LogoProps {
  */
 export function Logo({ variant = "horizontal", className = "", ariaLabel }: LogoProps) {
   const [theme, setTheme] = useState<ThemeId | null>(null);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(false);
 
   useEffect(() => {
     const rootTheme = document.documentElement.dataset.theme as ThemeId | undefined;
     setTheme(rootTheme ?? "night-watch");
+    setSystemPrefersDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
 
     // Listen for theme changes
     const observer = new MutationObserver(() => {
@@ -36,11 +38,12 @@ export function Logo({ variant = "horizontal", className = "", ariaLabel }: Logo
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
-    // Also listen for OS color-scheme changes when using "system" theme
+    // Also listen for OS color-scheme changes
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => {
-      const currentTheme = document.documentElement.dataset.theme as ThemeId | undefined;
-      if (currentTheme === "system") {
+    const handleChange = (e: MediaQueryListEvent) => {
+      setSystemPrefersDark(e.matches);
+      // If using "system" theme, force re-render to pick up new color
+      if (document.documentElement.dataset.theme === "system") {
         setTheme("system");
       }
     };
@@ -55,7 +58,7 @@ export function Logo({ variant = "horizontal", className = "", ariaLabel }: Logo
   const darkThemes: ThemeId[] = ["night-watch", "true-black"];
   const lightThemes: ThemeId[] = ["daylight", "pathfinder", "dnd"];
 
-  const isDark = theme ? darkThemes.includes(theme) || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches) : false;
+  const isDark = theme ? darkThemes.includes(theme) || (theme === "system" && systemPrefersDark) : false;
   const color: LogoColor = isDark ? "reversed" : "slate";
 
   const variantPath = variant === "horizontal" ? "horizontal" : variant === "stacked" ? "stacked" : variant === "symbol-small" ? "symbol-small" : "symbol";
@@ -66,7 +69,7 @@ export function Logo({ variant = "horizontal", className = "", ariaLabel }: Logo
   const alt = ariaLabel ?? defaultAria;
 
   // Intrinsic dimensions per branding guide (width:height aspect ratios)
-  // Let CSS control display size via className/style; provide intrinsic width/height for layout stability
+  // Provide width/height for layout stability; let CSS control display size
   const intrinsicWidth = variant === "horizontal" ? 316 : variant === "stacked" ? 200 : 80;
   const intrinsicHeight = variant === "horizontal" ? 74 : variant === "stacked" ? 132 : 84;
 
@@ -77,7 +80,7 @@ export function Logo({ variant = "horizontal", className = "", ariaLabel }: Logo
       className={className}
       width={intrinsicWidth}
       height={intrinsicHeight}
-      style={{ height: "auto" }}
+      // No inline height:auto - let caller control proportional sizing via CSS
     />
   );
 }

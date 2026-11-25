@@ -10,7 +10,7 @@ export function AuthForm({ setup = false }: { setup?: boolean }) {
   useEffect(() => { if (initialized.current) return; initialized.current = true; if (setup) { const hash = new URLSearchParams(window.location.hash.slice(1)); setToken(hash.get("token") || ""); window.history.replaceState(null, "", window.location.pathname); } }, [setup]);
   return <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center bg-app-canvas p-8 text-app-text">
     <div className="flex flex-col items-center mb-6">
-      <ResponsiveLogo className="w-auto max-w-full" />
+      <ResponsiveLogo className="w-auto max-w-full" adjacentTextNamesApp={!setup} />
       <h1 className="mt-4 font-serif text-3xl font-bold text-primary-200 text-center">{setup ? "Set up your author account" : "Sign in to WorldForge"}</h1>
     </div>
     <p className="mt-3 leading-relaxed text-app-text-dim">{setup ? "Choose the email and password you\u2019ll use to access your author workspace." : "Your author workspace is private. Public world pages are available without signing in."}</p>
