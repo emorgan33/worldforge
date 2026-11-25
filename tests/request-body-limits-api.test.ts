@@ -52,7 +52,30 @@ test("JSON mutation bodies are capped before authorization parses them", { skip:
   } as RequestInit);
   assert.equal(chunked.status, 413, await chunked.clone().text());
 
-  // A normal-sized mutation still reaches its handler.
+  // A normal-sized mutation is replayed to its handler and persists.
   const normal = await send("/api/articles", JSON.stringify({ worldId: world.id, title: "Small article", template: "GENERIC", contentHtml: "<p>Hello</p>" }));
-  assert.notEqual(normal.status, 413, await normal.clone().text());
+  assert.equal(normal.status, 201, await normal.clone().text());
+  assert.equal((await db.article.findFirst({ where: { worldId: world.id, title: "Small article" } }))?.contentHtml, "<p>Hello</p>");
+
+  // Malformed JSON is a client error, not a size failure or a 500.
+  const malformed = await send("/api/articles", "{not json");
+  assert.equal(malformed.status, 400, await malformed.clone().text());
+
+  // A valid chunked body without Content-Length is buffered and replayed too.
+  const chunkedStream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const payload = JSON.stringify({ worldId: world.id, title: "Chunked article", template: "GENERIC", contentHtml: "<p>Chunked</p>" });
+      controller.enqueue(new TextEncoder().encode(payload.slice(0, 20)));
+      controller.enqueue(new TextEncoder().encode(payload.slice(20)));
+      controller.close();
+    },
+  });
+  const chunkedCreate = await owned(`${origin}/api/articles`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: chunkedStream as unknown as BodyInit,
+    duplex: "half",
+  } as RequestInit);
+  assert.equal(chunkedCreate.status, 201, await chunkedCreate.clone().text());
+  assert.ok(await db.article.findFirst({ where: { worldId: world.id, title: "Chunked article" } }));
 });
