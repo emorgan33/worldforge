@@ -100,9 +100,9 @@ result=$(docker run --rm -v "$volume:/data" --user 10001:10001 \
     test -z "$(find /data/assets -type d \( ! -user 10001 -o ! -group 10001 -o ! -perm 700 \) -print -quit)"
     actual=$(find /data/assets -type f | wc -l | tr -d " ")
     test "$actual" = "$EXPECTED_ASSETS"
-    current_unfinished=$(sqlite3 /data/worldforge.db "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;" | while IFS= read -r name; do [ -d "/app/prisma/migrations/$name" ] && echo "$name"; done)
+    current_unfinished=$(sqlite3 /data/worldforge.db "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;" | while IFS= read -r name; do if [ -d "/app/prisma/migrations/$name" ]; then echo "$name"; fi; done)
     test -z "$current_unfinished"
-    legacy_unfinished=$(sqlite3 /data/worldforge.db "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;" | while IFS= read -r name; do [ -d "/app/prisma/migrations/$name" ] || echo "$name"; done | wc -l | tr -d " ")
+    legacy_unfinished=$(sqlite3 /data/worldforge.db "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;" | while IFS= read -r name; do if [ ! -d "/app/prisma/migrations/$name" ]; then echo "$name"; fi; done | wc -l | tr -d " ")
     migrations=$(sqlite3 /data/worldforge.db "SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL;")
     test "$migrations" -gt 0
     referenced=$(sqlite3 /data/worldforge.db "SELECT COUNT(*) FROM ImageAsset;")
