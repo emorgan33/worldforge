@@ -39,6 +39,10 @@ test("World contents explorer keeps a usable height in Articles on a short viewp
     await page.getByRole("button", { name: "Articles", exact: true }).click();
     const explorer = page.locator("#world-contents-explorer");
     await expect(explorer).toBeVisible();
+    const toggleBox = (await page.getByRole("button", { name: "Hide world contents" }).boundingBox())!;
+    const explorerBox = (await explorer.boundingBox())!;
+    // The explorer toggle sits beside the rail, not in the right-hand toolbar cluster.
+    expect(toggleBox.x - explorerBox.x).toBeLessThan(24);
     const sizes = await page.evaluate(() => {
       const section = document.querySelector('#world-contents-explorer section[aria-label="World contents"]');
       const inner = section?.querySelector(".sidebar-lore-scroll");
