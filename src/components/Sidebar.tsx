@@ -103,16 +103,21 @@ export function Sidebar({
   return (
     <aside role={mobile ? "dialog" : undefined} aria-modal={mobile || undefined} aria-label={mobile ? "World menu" : undefined} className={`relative flex h-full w-full select-none flex-col overflow-y-auto border-r border-[var(--aw-sidebar-border)] bg-[var(--aw-sidebar)] text-[var(--aw-text)] ${collapsed && !mobile ? "md:items-center" : ""}`}>
       {mobile && <div className="flex h-[65px] shrink-0 items-center justify-between border-b border-[var(--aw-sidebar-border)] bg-[var(--aw-sidebar)] px-5"><span className="text-xs font-bold">WORLD MENU</span><button type="button" onClick={onCloseMobile} aria-label="Close campaign navigation" className="flex h-11 w-11 items-center justify-center rounded-lg text-app-text-dim hover:bg-app-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300"><X className="h-5 w-5" /></button></div>}
-      <div className={`flex h-16 shrink-0 items-center gap-3 bg-[var(--aw-sidebar)] ${collapsed && !mobile ? "md:h-auto md:flex-col md:gap-2 md:px-2 md:py-3" : "px-4 py-2"}`}>
+      <div className={`flex shrink-0 items-start gap-3 bg-[var(--aw-sidebar)] ${collapsed && !mobile ? "md:h-auto md:flex-col md:gap-2 md:px-2 md:py-3" : "px-4 py-2"}`}>
         {/* Expanded desktop header (hidden when collapsed) */}
         <div className={`${collapsed && !mobile ? "hidden" : "flex-1 min-w-0"}`}>
           {onSelectWorld ? (
             <>
-              {/* Expanded with world switching: horizontal logo + separate world switcher */}
+              {/* Expanded with world switching: logo ABOVE WorldSwitcher */}
               {!mobile && (
-                <div className="flex items-center justify-between w-full mb-2">
-                  <Logo variant="horizontal" ariaLabel="" className="h-8 w-auto max-w-[calc(100%-120px)]" />
-                  <div className="flex-1 max-w-full">
+                <div className="flex flex-col items-start w-full">
+                  {/* Logo + WorldForge text at top */}
+                  <div className="flex items-center gap-2 w-full mb-2">
+                    <Logo variant="symbol-small" ariaLabel="WorldForge" className="h-7 w-auto flex-shrink-0" />
+                    <span className="font-serif text-base font-bold text-[var(--aw-text)] truncate">WorldForge</span>
+                  </div>
+                  {/* WorldSwitcher as separate control beneath */}
+                  <div className="w-full">
                     <WorldSwitcher
                       brand={false}
                       mobileCard={false}
@@ -132,7 +137,10 @@ export function Sidebar({
               {/* Expanded without world switching: logo + world title + system */}
               {!onSelectWorld && !mobile && (
                 <>
-                  <Logo variant="horizontal" ariaLabel="WorldForge" className="h-8 w-auto mb-1" />
+                  <div className="flex items-center gap-2 mb-1">
+                    <Logo variant="symbol-small" ariaLabel="WorldForge" className="h-7 w-auto flex-shrink-0" />
+                    <span className="font-serif text-base font-bold text-[var(--aw-text)] truncate">WorldForge</span>
+                  </div>
                   <h2 className="truncate text-sm font-extrabold tracking-tight">{worldTitle}</h2>
                   <span className="text-xs font-semibold uppercase tracking-wider text-[var(--aw-sidebar-muted)]">{systemProfile(system).short}{system === "PF_2E" ? " · Remaster" : ""}</span>
                 </>
@@ -140,7 +148,10 @@ export function Sidebar({
               {/* Mobile expanded: logo + world switcher */}
               {mobile && onSelectWorld && (
                 <div className="flex flex-col items-start w-full py-2">
-                  <Logo variant="horizontal" ariaLabel="WorldForge" className="h-7 w-auto mb-2" />
+                  <div className="flex items-center gap-2 mb-2">
+                    <Logo variant="symbol-small" ariaLabel="WorldForge" className="h-6 w-auto flex-shrink-0" />
+                    <span className="font-serif text-base font-bold text-[var(--aw-text)]">WorldForge</span>
+                  </div>
                   <WorldSwitcher
                     mobileCard={true}
                     worlds={worlds}
@@ -163,7 +174,10 @@ export function Sidebar({
               {/* Expanded without world switching: logo + world title + system */}
               {!mobile && (
                 <>
-                  <Logo variant="horizontal" ariaLabel="WorldForge" className="h-8 w-auto mb-1" />
+                  <div className="flex items-center gap-2 mb-1">
+                    <Logo variant="symbol-small" ariaLabel="WorldForge" className="h-7 w-auto flex-shrink-0" />
+                    <span className="font-serif text-base font-bold text-[var(--aw-text)] truncate">WorldForge</span>
+                  </div>
                   <h2 className="truncate text-sm font-extrabold tracking-tight">{worldTitle}</h2>
                   <span className="text-xs font-semibold uppercase tracking-wider text-[var(--aw-sidebar-muted)]">{systemProfile(system).short}{system === "PF_2E" ? " · Remaster" : ""}</span>
                 </>
