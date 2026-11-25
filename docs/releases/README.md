@@ -112,3 +112,18 @@ and `linux/arm64` child
 `sha256:14b6a4160217889fb9efa20205f07a12ad460c64da67eb22b5291e0d561824d9`.
 The workflow appended that image section to the GitHub release after
 re-verifying both published children.
+
+[v0.4.12](v0.4.12.md) publishes shared player maps, What's new, bookmarks, the
+player notebook, the security-hardening pass, pnpm 11.29.0, and the sidebar
+World contents fix. Its **Release Docker image** workflow succeeded, and the
+registry confirms that `0.4.12`, its full-SHA tag, and `latest` resolve to the
+multi-platform index
+`sha256:e5e6b72d49fd9ca0e7ac439aebb9798b56fea41fbb8224897dfae542ab64d221`,
+with `linux/amd64` child
+`sha256:82db6fbf48eb5035f39e8e6b1cac01936bd825b8a57bf4de43f198d5819b9ad3`
+and `linux/arm64` child
+`sha256:d46186610654f05cf5c4d40db8ea5409d3552b1c3bffe0cfeae5db3c0b1d9783`.
+The workflow appended that image section to the GitHub release after
+re-verifying both children. A fresh Trivy 0.76.2 scan of the release image
+reports 0 fixable findings; residual unfixed findings are recorded in
+`docs/security-scan-triage.md`.
