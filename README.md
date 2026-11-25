@@ -26,7 +26,7 @@ your use, and keep backups of your campaign data. See the
 
 ### Mobile
 
-![Mobile Aethelgard campaign desk with creation shortcuts and the Next Session panel](docs/screenshots/author-workspace-mobile.png)
+![Mobile Aethelgard campaign desk with creation shortcuts and the Next Session panel](docs/screenshots/mobile-campaign-desk.png)
 
 Both views come from the optional Aethelgard demo seed and show the Night Watch
 author workspace. The **Interface theme** dropdown in the top-right now offers
