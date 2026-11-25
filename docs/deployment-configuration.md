@@ -216,7 +216,10 @@ and restore those two paths together as documented in
 startup migrations and the server. A new named volume inherits ownership from
 the image. Before starting this image with an existing volume, stop the service,
 back up the volume, then run
-`docker compose run --rm --no-deps --user root --entrypoint sh worldforge -c 'chown -R 10001:10001 /data'`.
+`docker compose run --rm --no-deps --user root --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --entrypoint sh worldforge -c 'chown -R 10001:10001 /data'`.
+The service drops all capabilities, so this one-off repair explicitly adds only
+`CHOWN`, `DAC_OVERRIDE`, and `FOWNER`; it is not needed for normal startup. Verify
+with `docker compose run --rm --user 10001:10001 --entrypoint sh worldforge -c 'stat -c %u:%g /data/worldforge.db'`.
 For bind mounts, assign the same ownership on the host. The runtime image
 includes SQLite's `sqlite3` CLI for recovery snapshots and integrity checks.
 The security candidate uses Node 22 on Debian 13 with pnpm `10.34.9`; unused

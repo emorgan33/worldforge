@@ -93,10 +93,12 @@ access, encrypt disks or backup media where appropriate, and protect backups as
 carefully as the live installation. Browser recovery drafts and previously
 downloaded files remain on client devices after server logout.
 
-Server logs record operation labels and error messages, not request bodies,
-article or note content, passwords, or session tokens; shared helpers avoid
-serializing arbitrary error objects. Setup links are printed only by the explicit
-`pnpm auth:setup` CLI, so protect terminal output and shell history.
+Server logs record an operation label, the error class, and an allowlisted code
+(for example Prisma `P2002`), not error messages, request bodies, article or note
+content, passwords, or session tokens. Prisma's automatic query/error logging is
+disabled in production; routes report failures through the shared helper. Setup
+links are printed only by the explicit `pnpm auth:setup` CLI, so protect terminal
+output and shell history.
 
 ## Reporting vulnerabilities
 

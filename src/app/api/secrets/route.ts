@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { withAuthor } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { logServerError } from "@/lib/logging";
 
 async function getHandler(req: NextRequest) {
   try {
@@ -25,7 +26,7 @@ async function getHandler(req: NextRequest) {
 
     return NextResponse.json(secrets);
   } catch (error: unknown) {
-    console.error("Failed to fetch secrets:", error);
+    logServerError("Failed to fetch secrets", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process request." }, { status: 500 });
   }
 }
@@ -52,7 +53,7 @@ async function postHandler(req: NextRequest) {
 
     return NextResponse.json(secret, { status: 201 });
   } catch (error: unknown) {
-    console.error("Failed to create secret:", error);
+    logServerError("Failed to create secret", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process request." }, { status: 500 });
   }
 }
@@ -77,7 +78,7 @@ async function patchHandler(req: NextRequest) {
 
     return NextResponse.json(updated);
   } catch (error: unknown) {
-    console.error("Failed to update secret:", error);
+    logServerError("Failed to update secret", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to process request." }, { status: 500 });
   }
 }

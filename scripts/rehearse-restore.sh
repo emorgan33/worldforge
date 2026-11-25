@@ -3,11 +3,12 @@
 #
 #   bash scripts/rehearse-restore.sh backups/worldforge-TIMESTAMP.tar.gz [IMAGE]
 #
-# The archive must contain worldforge.db, assets/ and optionally manifest.txt
-# under one top-level directory, as produced by docs/backup-restore.md. The live
-# service and its volume are never touched: the script creates a synthetic
-# volume, applies the documented restore command, and verifies integrity,
-# ownership, permissions, and asset count as UID/GID 10001.
+# The archive must contain exactly one top-level directory with worldforge.db,
+# assets/ and optionally manifest.txt, as produced by docs/backup-restore.md.
+# The live service and its volume are never touched: the script creates a
+# synthetic volume, applies the documented restore command, and verifies
+# integrity, migrations, ownership, permissions, database-referenced assets, and
+# the archived asset count as UID/GID 10001.
 set -euo pipefail
 
 archive="${1:?Usage: bash scripts/rehearse-restore.sh BACKUP.tar.gz [IMAGE]}"
@@ -18,20 +19,56 @@ docker image inspect "$image" >/dev/null 2>&1 || { echo "Image not found locally
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/worldforge-restore-XXXXXX")
 volume="worldforge-restore-rehearsal-$(date +%s)-$$"
+volume_created=0
 cleanup() {
-  docker volume rm -f "$volume" >/dev/null 2>&1 || true
+  status=$?
   rm -rf "$tmp"
+  if [ "$volume_created" = 1 ]; then
+    if ! docker volume rm -f "$volume" >/dev/null 2>&1; then
+      echo "FAIL: could not remove disposable volume $volume; it may contain backup data." >&2
+      status=1
+    fi
+  fi
+  exit "$status"
 }
 trap cleanup EXIT
 
-tar -xzf "$archive" -C "$tmp"
-db=$(find "$tmp" -maxdepth 3 -name worldforge.db -type f | head -n1)
-[ -n "$db" ] || { echo "Backup archive has no worldforge.db" >&2; exit 1; }
-restore_root=$(dirname "$db")
-[ -d "$restore_root/assets" ] || { echo "Backup archive has no assets directory beside the database" >&2; exit 1; }
+# Reject links, devices, absolute paths, traversal, and multiple recovery roots
+# before anything is extracted.
+python3 - "$archive" "$tmp" <<'PY'
+import os, sys, tarfile
+
+archive, dest = sys.argv[1], sys.argv[2]
+problems = []
+roots = set()
+with tarfile.open(archive) as bundle:
+    members = bundle.getmembers()
+    for member in members:
+        name = member.name
+        parts = name.split("/")
+        if name.startswith("/") or ".." in parts or "" in parts[:-1]:
+            problems.append(f"unsafe path: {name}")
+            continue
+        if not (member.isfile() or member.isdir()):
+            problems.append(f"unsupported entry type: {name}")
+            continue
+        roots.add(parts[0])
+    if len(roots) != 1:
+        problems.append(f"archive must contain exactly one top-level directory (found {len(roots)})")
+    if problems:
+        print("\n".join(problems), file=sys.stderr)
+        raise SystemExit(1)
+    bundle.extractall(dest, filter="data")
+PY
+
+mapfile -t databases < <(find "$tmp" -type f -name worldforge.db -print)
+[ "${#databases[@]}" -eq 1 ] || { echo "Backup must contain exactly one worldforge.db (found ${#databases[@]})" >&2; exit 1; }
+restore_root=$(dirname "${databases[0]}")
+[ -d "$restore_root/assets" ] || { echo "Backup has no assets directory beside the database" >&2; exit 1; }
 expected_assets=$(find "$restore_root/assets" -type f | wc -l | tr -d ' ')
 
 docker volume create "$volume" >/dev/null
+volume_created=1
 docker run --rm --user 0:0 \
   -v "$volume:/data" \
   -v "$restore_root:/restore:ro" \
@@ -54,21 +91,33 @@ result=$(docker run --rm -v "$volume:/data" --user 10001:10001 \
   --entrypoint sh "$image" -c '
     set -e
     test "$(id -u)" = 10001
+    test "$(id -g)" = 10001
     test "$(sqlite3 /data/worldforge.db "PRAGMA integrity_check;")" = ok
+    test "$(stat -c %u:%g:%a /data/worldforge.db)" = "10001:10001:600"
     test -d /data/assets
-    test "$(stat -c %u /data/worldforge.db)" = 10001
-    test "$(stat -c %a /data/worldforge.db)" = 600
-    test "$(stat -c %u /data/assets)" = 10001
-    test "$(stat -c %a /data/assets)" = 700
+    test "$(stat -c %u:%g:%a /data/assets)" = "10001:10001:700"
+    test -z "$(find /data/assets -type f \( ! -user 10001 -o ! -group 10001 -o ! -perm 600 \) -print -quit)"
+    test -z "$(find /data/assets -type d \( ! -user 10001 -o ! -group 10001 -o ! -perm 700 \) -print -quit)"
     actual=$(find /data/assets -type f | wc -l | tr -d " ")
     test "$actual" = "$EXPECTED_ASSETS"
-    test -z "$(find /data/assets -type f ! -perm 600 -print -quit)"
-    tables=$(sqlite3 /data/worldforge.db "SELECT COUNT(*) FROM sqlite_master;")
-    migrations=$(sqlite3 /data/worldforge.db "SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL;")
-    test "$tables" -gt 0
+    current_unfinished=$(sqlite3 /data/worldforge.db "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;" | while IFS= read -r name; do [ -d "/app/prisma/migrations/$name" ] && echo "$name"; done)
+    test -z "$current_unfinished"
+    legacy_unfinished=$(sqlite3 /data/worldforge.db "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;" | while IFS= read -r name; do [ -d "/app/prisma/migrations/$name" ] || echo "$name"; done | wc -l | tr -d " ")
+    migrations=$(sqlite3 /data/worldforge.db "SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL;")
     test "$migrations" -gt 0
-    printf "rehearsal-ok tables=%s migrations=%s assets=%s\n" "$tables" "$migrations" "$actual"
+    referenced=$(sqlite3 /data/worldforge.db "SELECT COUNT(*) FROM ImageAsset;")
+    missing=$(sqlite3 /data/worldforge.db "SELECT id FROM ImageAsset;" | while IFS= read -r id; do [ -f "/data/assets/$id.webp" ] || echo "$id"; done)
+    test -z "$missing"
+    tables=$(sqlite3 /data/worldforge.db "SELECT COUNT(*) FROM sqlite_master;")
+    test "$tables" -gt 0
+    printf "rehearsal-ok tables=%s migrations=%s legacy-unfinished=%s referenced-assets=%s archived-assets=%s\n" "$tables" "$migrations" "$legacy_unfinished" "$referenced" "$actual"
   ')
+
+if ! docker volume rm -f "$volume" >/dev/null 2>&1; then
+  echo "FAIL: could not remove disposable volume $volume; it may contain backup data." >&2
+  exit 1
+fi
+volume_created=0
 
 echo "Restore rehearsal passed for $archive using image $image."
 echo "$result"

@@ -105,6 +105,9 @@ timelines, and map annotation order.
 
 Use a schedule appropriate to how much campaign work you can afford to lose.
 Keep multiple generations, retain at least one off-host copy, and test restores.
+Copy each verified archive to a different machine or encrypted storage outside
+the WorldForge host; a copy only inside the Docker volume or on the same disk is
+not a backup.
 Back up immediately before upgrades, account deletion, ownership changes, or
 storage maintenance.
 
