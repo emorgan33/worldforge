@@ -209,9 +209,8 @@ test("mobile author navigation gives World contents the remaining drawer space",
   for (const destination of ["Home", "Articles", "Maps", "Timelines", "Sessions", "Compendium", "DM tools"]) {
     assert(html.includes(`aria-label="${destination}"`));
   }
-  assert(html.includes('aria-label="World contents" class="sidebar-lore-scroll min-h-0 flex-1 border-b'));
-  assert(html.includes("flex flex-col overflow-hidden"));
-  assert(html.includes("overflow-x-hidden overflow-y-auto min-h-0 flex-1"));
+  assert(html.includes('aria-label="World contents" class="sidebar-lore-scroll flex min-h-[12rem] flex-1 flex-col overflow-hidden border-b'));
+  assert(html.includes("sidebar-lore-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto"));
   assert(html.includes('aria-label="Collapse Places"'));
   assert(html.includes("flex h-11 w-11 shrink-0 items-center justify-center"));
 });
