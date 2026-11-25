@@ -25,7 +25,7 @@ RUN printf '%s\n' \
     && chmod u-s /usr/bin/mount /usr/bin/umount \
     && apt-get purge -y --auto-remove curl gnupg \
     && rm -rf /var/lib/apt/lists/*
-RUN corepack enable && corepack prepare pnpm@10.34.9 --activate
+RUN corepack enable && corepack prepare pnpm@11.29.0 --activate
 WORKDIR /app
 
 # Install dependencies without lifecycle scripts; Prisma and native builds are
@@ -63,6 +63,7 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/resources ./resources
 COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 COPY --from=build /app/next.config.ts ./next.config.ts
 COPY --from=build /app/tsconfig.json ./tsconfig.json

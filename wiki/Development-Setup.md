@@ -2,7 +2,7 @@
 
 Docker is the supported self-hosting route. This page is for contributors working
 on a separate checkout, never a running user's database. Use Node.js 22+ and the
-`pnpm@10.34.9` pinned in `package.json` (Corepack or your package manager).
+`pnpm@11.29.0` pinned in `package.json` (Corepack or your package manager).
 
 Follow the canonical [CONTRIBUTING setup](https://github.com/emorgan33/worldforge/blob/main/CONTRIBUTING.md#local-development-setup)
 for cloning, dependencies, environment, migrations, and local startup. Generate

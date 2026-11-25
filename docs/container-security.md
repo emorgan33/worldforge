@@ -35,7 +35,8 @@ when a report was produced. A database/scan failure is not a clean scan.
 ## Runtime hardening
 
 The security candidate uses Node 22 on Debian 13 (`trixie-slim`) and pnpm
-`10.34.9`, pinned in `Dockerfile` and `package.json`. The separate bundled
+`11.29.0`, pinned in `Dockerfile` and `package.json`; install settings live in
+`pnpm-workspace.yaml`. The separate bundled
 npm/npx installation is removed from the runtime because WorldForge uses pnpm.
 This removes unused vulnerable code, rather than hiding scanner output.
 

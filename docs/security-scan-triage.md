@@ -12,17 +12,17 @@ this scan; apply the same dispositions to both.
   vendor/backport dispositions for `amd64`.
 - Commands: `scripts/verify-vendor-patches.sh` then `scripts/scan-image.sh`.
 - Raw reports and vendor evidence were kept outside the repository under
-  `/tmp/user/1000/opencode/p3-scan/` (23bd697) and
-  `/tmp/user/1000/opencode/p3-scan-193a003/` (fresh, report SHA-256 prefix
-  `89de9202ac70c7c2`); do not commit reports containing host or package
-  metadata.
+  `/tmp/user/1000/opencode/p3-scan/` (23bd697),
+  `/tmp/user/1000/opencode/p3-scan-193a003/` (report SHA-256 prefix
+  `89de9202ac70c7c2`), and `/tmp/user/1000/opencode/p3-scan-pnpm11/` (pnpm
+  11.29.0 rebuild); do not commit reports containing host or package metadata.
 
 ## Counts
 
 | Severity | Total | Scanner-listed fix | No fix listed |
 | --- | ---: | ---: | ---: |
 | HIGH | 55 | 0 | 55 |
-| MEDIUM | 86 | 2 | 84 |
+| MEDIUM | 84 | 0 | 84 |
 | LOW | 81 | 0 | 81 |
 | UNKNOWN | 18 | 0 | 18 |
 
@@ -42,11 +42,13 @@ the unfixed ones.
   attacker-controlled input, but that is an exposure assessment, not proof of
   safety. Rebuild when Debian/dhi.io publish fixes; the weekly CI scan records
   changes.
-- **2 fixable MEDIUM** are Node.js inventory entries `glob 10.5.0` and
-  `minimatch 9.0.9` (CVE-2026-118773, CVE-2026-118764). They are dependency/CLI
-  tooling, not part of the Next.js request path, and MEDIUM does not block the
-  release policy. Track them in the next dependency refresh rather than forcing a
-  major tooling upgrade inside this hardening pass.
+- **Fixable MEDIUM resolved:** the two earlier entries (`glob 10.5.0` and
+  `minimatch 9.0.9`, CVE-2026-118773 and CVE-2026-118764) came from pnpm
+  10.34.9's bundled CLI, not the application dependency tree. Upgrading the
+  pinned package manager to pnpm 11.29.0 (which bundles neither package) and
+  moving install settings to `pnpm-workspace.yaml` removes both. A rebuilt image
+  rescan reports **0 fixable findings** at any severity; counts are 55 HIGH, 84
+  MEDIUM, 81 LOW, 18 UNKNOWN, all without a scanner-listed fix.
 - **UNKNOWN/LOW/MEDIUM with no fix** are retained in the report and reviewed
   with the next base-image rebuild; they are not treated as approved exceptions.
 

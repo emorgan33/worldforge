@@ -222,7 +222,7 @@ The service drops all capabilities, so this one-off repair explicitly adds only
 with `docker compose run --rm --user 10001:10001 --entrypoint sh worldforge -c 'stat -c %u:%g /data/worldforge.db'`.
 For bind mounts, assign the same ownership on the host. The runtime image
 includes SQLite's `sqlite3` CLI for recovery snapshots and integrity checks.
-The security candidate uses Node 22 on Debian 13 with pnpm `10.34.9`; unused
+The security candidate uses Node 22 on Debian 13 with pnpm `11.29.0`; unused
 npm/npx are removed from the runtime. Use supported `pnpm` commands for
 operations, not `npm`/`npx`. The `/data` layout and UID/GID are unchanged.
 It also keeps the installed package tree intact: Prisma CLI is needed for runtime
