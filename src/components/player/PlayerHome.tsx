@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, BookOpen, LogOut, NotebookPen, Trash2, Users } from "lucide-react";
+import { ResponsiveLogo } from "@/components/ui/ResponsiveLogo";
 
 type PlayerWorld = { id: string; slug: string; title: string; description?: string | null };
 type ActivityItem = { id: string; kind: "article" | "map"; label: string; title: string; worldTitle: string; href: string; occurredAt: string };
@@ -96,7 +97,12 @@ export default function PlayerHome({ name, email }: { name: string | null; email
   return <main className="min-h-screen bg-app-canvas px-5 py-8 text-app-text-strong sm:px-8">
     <div className="mx-auto max-w-6xl">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-app-border pb-6">
-        <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary-400">WorldForge · Player</p><h1 className="mt-2 font-serif text-3xl font-bold">Your worlds</h1><p className="mt-1 text-sm text-app-muted">Welcome{ name ? `, ${name}` : ""}. Choose a world to continue reading.</p></div>
+        <div className="flex flex-col items-start">
+          <ResponsiveLogo className="w-auto max-w-full mb-2" />
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary-400">WorldForge · Player</p>
+          <h1 className="mt-2 font-serif text-3xl font-bold">Your worlds</h1>
+          <p className="mt-1 text-sm text-app-muted">Welcome{ name ? `, ${name}` : ""}. Choose a world to continue reading.</p>
+        </div>
         <div className="flex flex-wrap items-center gap-3"><Link href="/player/notebook" className="inline-flex items-center gap-2 rounded-lg border border-app-border-strong px-3 py-2 text-sm text-app-text-dim hover:border-primary-500/60 hover:text-primary-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"><NotebookPen className="h-4 w-4" aria-hidden="true" />Notebook</Link><Link href="/" className="inline-flex items-center gap-2 rounded-lg border border-app-border-strong px-3 py-2 text-sm text-app-text-dim hover:border-app-border-emphasis-strong hover:text-app-text-bright focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"><ArrowLeft className="h-4 w-4" aria-hidden="true" />Back to main site</Link><span className="hidden text-sm text-app-subtle sm:inline">{email}</span><button onClick={signOut} disabled={signingOut} className="inline-flex items-center gap-2 rounded-lg border border-app-border-strong px-3 py-2 text-sm text-app-text-dim hover:border-app-border-emphasis-strong disabled:opacity-50"><LogOut className="h-4 w-4" />{signingOut ? "Signing out…" : "Sign out"}</button></div>
       </header>
       <section aria-labelledby="player-whats-new" className="border-b border-app-border py-8">

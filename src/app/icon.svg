@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img"><title>WorldForge</title><path fill="#34445F" d="M0 0h512v512H0z"/><g transform="translate(96 88) scale(1.6)"><defs xmlns="http://www.w3.org/2000/svg" id="defs3" />
+  <g xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#F3ECDD" stroke-width="11" stroke-linejoin="round" id="g2">
+    <path d="m100 22 76 42v87l-76 38-76-38V64Z" id="path1" />
+    <path d="m24 64 76 42 76-42M100 106v83" id="path2" />
+  </g>
+  <path xmlns="http://www.w3.org/2000/svg" fill="#F3ECDD" d="m100 45 17 21-17 21-17-21Z" id="path3" />
+</g></svg>

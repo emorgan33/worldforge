@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
 import { ArticleTree, TreeMove } from "./ArticleTree";
 import { ArticleListItem, ArticleTemplateType, CategoryItem } from "@/types";
 import { TemplateIcon } from "@/components/TemplateIcon";
@@ -107,6 +108,8 @@ export function Sidebar({
           {onSelectWorld ? <WorldSwitcher brand={!mobile} mobileCard={mobile} worlds={worlds} currentWorldId={currentWorldId} actorId={actorId ?? null} disabled={worldSwitchDisabled} onSelect={onSelectWorld} onNewWorld={() => onNewWorld?.()} onRefresh={onRefreshWorlds} onManage={onManageWorld} onBeforeManageAction={onBeforeManageAction} /> : <><h2 className="truncate text-sm font-extrabold tracking-tight">{worldTitle}</h2><span className="text-xs font-semibold uppercase tracking-wider text-[var(--aw-sidebar-muted)]">{systemProfile(system).short}{system === "PF_2E" ? " · Remaster" : ""}</span></>}
         </div>
         {onSelectWorld && collapsed && !mobile && <div className="hidden md:block"><WorldSwitcher compact worlds={worlds} currentWorldId={currentWorldId} actorId={actorId ?? null} disabled={worldSwitchDisabled} onSelect={onSelectWorld} onNewWorld={() => onNewWorld?.()} onRefresh={onRefreshWorlds} onManage={onManageWorld} onBeforeManageAction={onBeforeManageAction} /></div>}
+        {/* Collapsed sidebar: show compact WorldForge logo */}
+        {collapsed && !mobile && <div className="flex items-center justify-center w-full py-2 md:order-first"><Logo variant="symbol-small" ariaLabel="WorldForge" className="h-10 w-auto" /></div>}
         <div className={`${collapsed && !mobile ? "hidden md:block" : "hidden"} flex-1`} />
         {!mobile && onToggleCollapsed && <button type="button" onClick={onToggleCollapsed} aria-label={collapsed ? "Expand navigation" : "Collapse navigation"} title={collapsed ? "Expand navigation" : "Collapse navigation"} aria-expanded={!collapsed} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-app-text-dim hover:bg-app-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight-300">{collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}</button>}
       </div>

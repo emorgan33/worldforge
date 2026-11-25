@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { ResponsiveLogo } from "@/components/ui/ResponsiveLogo";
 
 type InvitationData = { invitation: { email: string; worldTitle: string; expiresAt: string }; accountExists: boolean; signedInEmail?: string | null };
 
@@ -64,8 +65,11 @@ export default function InviteClaimForm({ token }: { token: string }) {
   }
 
   return <main className="flex min-h-screen items-center justify-center bg-app-canvas px-5 py-10 text-app-text-strong"><section className="w-full max-w-md rounded-2xl border border-app-border bg-app-surface/60 p-7 shadow-2xl">
-    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary-400">WorldForge · Invitation</p>
-    <h1 className="mt-3 font-serif text-3xl font-bold">Join a world</h1>
+    <div className="flex flex-col items-center mb-4">
+      <ResponsiveLogo className="w-auto max-w-full mb-2" />
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary-400 text-center">WorldForge · Invitation</p>
+      <h1 className="mt-3 font-serif text-3xl font-bold text-center">Join a world</h1>
+    </div>
     {token && loading ? <p role="status" className="mt-5 text-app-muted">Checking your invitation…</p> : invitationError && !details ? <div className="mt-5 space-y-5"><p role="alert" className="rounded-lg border border-danger-900 bg-danger-950/40 p-4 text-sm text-danger-200">{invitationError}</p><Link href="/login" className="text-sm text-secondary-300 hover:underline">Go to sign in</Link></div> : details && <>
       <p className="mt-3 text-app-text-dim">You’ve been invited to <strong className="text-primary-200">{details.invitation.worldTitle}</strong>.</p>
       <form className="mt-7 space-y-5" onSubmit={submit}>

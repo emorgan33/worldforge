@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
+import { ResponsiveLogo } from "@/components/ui/ResponsiveLogo";
 export function AuthForm({ setup = false }: { setup?: boolean }) {
   const router = useRouter();
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
@@ -8,7 +9,10 @@ export function AuthForm({ setup = false }: { setup?: boolean }) {
   const initialized = useRef(false);
   useEffect(() => { if (initialized.current) return; initialized.current = true; if (setup) { const hash = new URLSearchParams(window.location.hash.slice(1)); setToken(hash.get("token") || ""); window.history.replaceState(null, "", window.location.pathname); } }, [setup]);
   return <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center bg-app-canvas p-8 text-app-text">
-    <h1 className="font-serif text-3xl font-bold text-primary-200">{setup ? "Set up your author account" : "Sign in to WorldForge"}</h1>
+    <div className="flex flex-col items-center mb-6">
+      <ResponsiveLogo className="w-auto max-w-full" />
+      <h1 className="mt-4 font-serif text-3xl font-bold text-primary-200 text-center">{setup ? "Set up your author account" : "Sign in to WorldForge"}</h1>
+    </div>
     <p className="mt-3 leading-relaxed text-app-text-dim">{setup ? "Choose the email and password you\u2019ll use to access your author workspace." : "Your author workspace is private. Public world pages are available without signing in."}</p>
     <form className="mt-8 space-y-5" onSubmit={async event => { event.preventDefault(); setBusy(true); setError(""); try { const response = await fetch(`/api/auth/${setup ? "setup" : "login"}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, ...(setup ? { token } : {}) }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); router.replace("/"); router.refresh(); } catch (error) { setError(error instanceof Error ? error.message : "Unable to sign in."); } finally { setBusy(false); } }}>
       {error && <p role="alert" className="rounded-lg border border-danger-700 bg-danger-950/30 px-4 py-2 text-sm text-danger-300">{error}</p>}
