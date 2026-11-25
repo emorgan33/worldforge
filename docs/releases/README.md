@@ -127,3 +127,10 @@ The workflow appended that image section to the GitHub release after
 re-verifying both children. A fresh Trivy 0.76.2 scan of the release image
 reports 0 fixable findings; residual unfixed findings are recorded in
 `docs/security-scan-triage.md`.
+
+[v0.4.13](v0.4.13.md) moves World contents out of the workspace rail into a
+contextual, pinnable explorer with a focus-managed mobile drawer and a
+keyboard-accessible template picker. It contains no migrations or configuration
+changes and leaves reader navigation untouched. Check its **Release Docker
+image** workflow before relying on a published image version; no digest is
+claimed here until that workflow records one.
