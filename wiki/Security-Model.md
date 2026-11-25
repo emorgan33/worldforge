@@ -41,10 +41,12 @@ an HTTPS origin. The CSP disables inline event-handler attributes
 (`script-src-attr 'none'`), frames, media, and plugins; inline scripts and styles
 remain allowed because Next.js and reader custom CSS require them.
 
-Image decoding is limited to static PNG, JPEG, or WebP, at most 10 MB and 40
-million pixels; animated images and other formats are rejected before
-processing. Imported world assets go through the same normalization, with a
-14 million-character per-asset base64 cap inside the 60 MB bundle.
+Server-side upload and import decoding is limited to static PNG, JPEG, or WebP,
+at most 10 MB and 40 million pixels; animated images and other formats are
+rejected before processing. Imported world assets go through the same
+normalization, with a 14 × 1024 × 1024 character per-asset base64 cap inside the
+60 MB bundle. These limits do not apply to remote images that a reader's browser
+loads; `img-src` allows HTTP/HTTPS campaign artwork by design.
 
 Author routes that determine ownership from a JSON body (`world-body`,
 `resource-body`, and map creation actions) stream the body once with a hard cap
