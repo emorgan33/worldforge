@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="public/brand/worldforge/worldforge-horizontal-reversed.svg">
+  <img src="public/brand/worldforge/worldforge-horizontal-slate.svg" alt="" width="395">
+</picture>
+
 # WorldForge
 
 A self-hosted campaign worldbuilding workspace for **D&D 5e (2014)** and
