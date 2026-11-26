@@ -183,3 +183,5 @@ relevant area in `node_modules/next/dist/docs/`.
 
 By contributing, you agree that your contributions are licensed under the
 [MIT License](LICENSE).
+
+New contributions also require express acceptance of the [Contributor License Agreement (version 1.0)](CLA.md) before merge. Each contributor must accept individually using the statement in that agreement. Existing contributions are not retroactively covered.
