@@ -185,3 +185,9 @@ By contributing, you agree that your contributions are licensed under the
 [MIT License](LICENSE).
 
 New contributions also require express acceptance of the [Contributor License Agreement (version 1.0)](CLA.md) before merge. Each contributor must accept individually using the statement in that agreement. Existing contributions are not retroactively covered.
+
+### CLA check activation
+
+Apply the CLA to new contributions after adoption, not to previously merged work. The GitHub workflow checks the pull request author's exact acceptance statement and publishes the `cla/acceptance` status. Maintainers must independently verify acceptance by any other contributors, including co-authors, before merging. The workflow does not execute pull request code.
+
+After merging this policy, configure the main branch ruleset or branch protection to require the `cla/acceptance` status check. Test on a new pull request before relying on it. Existing open pull requests may need manual review or a documented exception for pre-adoption contributions. Do not treat the check as proof of copyright ownership.
