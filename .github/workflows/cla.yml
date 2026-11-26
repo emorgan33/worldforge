@@ -1,0 +1,33 @@
+name: Contributor agreement
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+  issue_comment:
+    types: [created, edited, deleted]
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  statuses: write
+jobs:
+  cla:
+    if: github.event_name == 'pull_request_target' || github.event.issue.pull_request != null
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify PR author acceptance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          pr=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")
+          sha=$(jq -r '.head.sha' <<< "$pr")
+          author=$(jq -r '.user.login' <<< "$pr")
+          state=failure
+          description="PR author must accept CLA v1.0 in a comment"
+          if gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" | jq -se --arg author "$author" --arg statement 'I have read and agree to the WorldForge Contributor License Agreement version 1.0 and have authority to submit my contributions under its terms.' 'any(.[][]; .user.login == $author and (.body | gsub("\\r"; "") | split("\\n") | any(. == $statement)))' >/dev/null; then
+            state=success
+            description="PR author accepted CLA v1.0; review other authors manually"
+          fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$sha" -f state="$state" -f context="cla/acceptance" -f description="$description"
+          test "$state" = success
